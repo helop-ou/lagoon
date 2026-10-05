@@ -94,6 +94,9 @@ nonisolated enum DiagnosticSchema {
         "videoQueued": .int,
         "audioQueued": .int,
         "videoIntake": .int,
+        /// What the link delivered while busy, in bit/s like `bitrate`, so a
+        /// slow link reads as one rather than as an engine problem.
+        "networkBitrate": .int,
         "audioLead": .double,
         "stalls": .int,
         "audioStalls": .int,

@@ -175,6 +175,9 @@ final class PlaybackIncidentMonitor {
     /// across attempts, and inherited by every incident, the engine's
     /// session faults included.
     private var displayFields: [String: DiagnosticValue] = [:]
+    /// The link's latest measured rate, so a stall the engine reports itself,
+    /// and the degradation verdict at the end, say whether the link was slow.
+    private var linkFields: [String: DiagnosticValue] = [:]
     /// Degradation is only assessed after uninterrupted sampling of the
     /// attempt.
     private(set) var sampledWholeAttempt = false
@@ -251,6 +254,7 @@ final class PlaybackIncidentMonitor {
         lastStallCount = 0
         frequentStallsReported = false
         attemptEnded = false
+        linkFields = [:]
         sampledWholeAttempt = hub.isReportingEnabled
         facts = Self.facts(delivery: delivery, method: method, source: source, cached: cached, disc: disc)
         var fields = facts
@@ -263,7 +267,9 @@ final class PlaybackIncidentMonitor {
     /// Fields every incident inherits until the attempt ends, including ones the
     /// engine reports itself.
     private func publishAmbientFields() {
-        var ambient = facts.merging(displayFields) { _, display in display }
+        var ambient = facts
+            .merging(displayFields) { _, display in display }
+            .merging(linkFields) { _, link in link }
         ambient["attempt"] = .string(attempt)
         hub.setAmbientFields(ambient)
     }
@@ -457,6 +463,7 @@ final class PlaybackIncidentMonitor {
         tick += 1
         accumulate(engine: engine, at: now)
         engine.refreshVideoPerformanceMetrics()
+        observeLinkRate(bytesPerSecond: engine.bufferState.networkBytesPerSecond)
 
         let verdict = freeze.observe(PlaybackFreezeDetector.Sample(
             position: engine.timePosition,
@@ -498,6 +505,25 @@ final class PlaybackIncidentMonitor {
         }
     }
 
+    /// Republishes the ambient fields only when the rate moves by a whole
+    /// 100 kbit/s, so a steady link costs nothing between samples.
+    func observeLinkRate(bytesPerSecond: Double?) {
+        guard let bitrate = Self.networkBitrate(bytesPerSecond) else { return }
+        let fields: [String: DiagnosticValue] = ["networkBitrate": .int(bitrate)]
+        guard fields != linkFields else { return }
+        linkFields = fields
+        guard !attemptEnded else { return }
+        publishAmbientFields()
+    }
+
+    /// Bits per second to the nearest 100 kbit/s, the unit of the title's
+    /// `bitrate`; nil before the engine has measured anything.
+    nonisolated static func networkBitrate(_ bytesPerSecond: Double?) -> Int? {
+        guard let bytesPerSecond, bytesPerSecond.isFinite, bytesPerSecond > 0,
+              bytesPerSecond < Double(Int.max / 16) else { return nil }
+        return Int((bytesPerSecond * 8 / 100_000).rounded()) * 100_000
+    }
+
     /// Advances the session counters from the engine's session-scoped
     /// values and the wall clock while playing.
     private func accumulate(engine: DiagnosableEngine, at now: TimeInterval) {
@@ -533,7 +559,9 @@ final class PlaybackIncidentMonitor {
     /// The facts, the display state, the attempt, and how long ago the viewer
     /// last seeked or switched a track, merged with `extra`.
     private func incidentFields(extra: [String: DiagnosticValue]) -> [String: DiagnosticValue] {
-        var fields = facts.merging(displayFields) { _, display in display }
+        var fields = facts
+            .merging(displayFields) { _, display in display }
+            .merging(linkFields) { _, link in link }
         // Negotiation failures precede the attempt; the schema rejects an empty
         // token.
         if !attempt.isEmpty {
@@ -618,6 +646,9 @@ final class PlaybackIncidentMonitor {
             "thermal": .string(DiagnosticsProcessObserver.thermalName(ProcessInfo.processInfo.thermalState)),
             "appState": .string(appStateName),
         ]
+        if let bitrate = networkBitrate(engine.bufferState.networkBytesPerSecond) {
+            fields["networkBitrate"] = .int(bitrate)
+        }
         if let refused = engine.refusedSampleMsDiagnostic {
             fields["refusedSampleMs"] = .int(refused)
         }
