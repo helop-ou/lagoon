@@ -107,7 +107,7 @@ final class HomeViewModel {
                 client: client,
                 preferences: homeSectionPreferences
             )
-            guard generation == loadGeneration, identity == client.sessionIdentity, !Task.isCancelled else { return }
+            guard isCurrent(generation, identity: identity, client: client) else { return }
             if let resolvedResume { resume = resolvedResume }
             nextUp = resolvedNextUp
             favorites = resolvedFavorites
@@ -133,7 +133,7 @@ final class HomeViewModel {
                     sortBy: "Random",
                     limit: 24
                 ))?.items ?? []
-                guard generation == loadGeneration, identity == client.sessionIdentity, !Task.isCancelled else { return }
+                guard isCurrent(generation, identity: identity, client: client) else { return }
                 librarySample = sample
                 heroItems = HeroSelection.select(tiers: heroTiers)
             }
@@ -194,7 +194,7 @@ final class HomeViewModel {
         async let favoriteItems = try? client.favorites()
         let refreshed = await (resume: resumeItems, nextUp: nextUpItems)
         let refreshedFavorites = await favoriteItems
-        guard generation == loadGeneration, identity == client.sessionIdentity, !Task.isCancelled else { return }
+        guard isCurrent(generation, identity: identity, client: client) else { return }
         if let refreshedResume = refreshed.resume {
             resume = refreshedResume
             TopShelfStore.publish(refreshedResume, client: client, identity: identity)
@@ -252,7 +252,7 @@ final class HomeViewModel {
         let generation = loadGeneration
         let identity = client.sessionIdentity
         let rails = await loadPluginRails(client: client, preferences: preferences)
-        guard generation == loadGeneration, identity == client.sessionIdentity, !Task.isCancelled else { return }
+        guard isCurrent(generation, identity: identity, client: client) else { return }
         pluginRails = rails
         if heroItems.isEmpty {
             heroItems = HeroSelection.select(tiers: heroTiers)
@@ -265,9 +265,9 @@ final class HomeViewModel {
         let identity = client.sessionIdentity
         guard let libraries = try? await client.userViews()
             .filter({ ["movies", "tvshows"].contains($0.collectionType ?? "") }) else { return }
-        guard generation == loadGeneration, identity == client.sessionIdentity, !Task.isCancelled else { return }
+        guard isCurrent(generation, identity: identity, client: client) else { return }
         let refreshed = await loadLatestRails(libraries: libraries, client: client)
-        guard generation == loadGeneration, identity == client.sessionIdentity, !Task.isCancelled else { return }
+        guard isCurrent(generation, identity: identity, client: client) else { return }
 
         // A failed request keeps the rail's last value; a successful empty
         // one clears it.
@@ -341,7 +341,7 @@ final class HomeViewModel {
             limit: 60,
             filters: ["IsPlayed"]
         ))?.items ?? []
-        guard generation == loadGeneration, identity == client.sessionIdentity, !Task.isCancelled else { return }
+        guard isCurrent(generation, identity: identity, client: client) else { return }
 
         let today = Date.now
         let genre = HomeRotation.genre(
@@ -411,7 +411,7 @@ final class HomeViewModel {
             binge,
             surprise,
         ].compactMap(\.self)
-        guard generation == loadGeneration, identity == client.sessionIdentity, !Task.isCancelled else { return }
+        guard isCurrent(generation, identity: identity, client: client) else { return }
         // Top 10 loads separately so its scan never delays these; keep its rows.
         let topTen = curatedRails.filter {
             $0.key == HomeCuratedRows.ID.topMovies || $0.key == HomeCuratedRows.ID.topShows
@@ -438,8 +438,8 @@ final class HomeViewModel {
         let enabled = preferences.isEnabled(HomeCuratedRows.ID.topMovies)
             || preferences.isEnabled(HomeCuratedRows.ID.topShows)
         let rails = await topTenRails(client: client, seerr: seerr?.sessionSnapshot(), enabled: enabled)
-        guard generation == loadGeneration, identity == client.sessionIdentity,
-              origin == seerr?.serverURL, cookie == seerr?.sessionCookie, !Task.isCancelled else { return }
+        guard isCurrent(generation, identity: identity, client: client),
+              origin == seerr?.serverURL, cookie == seerr?.sessionCookie else { return }
         curatedRails.removeValue(forKey: HomeCuratedRows.ID.topMovies)
         curatedRails.removeValue(forKey: HomeCuratedRows.ID.topShows)
         for rail in rails { curatedRails[rail.id] = rail }
@@ -452,7 +452,7 @@ final class HomeViewModel {
     private func loadCollections(client: JellyfinClient, generation: Int) async {
         let identity = client.sessionIdentity
         guard let all = try? await client.collections() else { return }
-        guard generation == loadGeneration, identity == client.sessionIdentity, !Task.isCancelled else { return }
+        guard isCurrent(generation, identity: identity, client: client) else { return }
 
         let ranked = CollectionShelf.ranked(all)
         guard !ranked.isEmpty else {
@@ -477,7 +477,7 @@ final class HomeViewModel {
             }
         }
 
-        guard generation == loadGeneration, identity == client.sessionIdentity, !Task.isCancelled else { return }
+        guard isCurrent(generation, identity: identity, client: client) else { return }
         collections = CollectionShelf.shelf(ranked, borrowedArtwork: borrowed)
     }
 
@@ -693,5 +693,15 @@ final class HomeViewModel {
     private func cancelDiscoveryTasks() {
         discoveryTasks.forEach { $0.cancel() }
         discoveryTasks.removeAll()
+    }
+
+    /// A result may land only while its load is the latest, the session it
+    /// was fetched for is still signed in, and its task was not cancelled.
+    private func isCurrent(
+        _ generation: Int,
+        identity: JellyfinClient.SessionIdentity?,
+        client: JellyfinClient
+    ) -> Bool {
+        generation == loadGeneration && identity == client.sessionIdentity && !Task.isCancelled
     }
 }
