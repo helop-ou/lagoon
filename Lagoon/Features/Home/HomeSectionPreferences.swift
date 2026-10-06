@@ -514,50 +514,18 @@ struct HomeRowsSettingsView: View {
 
     var body: some View {
         #if os(tvOS)
+        tvPage
+        #else
+        touchForm
+        #endif
+    }
+
+    #if os(tvOS)
+    private var tvPage: some View {
         TVSettingsPage("Home Rows", description: description) {
             TVSettingsSection("Rows") {
                 ForEach(Array(preferences.choices.enumerated()), id: \.element.id) { index, choice in
-                    HStack(spacing: Metrics.Space.m) {
-                        Button {
-                            preferences.toggle(choice.id)
-                        } label: {
-                            HStack(spacing: Metrics.Space.l) {
-                                VStack(alignment: .leading, spacing: Metrics.Space.xs) {
-                                    Text(choice.title)
-                                    Text("\(choice.source.rawValue) · \(choice.isEnabled ? "Shown" : "Hidden")")
-                                        .font(.caption)
-                                        .opacity(0.7)
-                                }
-                                Spacer(minLength: Metrics.Space.xl)
-                                Image(systemName: choice.isEnabled ? "checkmark.circle.fill" : "circle")
-                                    .stateGlyph(isOn: choice.isEnabled)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .buttonStyle(.glass)
-                        .accessibilityValue(choice.isEnabled ? "Shown" : "Hidden")
-                        .accessibilityIdentifier("settings.home.row.\(choice.id)")
-
-                        Button {
-                            preferences.move(choice.id, by: -1)
-                        } label: {
-                            Image(systemName: "arrow.up")
-                                .frame(width: Metrics.inlineIconButtonSize, height: Metrics.inlineIconButtonSize)
-                        }
-                        .buttonStyle(.glass)
-                        .disabled(index == 0)
-                        .accessibilityLabel("Move \(choice.title) up")
-
-                        Button {
-                            preferences.move(choice.id, by: 1)
-                        } label: {
-                            Image(systemName: "arrow.down")
-                                .frame(width: Metrics.inlineIconButtonSize, height: Metrics.inlineIconButtonSize)
-                        }
-                        .buttonStyle(.glass)
-                        .disabled(index == preferences.choices.count - 1)
-                        .accessibilityLabel("Move \(choice.title) down")
-                    }
+                    tvRow(index: index, choice: choice)
                 }
             }
 
@@ -571,7 +539,53 @@ struct HomeRowsSettingsView: View {
                 }
             }
         }
-        #else
+    }
+
+    private func tvRow(index: Int, choice: HomeSectionChoice) -> some View {
+        HStack(spacing: Metrics.Space.m) {
+            Button {
+                preferences.toggle(choice.id)
+            } label: {
+                HStack(spacing: Metrics.Space.l) {
+                    VStack(alignment: .leading, spacing: Metrics.Space.xs) {
+                        Text(choice.title)
+                        Text("\(choice.source.rawValue) · \(choice.isEnabled ? "Shown" : "Hidden")")
+                            .font(.caption)
+                            .opacity(0.7)
+                    }
+                    Spacer(minLength: Metrics.Space.xl)
+                    Image(systemName: choice.isEnabled ? "checkmark.circle.fill" : "circle")
+                        .stateGlyph(isOn: choice.isEnabled)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .buttonStyle(.glass)
+            .accessibilityValue(choice.isEnabled ? "Shown" : "Hidden")
+            .accessibilityIdentifier("settings.home.row.\(choice.id)")
+
+            Button {
+                preferences.move(choice.id, by: -1)
+            } label: {
+                Image(systemName: "arrow.up")
+                    .frame(width: Metrics.inlineIconButtonSize, height: Metrics.inlineIconButtonSize)
+            }
+            .buttonStyle(.glass)
+            .disabled(index == 0)
+            .accessibilityLabel("Move \(choice.title) up")
+
+            Button {
+                preferences.move(choice.id, by: 1)
+            } label: {
+                Image(systemName: "arrow.down")
+                    .frame(width: Metrics.inlineIconButtonSize, height: Metrics.inlineIconButtonSize)
+            }
+            .buttonStyle(.glass)
+            .disabled(index == preferences.choices.count - 1)
+            .accessibilityLabel("Move \(choice.title) down")
+        }
+    }
+    #else
+    private var touchForm: some View {
         ThemedForm {
             Section {
                 ForEach(preferences.choices) { choice in
@@ -603,6 +617,6 @@ struct HomeRowsSettingsView: View {
         }
         .navigationTitle("Home Rows")
         .toolbar { EditButton() }
-        #endif
     }
+    #endif
 }
