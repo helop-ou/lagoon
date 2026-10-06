@@ -123,7 +123,7 @@ struct DownloadedSubtitlePoller {
             return nil
         }
         let candidates = (source.mediaStreams ?? []).filter {
-            $0.type == "Subtitle"
+            $0.isSubtitle
                 && $0.isExternal == true
                 && $0.deliveryUrl != nil
                 && !existingSignatures.contains(SubtitleStreamSignature($0))
@@ -199,7 +199,7 @@ final class SubtitleSearchCoordinator {
         results = []
         isBrowsingResults = false
         phase = .idle
-        existingSignatures = Set(streams.filter { $0.type == "Subtitle" }.map(SubtitleStreamSignature.init))
+        existingSignatures = Set(streams.filter { $0.isSubtitle }.map(SubtitleStreamSignature.init))
         if missingMode == .automaticSearch, !hasSuitableLocalTrack {
             startSearch()
         }

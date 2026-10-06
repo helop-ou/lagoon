@@ -219,7 +219,7 @@ extension MediaItem {
         guard let streams = mediaSources?.first?.mediaStreams, !streams.isEmpty else { return nil }
         var options: TVTopShelfCarouselItem.MediaOptions = []
 
-        if let video = streams.first(where: { $0.type == "Video" }) {
+        if let video = streams.first(where: { $0.isVideo }) {
             if let width = video.width {
                 // Apple offers only HD and 4K; below 720p gets no badge.
                 switch MediaQuality.resolutionClass(width: width) {
@@ -235,11 +235,11 @@ extension MediaItem {
             }
         }
 
-        let audio = streams.filter { $0.type == "Audio" }
-        if audio.contains(where: { $0.profile?.localizedCaseInsensitiveContains("atmos") == true }) {
+        let audio = streams.filter { $0.isAudio }
+        if audio.contains(where: { $0.hasAtmos }) {
             options.insert(.audioDolbyAtmos)
         }
-        if streams.contains(where: { $0.type == "Subtitle" && $0.isHearingImpaired == true }) {
+        if streams.contains(where: { $0.isSubtitle && $0.isHearingImpaired == true }) {
             options.insert(.audioTranscriptionSDH)
         }
 

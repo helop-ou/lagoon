@@ -184,7 +184,7 @@ final class PlaybackDiagnosticsSampler {
             sourceLine += " · \(Self.mbps(bitrate))"
         }
         negotiated.append(sourceLine)
-        if let video = source.mediaStreams?.first(where: { $0.type == "Video" }) {
+        if let video = source.videoStream {
             var line = "Video:  \(video.codec ?? "?")"
             if let profile = video.profile { line += " \(profile.lowercased())" }
             if let range = video.videoRangeType { line += " · \(range)" }
@@ -210,8 +210,7 @@ final class PlaybackDiagnosticsSampler {
                 ))
             }
         }
-        let audioStreams = source.mediaStreams?.filter { $0.type == "Audio" } ?? []
-        if let audio = audioStreams.first(where: { $0.isDefault == true }) ?? audioStreams.first {
+        if let audio = source.defaultAudioStream {
             var line = "Audio:  \(audio.codec ?? "?")"
             if let channels = audio.channels { line += " · \(channels)ch" }
             negotiated.append(line)

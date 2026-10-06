@@ -88,7 +88,7 @@ struct LaunchFixtureResolver {
             guard let info = try? await client.playbackInfo(itemId: episode.id),
                   let source = info.mediaSources.first,
                   (source.mediaStreams ?? []).contains(where: {
-                      $0.type == "Video" && ["vc1", "vc-1"].contains($0.codec?.lowercased() ?? "")
+                      $0.isVideo && ["vc1", "vc-1"].contains($0.codec?.lowercased() ?? "")
                   }) else { continue }
             print("RegressionResolve VC-1 series=\"\(requestedSeries)\" title=\"\(episode.name ?? "?")\" id=\(episode.id)")
             return .resolved(episode, startFromBeginning: true, replaysLifecycle: true)
@@ -135,13 +135,13 @@ struct LaunchFixtureResolver {
         for episode in candidates.prefix(20) {
             guard let info = try? await client.playbackInfo(itemId: episode.id),
                   let source = info.mediaSources.first,
-                  (source.mediaStreams ?? []).contains(where: { $0.type == "Video" }) else {
+                  source.videoStream != nil else {
                 continue
             }
             if requireDirectH264 {
                 let isDirectH264 = source.supportsDirectPlay == true
                     && (source.mediaStreams ?? []).contains {
-                        $0.type == "Video" && $0.codec?.lowercased() == "h264"
+                        $0.isVideo && $0.codec?.lowercased() == "h264"
                     }
                 guard isDirectH264 else { continue }
             }
@@ -165,7 +165,7 @@ struct LaunchFixtureResolver {
                   let source = info.mediaSources.first,
                   source.supportsDirectPlay != true,
                   source.supportsDirectStream == true,
-                  (source.mediaStreams ?? []).contains(where: { $0.type == "Video" }) else {
+                  source.videoStream != nil else {
                 continue
             }
             print("RegressionResolve direct-stream title=\"\(item.name ?? "?")\" id=\(item.id)")
@@ -190,9 +190,9 @@ struct LaunchFixtureResolver {
         for item in page.items {
             guard let info = try? await client.playbackInfo(itemId: item.id),
                   let source = info.mediaSources.first,
-                  (source.mediaStreams ?? []).contains(where: { $0.type == "Video" }),
+                  source.videoStream != nil,
                   !requireDirectPlay || source.supportsDirectPlay == true,
-                  !requireAudio || (source.mediaStreams ?? []).contains(where: { $0.type == "Audio" }) else {
+                  !requireAudio || !source.audioStreams.isEmpty else {
                 continue
             }
             print("RegressionResolve playable title=\"\(item.name ?? "?")\" id=\(item.id)")
@@ -219,9 +219,9 @@ struct LaunchFixtureResolver {
             }
             let streams = source.mediaStreams ?? []
             let isH264 = streams.contains {
-                $0.type == "Video" && $0.codec?.lowercased() == "h264"
+                $0.isVideo && $0.codec?.lowercased() == "h264"
             }
-            let audioCount = streams.count { $0.type == "Audio" }
+            let audioCount = streams.count { $0.isAudio }
             if isH264, audioCount > 1 {
                 print("RegressionResolve multi-audio title=\"\(item.name ?? "?")\" id=\(item.id)")
                 return .resolved(item, startFromBeginning: true, replaysLifecycle: false)

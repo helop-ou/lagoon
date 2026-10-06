@@ -392,14 +392,32 @@ nonisolated enum MediaQuality {
     }
 }
 
+nonisolated extension MediaStream {
+    var isVideo: Bool { type == "Video" }
+    var isAudio: Bool { type == "Audio" }
+    var isSubtitle: Bool { type == "Subtitle" }
+    var hasAtmos: Bool { profile?.localizedCaseInsensitiveContains("atmos") == true }
+}
+
+nonisolated extension MediaSource {
+    var videoStream: MediaStream? { mediaStreams?.first(where: \.isVideo) }
+    var audioStreams: [MediaStream] { (mediaStreams ?? []).filter(\.isAudio) }
+    var subtitleStreams: [MediaStream] { (mediaStreams ?? []).filter(\.isSubtitle) }
+
+    /// The stream the server marks default, else the first audio stream.
+    var defaultAudioStream: MediaStream? {
+        let audio = audioStreams
+        return audio.first(where: { $0.isDefault == true }) ?? audio.first
+    }
+}
+
 extension MediaSource {
     /// "4K DV TrueHD 7.1 Atmos": the best the file can do, not the selected
     /// track.
     var qualityTokens: [String] {
-        let streams = mediaStreams ?? []
         var tokens: [String] = []
 
-        if let video = streams.first(where: { $0.type == "Video" }) {
+        if let video = videoStream {
             if let width = video.width {
                 tokens.append(MediaQuality.resolutionClass(width: width))
             }
@@ -408,7 +426,7 @@ extension MediaSource {
             }
         }
 
-        let audio = streams.filter { $0.type == "Audio" }
+        let audio = audioStreams
         // Rank by what a viewer would call "best": lossless over lossy, more
         // channels over fewer.
         let best = audio.max { lhs, rhs in
@@ -421,7 +439,7 @@ extension MediaSource {
             }
             tokens.append(name)
         }
-        if audio.contains(where: { $0.profile?.localizedCaseInsensitiveContains("atmos") == true }) {
+        if audio.contains(where: { $0.hasAtmos }) {
             tokens.append("Atmos")
         }
 

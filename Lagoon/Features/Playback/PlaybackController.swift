@@ -560,8 +560,8 @@ final class PlaybackController {
     ) -> StartTracks {
         let source = resolved.source
         let streams = resolved.trackStreams
-        let embeddedAudio = streams.filter { $0.type == "Audio" }
-        let allSubtitles = streams.filter { $0.type == "Subtitle" }
+        let embeddedAudio = streams.filter(\.isAudio)
+        let allSubtitles = streams.filter(\.isSubtitle)
         let embeddedSubtitles = allSubtitles.filter { $0.isExternal != true }
         // Kept paired: a sidecar whose URL won't resolve is dropped from
         // both lists, or every later ordinal names the wrong track.
@@ -1658,10 +1658,8 @@ final class PlaybackController {
         extras: JellyfinClient.PlaybackExtras,
         segments: [MediaSegment] = []
     ) -> PlayerItemInfo {
-        let streams = source.mediaStreams ?? []
-        let video = streams.first(where: { $0.type == "Video" })
-        let audioStreams = streams.filter { $0.type == "Audio" }
-        let audio = audioStreams.first(where: { $0.isDefault == true }) ?? audioStreams.first
+        let video = source.videoStream
+        let audio = source.defaultAudioStream
 
         var facts: [String] = []
         if let runtime = media.runtimeLabel { facts.append(runtime) }

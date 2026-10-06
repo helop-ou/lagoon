@@ -602,7 +602,7 @@ final class PlaybackIncidentMonitor {
         if let ticks = source.runTimeTicks {
             fields["durationSeconds"] = .double(Ticks.seconds(ticks).rounded())
         }
-        if let video = source.mediaStreams?.first(where: { $0.type == "Video" }) {
+        if let video = source.videoStream {
             if let codec = DiagnosticSchema.token(video.codec?.lowercased()) { fields["videoCodec"] = codec }
             if let profile = DiagnosticSchema.token(video.profile?.replacingOccurrences(of: " ", with: "")) {
                 fields["videoProfile"] = profile
@@ -615,8 +615,7 @@ final class PlaybackIncidentMonitor {
                 fields["frameRate"] = .double(frameRate.rounded(toPlaces: 3))
             }
         }
-        let audioStreams = source.mediaStreams?.filter { $0.type == "Audio" } ?? []
-        if let audio = audioStreams.first(where: { $0.isDefault == true }) ?? audioStreams.first {
+        if let audio = source.defaultAudioStream {
             if let codec = DiagnosticSchema.token(audio.codec?.lowercased()) { fields["audioCodec"] = codec }
             if let channels = audio.channels { fields["audioChannels"] = .int(channels) }
         }
