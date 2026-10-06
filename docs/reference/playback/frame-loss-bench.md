@@ -33,8 +33,8 @@ already be installed and signed in on the target simulator:
     scripts/framedrop-bench.sh --title "Deadgirl" --position 600 --runs 3 \
         --set debug.simulatorTranscode=true
 
-- It uses `MainTabView`'s launch-time bench hook
-  (`launchBenchItemIfRequested()`), not a `lagoon://` deep link: the router
+- It uses the launch-time bench hook (`LaunchFixtureResolver`, run from
+  `MainTabView`), not a `lagoon://` deep link: the router
   drops links without the current Top Shelf `?owner=&generation=` pair.
 - Each run force-quits the app, writes `debug.frameLossBench`,
   `debug.playbackHUD`, `debug.benchAutoExit`, `debug.benchSearchTerm` (the

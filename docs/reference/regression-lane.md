@@ -31,7 +31,7 @@ transcodes.
 `-debug.benchSearchTerm <title>` opens a named title, disambiguated by
 `-debug.benchProductionYear` and `-debug.regressionSeriesName`. Resolver flags
 open a title by property instead, so the journey works on any server that has
-one:
+one. `LaunchFixtureResolver` in `Lagoon/App/` reads them all:
 
 | Flag | Picks | Fails with |
 | --- | --- | --- |
