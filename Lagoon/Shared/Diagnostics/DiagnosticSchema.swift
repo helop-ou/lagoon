@@ -57,9 +57,6 @@ nonisolated enum DiagnosticSchema {
     /// has its own key: `method` is Jellyfin's delivery method.
     static let syncPlayCommandChoices: Set<String> = ["unpause", "pause", "seek", "stop"]
     static let syncPlayCorrectionChoices: Set<String> = ["none", "rate", "seek"]
-    static let degradationChoices: Set<String> = [
-        "droppedFrames", "stalls", "reprimes", "audioStarvation", "frozen", "rendererRecovery",
-    ]
 
     static let fields: [String: DiagnosticFieldKind] = [
         // Identity of the attempt and the record.

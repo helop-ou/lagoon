@@ -48,8 +48,8 @@ enum QRCode {
         // extreme; never tint the light half toward the accent.
         let tint = CIFilter.falseColor()
         tint.inputImage = output
-        tint.color0 = CIColor(red: 0x07 / 255, green: 0x16 / 255, blue: 0x1D / 255)
-        tint.color1 = CIColor(red: 0xE9 / 255, green: 0xF1 / 255, blue: 0xF2 / 255)
+        tint.color0 = CIColor(color: UIColor(.lagoonInk))
+        tint.color1 = CIColor(color: UIColor(.lagoonMist))
         guard let tinted = tint.outputImage else { return nil }
         return context.createCGImage(tinted, from: tinted.extent)
     }

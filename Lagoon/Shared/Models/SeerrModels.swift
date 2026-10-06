@@ -5,7 +5,6 @@ import Foundation
 
 nonisolated struct SeerrServerStatus: Decodable, Equatable {
     let version: String
-    let commitTag: String?
 }
 
 nonisolated struct SeerrPublicSettings: Decodable, Equatable {

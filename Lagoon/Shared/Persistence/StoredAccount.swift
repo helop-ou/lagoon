@@ -20,7 +20,6 @@ nonisolated struct StoredAccount: Codable, Identifiable, Hashable {
     var keychainAccount: String { "token:\(id)" }
 
     var displayName: String { userName ?? "User" }
-    var serverLabel: String { serverName ?? serverURL.host() ?? serverURL.absoluteString }
 
     /// Built from the account's own server, so it works for inactive accounts too.
     func avatarURL(maxWidth: Int) -> URL? {
