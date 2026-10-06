@@ -22,3 +22,32 @@ nonisolated extension SubtitleCandidate {
         )
     }
 }
+
+nonisolated extension MediaStream {
+    /// How the controller sees a downloaded candidate before Jellyfin has a
+    /// stream for it: external, with no index or delivery URL yet.
+    static func externalSubtitle(describing candidate: SubtitleCandidate) -> MediaStream {
+        MediaStream(
+            type: "Subtitle",
+            codec: candidate.format,
+            displayTitle: candidate.name,
+            title: candidate.name,
+            language: candidate.language,
+            index: nil,
+            isDefault: nil,
+            isOriginal: nil,
+            isExternal: true,
+            isForced: candidate.isForced,
+            isHearingImpaired: candidate.isHearingImpaired,
+            deliveryUrl: nil,
+            profile: nil,
+            videoRangeType: nil,
+            channels: nil,
+            width: nil,
+            height: nil,
+            bitDepth: nil,
+            bitRate: nil,
+            realFrameRate: nil
+        )
+    }
+}

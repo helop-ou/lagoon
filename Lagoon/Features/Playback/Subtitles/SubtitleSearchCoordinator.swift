@@ -373,7 +373,6 @@ final class SubtitleSearchCoordinator {
 
     private func downloadFromJellyfin(_ candidate: SubtitleCandidate, generation: Int, selectionRevision: Int) async {
         guard let client, let engine else { return }
-        let subtitleID = candidate.providerID
         var directFailure: SubtitleDownloadError?
         do {
             guard await client.canManageSubtitles() else {
@@ -386,63 +385,13 @@ final class SubtitleSearchCoordinator {
                 candidate.language ?? selectedLanguage ?? ""
             )
             do {
-                // Fetch once, validate the bytes, then upload the same bytes to Jellyfin.
-                // This bypasses the 10.11.x endpoint that can return 204 after a failed
-                // save.
-                let file = try await Self.retrying {
-                    try await client.remoteSubtitleFile(subtitleId: subtitleID)
-                }
-                try await ExternalSubtitleLoader.validate(file.data, language: candidate.language)
-                try Task.checkCancellation()
-                guard generation == downloadGeneration else { return }
-                guard engine.subtitleSelectionRevision == selectionRevision else { phase = .idle; return }
-                // The controller maps the selected track through its own stream list to
-                // carry the choice into the next episode. The server has no stream for
-                // this file until the upload lands, so add the candidate's description.
-                attach(ExternalSubtitleTrack(
-                    url: file.url,
-                    preloadedData: file.data,
-                    title: candidate.name,
-                    language: candidate.language,
-                    select: true,
-                    isForced: candidate.isForced,
-                    isHearingImpaired: candidate.isHearingImpaired,
-                    isDownloaded: true
-                ), described: MediaStream(
-                    type: "Subtitle",
-                    codec: candidate.format,
-                    displayTitle: candidate.name,
-                    title: candidate.name,
-                    language: candidate.language,
-                    index: nil,
-                    isDefault: nil,
-                    isOriginal: nil,
-                    isExternal: true,
-                    isForced: candidate.isForced,
-                    isHearingImpaired: candidate.isHearingImpaired,
-                    deliveryUrl: nil,
-                    profile: nil,
-                    videoRangeType: nil,
-                    channels: nil,
-                    width: nil,
-                    height: nil,
-                    bitDepth: nil,
-                    bitRate: nil,
-                    realFrameRate: nil
-                ), to: engine)
-
-                persistenceTask?.cancel()
-                persistenceTask = Task { [weak self] in
-                    guard let self else { return }
-                    try? await client.uploadSubtitle(
-                        itemId: itemID,
-                        data: file.data,
-                        language: candidate.language,
-                        format: candidate.format ?? "srt",
-                        isForced: candidate.isForced,
-                        isHearingImpaired: candidate.isHearingImpaired
-                    )
-                }
+                try await attachDirectDownload(
+                    candidate,
+                    generation: generation,
+                    selectionRevision: selectionRevision,
+                    client: client,
+                    engine: engine
+                )
                 return
             } catch is CancellationError {
                 throw CancellationError()
@@ -459,32 +408,14 @@ final class SubtitleSearchCoordinator {
                 throw directFailure ?? .providerUnavailable
             }
 
-            try await Self.retrying {
-                try await client.downloadRemoteSubtitle(itemId: itemID, subtitleId: subtitleID)
-            }
-            let stream = try await downloadedSubtitlePoller.waitForStream(
-                mediaSourceID: mediaSourceID,
-                existingSignatures: existingSignatures,
-                requestedLanguage: requestedLanguage
-            ) {
-                try await client.playbackInfo(itemId: self.itemID)
-            }
-            guard let url = client.externalSubtitleURL(deliveryUrl: stream.deliveryUrl) else {
-                throw SubtitleDownloadError.notAvailable
-            }
-            try Task.checkCancellation()
-            guard generation == downloadGeneration else { return }
-            guard engine.subtitleSelectionRevision == selectionRevision else { phase = .idle; return }
-            existingSignatures.insert(SubtitleStreamSignature(stream))
-            attach(ExternalSubtitleTrack(
-                url: url,
-                title: stream.displayTitle ?? candidate.name,
-                language: stream.language ?? candidate.language,
-                select: true,
-                isForced: stream.isForced == true || candidate.isForced,
-                isHearingImpaired: stream.isHearingImpaired == true || candidate.isHearingImpaired,
-                isDownloaded: true
-            ), described: stream, to: engine)
+            try await attachViaServerSave(
+                candidate,
+                requestedLanguage: requestedLanguage,
+                generation: generation,
+                selectionRevision: selectionRevision,
+                client: client,
+                engine: engine
+            )
         } catch is CancellationError {
             if generation == downloadGeneration { phase = .idle }
         } catch {
@@ -499,6 +430,103 @@ final class SubtitleSearchCoordinator {
                 ? .notPermitted
                 : .downloadFailed(failure.localizedDescription)
         }
+    }
+
+    /// Fetches once, validates the bytes, then uploads the same bytes to
+    /// Jellyfin. This bypasses the 10.11.x endpoint that can return 204 after a
+    /// failed save. Returns without attaching once the download is stale.
+    private func attachDirectDownload(
+        _ candidate: SubtitleCandidate,
+        generation: Int,
+        selectionRevision: Int,
+        client: JellyfinClient,
+        engine: any PlayerEngine
+    ) async throws {
+        let file = try await Self.retrying {
+            try await client.remoteSubtitleFile(subtitleId: candidate.providerID)
+        }
+        try await ExternalSubtitleLoader.validate(file.data, language: candidate.language)
+        guard try isStillCurrent(generation: generation, selectionRevision: selectionRevision, engine: engine) else {
+            return
+        }
+        // The controller maps the selected track through its own stream list to
+        // carry the choice into the next episode. The server has no stream for
+        // this file until the upload lands, so add the candidate's description.
+        attach(ExternalSubtitleTrack(
+            url: file.url,
+            preloadedData: file.data,
+            title: candidate.name,
+            language: candidate.language,
+            select: true,
+            isForced: candidate.isForced,
+            isHearingImpaired: candidate.isHearingImpaired,
+            isDownloaded: true
+        ), described: .externalSubtitle(describing: candidate), to: engine)
+
+        persistenceTask?.cancel()
+        persistenceTask = Task { [weak self] in
+            guard let self else { return }
+            try? await client.uploadSubtitle(
+                itemId: itemID,
+                data: file.data,
+                language: candidate.language,
+                format: candidate.format ?? "srt",
+                isForced: candidate.isForced,
+                isHearingImpaired: candidate.isHearingImpaired
+            )
+        }
+    }
+
+    /// Has Jellyfin save the subtitle, waits for the new sidecar in
+    /// PlaybackInfo and attaches it. Returns without attaching once the
+    /// download is stale.
+    private func attachViaServerSave(
+        _ candidate: SubtitleCandidate,
+        requestedLanguage: String?,
+        generation: Int,
+        selectionRevision: Int,
+        client: JellyfinClient,
+        engine: any PlayerEngine
+    ) async throws {
+        try await Self.retrying {
+            try await client.downloadRemoteSubtitle(itemId: itemID, subtitleId: candidate.providerID)
+        }
+        let stream = try await downloadedSubtitlePoller.waitForStream(
+            mediaSourceID: mediaSourceID,
+            existingSignatures: existingSignatures,
+            requestedLanguage: requestedLanguage
+        ) {
+            try await client.playbackInfo(itemId: self.itemID)
+        }
+        guard let url = client.externalSubtitleURL(deliveryUrl: stream.deliveryUrl) else {
+            throw SubtitleDownloadError.notAvailable
+        }
+        guard try isStillCurrent(generation: generation, selectionRevision: selectionRevision, engine: engine) else {
+            return
+        }
+        existingSignatures.insert(SubtitleStreamSignature(stream))
+        attach(ExternalSubtitleTrack(
+            url: url,
+            title: stream.displayTitle ?? candidate.name,
+            language: stream.language ?? candidate.language,
+            select: true,
+            isForced: stream.isForced == true || candidate.isForced,
+            isHearingImpaired: stream.isHearingImpaired == true || candidate.isHearingImpaired,
+            isDownloaded: true
+        ), described: stream, to: engine)
+    }
+
+    /// Whether a finished download may still attach. Cancellation throws; a
+    /// newer download drops it silently; a subtitle choice the viewer made
+    /// meanwhile wins and leaves the status idle.
+    private func isStillCurrent(generation: Int, selectionRevision: Int, engine: any PlayerEngine) throws -> Bool {
+        try Task.checkCancellation()
+        guard generation == downloadGeneration else { return false }
+        guard engine.subtitleSelectionRevision == selectionRevision else {
+            phase = .idle
+            return false
+        }
+        return true
     }
 
     /// Selects a downloaded track in the player and reports it, ending the
