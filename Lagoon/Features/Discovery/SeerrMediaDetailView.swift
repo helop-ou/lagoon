@@ -158,26 +158,7 @@ struct SeerrMediaDetailView: View {
                 )
             }
         case .pending, .processing:
-            // Show download progress when the server knows it.
-            if availability == .processing, let progress = details.mediaInfo?.downloadProgress() {
-                statusButton(
-                    title: progress.isImporting ? String(localized: "Importing") : progress.percentText,
-                    symbol: progress.isImporting ? "square.and.arrow.down" : "arrow.down.circle",
-                    message: progress.downloadCount > 1
-                        ? "\(progress.summary). \(progress.downloadCount) downloads."
-                        : progress.summary,
-                    motion: .bounce
-                )
-            } else {
-                statusButton(
-                    title: availability.title,
-                    symbol: availability == .pending ? "clock" : "arrow.triangle.2.circlepath",
-                    message: availability == .pending
-                        ? "This request is waiting for approval."
-                        : "This title has been approved and is being added to your library.",
-                    motion: availability == .pending ? .pulse : .rotate
-                )
-            }
+            inProgressStatus(details)
         case .partiallyAvailable:
             if let jellyfinItem {
                 openInLagoonButton(jellyfinItem)
@@ -187,71 +168,115 @@ struct SeerrMediaDetailView: View {
                 partiallyAvailableStatusButton
             }
         case .blocklisted:
-            // Jellyseerr drops the media row with the block, so the reload
-            // shows the ordinary Request button.
-            if seerr.user?.canManageBlocklist == true {
-                Button {
+            blocklistedAction(details)
+        case .unknown, .deleted:
+            requestAction(details)
+        }
+    }
+
+    /// A request waiting for approval or being added to the library.
+    @ViewBuilder
+    private func inProgressStatus(_ details: SeerrMediaDetails) -> some View {
+        // Show download progress when the server knows it.
+        if availability == .processing, let progress = details.mediaInfo?.downloadProgress() {
+            statusButton(
+                title: progress.isImporting ? String(localized: "Importing") : progress.percentText,
+                symbol: progress.isImporting ? "square.and.arrow.down" : "arrow.down.circle",
+                message: progress.downloadCount > 1
+                    ? "\(progress.summary). \(progress.downloadCount) downloads."
+                    : progress.summary,
+                motion: .bounce
+            )
+        } else {
+            statusButton(
+                title: availability.title,
+                symbol: availability == .pending ? "clock" : "arrow.triangle.2.circlepath",
+                message: availability == .pending
+                    ? "This request is waiting for approval."
+                    : "This title has been approved and is being added to your library.",
+                motion: availability == .pending ? .pulse : .rotate
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func blocklistedAction(_ details: SeerrMediaDetails) -> some View {
+        // Jellyseerr drops the media row with the block, so the reload
+        // shows the ordinary Request button.
+        if seerr.user?.canManageBlocklist == true {
+            confirmingPrimaryButton(
+                title: "Unblock",
+                symbol: "hand.raised.slash",
+                identifier: "seerr.detail.unblock"
+            ) {
+                popup = Popup(
+                    title: "Unblock \(details.displayTitle)?",
+                    message: "This lifts the block so the title can be requested again.",
+                    confirmsUnblock: true
+                )
+            }
+        } else {
+            statusButton(
+                title: availability.title,
+                symbol: "hand.raised",
+                message: "The server administrator has blocked this title, so it cannot be requested."
+            )
+        }
+    }
+
+    @ViewBuilder
+    private func requestAction(_ details: SeerrMediaDetails) -> some View {
+        if seerr.user?.canRequest(mediaType) == true {
+            if mediaType == .movie {
+                confirmingPrimaryButton(
+                    title: "Request Movie",
+                    symbol: "plus",
+                    identifier: "seerr.detail.request"
+                ) {
                     popup = Popup(
-                        title: "Unblock \(details.displayTitle)?",
-                        message: "This lifts the block so the title can be requested again.",
-                        confirmsUnblock: true
+                        title: "Request \(details.displayTitle)?",
+                        message: "Send this movie request to Seerr?",
+                        confirmsMovieRequest: true
                     )
+                }
+            } else {
+                Button {
+                    seasonRequestDetails = details
                 } label: {
-                    if isRequesting {
-                        ProgressView()
-                    } else {
-                        Label("Unblock", systemImage: "hand.raised.slash")
-                            .detailPrimaryLabel()
-                    }
+                    Label("Choose Seasons", systemImage: "plus")
+                        .detailPrimaryLabel()
                 }
                 .detailPrimaryButton()
-                .disabled(isRequesting)
-                .accessibilityIdentifier("seerr.detail.unblock")
-            } else {
-                statusButton(
-                    title: availability.title,
-                    symbol: "hand.raised",
-                    message: "The server administrator has blocked this title, so it cannot be requested."
-                )
+                .accessibilityIdentifier("seerr.detail.request")
             }
-        case .unknown, .deleted:
-            if seerr.user?.canRequest(mediaType) == true {
-                if mediaType == .movie {
-                    Button {
-                        popup = Popup(
-                            title: "Request \(details.displayTitle)?",
-                            message: "Send this movie request to Seerr?",
-                            confirmsMovieRequest: true
-                        )
-                    } label: {
-                        if isRequesting {
-                            ProgressView()
-                        } else {
-                            Label("Request Movie", systemImage: "plus")
-                                .detailPrimaryLabel()
-                        }
-                    }
-                    .detailPrimaryButton()
-                    .disabled(isRequesting)
-                    .accessibilityIdentifier("seerr.detail.request")
-                } else {
-                    Button {
-                        seasonRequestDetails = details
-                    } label: {
-                        Label("Choose Seasons", systemImage: "plus")
-                            .detailPrimaryLabel()
-                    }
-                    .detailPrimaryButton()
-                    .accessibilityIdentifier("seerr.detail.request")
-                }
+        } else {
+            statusButton(
+                title: "Request Unavailable",
+                symbol: "lock",
+                message: "Your Seerr account doesn't have permission to request this title."
+            )
+        }
+    }
+
+    /// A primary button that asks for confirmation and shows a spinner
+    /// while the request it triggers is in flight.
+    private func confirmingPrimaryButton(
+        title: LocalizedStringKey,
+        symbol: String,
+        identifier: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            if isRequesting {
+                ProgressView()
             } else {
-                statusButton(
-                    title: "Request Unavailable",
-                    symbol: "lock",
-                    message: "Your Seerr account doesn't have permission to request this title."
-                )
+                Label(title, systemImage: symbol)
+                    .detailPrimaryLabel()
             }
         }
+        .detailPrimaryButton()
+        .disabled(isRequesting)
+        .accessibilityIdentifier(identifier)
     }
 
     /// Beside a show's primary action: request the seasons nobody has
