@@ -2220,11 +2220,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
 
         remote.press(.menu)
         let playerProbe = app.descendants(matching: .any)["player.regression.state"]
-        let dismissed = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "exists == false"),
-            object: playerProbe
-        )
-        XCTAssertEqual(XCTWaiter().wait(for: [dismissed], timeout: 20), .completed, "the player did not dismiss")
+        XCTAssertTrue(playerProbe.waitForNonExistence(timeout: 20), "the player did not dismiss")
         // The lifecycle probe exists only in Debug, and this test runs in Release.
         if app.descendants(matching: .any)["app.lifecycle.state"].exists {
             let cleanup = waitForState(in: app, timeout: 15, probe: .lifecycle) {

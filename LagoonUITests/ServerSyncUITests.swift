@@ -234,7 +234,7 @@ final class ServerSyncUITests: XCTestCase {
         attachScreenshot(of: app, named: "profile-picker")
 
         remote.press(.menu)
-        XCTAssertTrue(waitForNonexistence(of: add, timeout: 8), "Back did not close the picker")
+        XCTAssertTrue(add.waitForNonExistence(timeout: 8), "Back did not close the picker")
         Thread.sleep(forTimeInterval: 0.5)
         XCTAssertTrue(profile.hasFocus, "Back from the picker did not return focus to the profile button")
 
@@ -279,11 +279,11 @@ final class ServerSyncUITests: XCTestCase {
         )
         remote.press(.select)
         XCTAssertTrue(
-            waitForNonexistence(of: refresh, timeout: 8),
+            refresh.waitForNonExistence(timeout: 8),
             "Refresh remained exposed over the pushed detail"
         )
         XCTAssertTrue(
-            waitForNonexistence(of: app.buttons["profile.button"], timeout: 8),
+            app.buttons["profile.button"].waitForNonExistence(timeout: 8),
             "The profile button remained exposed over the pushed detail"
         )
 
@@ -425,14 +425,6 @@ final class ServerSyncUITests: XCTestCase {
             Thread.sleep(forTimeInterval: 0.2)
         } while Date() < deadline
         return false
-    }
-
-    private func waitForNonexistence(of element: XCUIElement, timeout: TimeInterval) -> Bool {
-        let expectation = XCTNSPredicateExpectation(
-            predicate: NSPredicate(format: "exists == false"),
-            object: element
-        )
-        return XCTWaiter.wait(for: [expectation], timeout: timeout) == .completed
     }
 }
 
