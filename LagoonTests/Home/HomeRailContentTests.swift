@@ -142,6 +142,31 @@ struct HomeRailContentTests {
         #expect(model.latestRails.first?.items.isEmpty == true)
     }
 
+    @Test func aLoadSupersededByAnAccountSwitchPublishesNothing() async {
+        let client = makeClient()
+        let model = HomeViewModel()
+        HomeRailURLProtocol.set(resume: #"{"Items":[{"Id":"first","Type":"Movie"}]}"#)
+        HomeRailURLProtocol.hold("latest")
+        defer { HomeRailURLProtocol.release() }
+
+        let stale = Task { await model.load(client: client, accountID: "first") }
+        while !HomeRailURLProtocol.hasPending { await Task.yield() }
+        // Keep the first load parked so its results land after the second's.
+        HomeRailURLProtocol.hold("none")
+        HomeRailURLProtocol.set(resume: #"{"Items":[{"Id":"second","Type":"Movie"}]}"#)
+        await model.load(client: client, accountID: "second")
+        #expect(model.resume.map(\.id) == ["second"])
+
+        HomeRailURLProtocol.release()
+        await stale.value
+
+        #expect(model.resume.map(\.id) == ["second"])
+        #expect(!model.isLoading)
+        #expect(model.errorMessage == nil)
+        // Refresh joins its discovery tasks, so none leak into another fixture.
+        await model.refreshServerContent(client: client, homeSectionPreferences: .init())
+    }
+
     @Test(arguments: ["latest", "parents"])
     func switchingAccountsCannotMixLatestAndParentRecords(heldStage: String) async throws {
         let client = makeClient()
