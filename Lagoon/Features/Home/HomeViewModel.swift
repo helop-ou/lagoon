@@ -109,7 +109,7 @@ final class HomeViewModel {
         preferences: HomeSectionPreferenceValues
     ) async throws -> PrimaryContent {
         let libraries = try await client.userViews()
-            .filter { ["movies", "tvshows"].contains($0.collectionType ?? "") }
+            .filter { LibraryMediaKind.isBrowsable(collectionType: $0.collectionType) }
 
         async let resumeItems = try? client.resumeItems()
         async let nextUpItems = try? client.nextUp()
@@ -328,7 +328,7 @@ final class HomeViewModel {
         let generation = loadGeneration
         let identity = client.sessionIdentity
         guard let libraries = try? await client.userViews()
-            .filter({ ["movies", "tvshows"].contains($0.collectionType ?? "") }) else { return }
+            .filter({ LibraryMediaKind.isBrowsable(collectionType: $0.collectionType) }) else { return }
         guard isCurrent(generation, identity: identity, client: client) else { return }
         let refreshed = await loadLatestRails(libraries: libraries, client: client)
         guard isCurrent(generation, identity: identity, client: client) else { return }

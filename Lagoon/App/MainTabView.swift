@@ -474,7 +474,7 @@ struct MainTabView: View {
                 // Only a success assigns, so an empty result really is empty
                 // and clears the cache.
                 let tabs = views
-                    .filter { ["movies", "tvshows"].contains($0.collectionType ?? "") }
+                    .filter { LibraryMediaKind.isBrowsable(collectionType: $0.collectionType) }
                     .map(LibraryTab.init)
                 libraries = tabs
                 librariesLoaded = true
