@@ -198,11 +198,7 @@ final class PlaybackController {
     @ObservationIgnored private let lifecycleID = UUID()
     @ObservationIgnored private var handoffStartedAt: TimeInterval?
     @ObservationIgnored private var transitionFeedbackTask: Task<Void, Never>?
-    #if DEBUG
-    /// `debug.regressionStartNearEnd` applies to the fixture episode only;
-    /// applied to the successor, the hand-off test exits too early.
-    @ObservationIgnored private var didApplyRegressionNearEnd = false
-    #endif
+    @ObservationIgnored private var startHooks = PlaybackStartHooks()
 
     init() {
         PlaybackLifecycleDiagnostics.controllerCreated(lifecycleID)
@@ -286,60 +282,12 @@ final class PlaybackController {
         startPaused: Bool = false
     ) async {
         guard !isClosed else { return }
-        os_signpost(
-            .begin,
-            log: PlaybackPerformance.log,
-            name: "Playback Controller Start",
-            signpostID: performanceSignpostID,
-            "item=%{public}s",
-            media.id
-        )
-        defer {
-            os_signpost(
-                .end,
-                log: PlaybackPerformance.log,
-                name: "Playback Controller Start",
-                signpostID: performanceSignpostID
-            )
-        }
-        self.client = client
-        currentMedia = media
-        // Reset every start, so a failed group start cannot leak its position.
-        startPositionOverride = startPosition
-        startsPaused = startPaused
-        if deliveryItemId != media.id {
-            // A new item negotiates from scratch.
-            deliveryItemId = media.id
-            delivery = .negotiated
-            deliveryFallbacks = []
-            skipsLocalPlayback = false
-            qualityOfferPolicy = PlaybackQualityOfferPolicy()
-            #if DEBUG
-            // Regression hook: force a rung so HLS cases run on a server that
-            // would direct-play everything. Raw value `remux` or `transcode`.
-            if UserDefaults.standard.bool(forKey: "debug.playerRegression"),
-               let forced = UserDefaults.standard.string(forKey: "debug.regressionInitialDelivery"),
-               let rung = PlaybackDelivery(rawValue: forced), rung != .negotiated {
-                delivery = rung
-            }
-            #endif
-        }
-        itemId = media.id
-        // A download plays from disk with no server round trip. Checked
-        // before a prepared successor, which describes a network stream.
-        var localSource: MediaSource?
-        var localURL: URL?
-        var localResumeTicks: Int64?
-        #if os(iOS)
-        var localIsTranscode = false
-        if !skipsLocalPlayback, let local = DownloadStore.shared.localPlayback(for: media.id) {
-            localSource = local.source
-            localURL = local.url
-            localIsTranscode = local.quality != .original
-            localResumeTicks = local.resumeTicks
-        }
-        #endif
-        isLocalPlayback = localURL != nil
+        beginStartSignpost(itemID: media.id)
+        defer { endStartSignpost() }
+        beginStart(media: media, client: client, startPosition: startPosition, startPaused: startPaused)
+        // Checked before a prepared successor, which describes a network stream.
+        let download = downloadedSource(for: media)
+        isLocalPlayback = download != nil
         // How far the attempt got, for the failure report.
         var startStage: PlaybackFailureDetail.Stage = .negotiate
         do {
@@ -352,379 +300,541 @@ final class PlaybackController {
             async let segments: [MediaSegment] = isLocalPlayback
                 ? []
                 : await client.mediaSegments(itemId: media.id)
-            let info: PlaybackInfoResponse?
-            let source: MediaSource
-            var streamURL: URL
-            var method: PlayMethod
-            if let localURL, let localSource {
-                info = nil
-                source = localSource
-                streamURL = localURL
-                method = .directPlay
-            } else if let prepared, prepared.mediaID == media.id {
-                info = prepared.info
-                source = prepared.source
-                streamURL = prepared.streamURL
-                method = prepared.method
+            let resolved = if let download {
+                download
             } else {
-                var negotiated = try await client.playbackInfo(
-                    itemId: media.id,
-                    delivery: delivery,
-                    maxBitrate: qualityCap
-                )
-                guard negotiated.errorCode == nil,
-                      var resolvedSource = negotiated.mediaSources.first else {
-                    throw JellyfinError.unplayable
-                }
-                // A disc this rung cannot play steps down before an attempt,
-                // whatever the server says. The HUD still records why.
-                let layout = PlaybackSourceLayout(
-                    videoType: resolvedSource.videoType,
-                    isoType: resolvedSource.isoType
-                )
-                if delivery == .negotiated, let refusal = layout.directPlayRefusal {
-                    skipDelivery(to: PlaybackFallbackPolicy.start(for: layout), refusal: refusal)
-                    negotiated = try await client.playbackInfo(
-                        itemId: media.id,
-                        delivery: delivery,
-                        maxBitrate: qualityCap
-                    )
-                    guard negotiated.errorCode == nil,
-                          let lowered = negotiated.mediaSources.first else {
-                        throw JellyfinError.unplayable
-                    }
-                    resolvedSource = lowered
-                }
-                info = negotiated
-                source = resolvedSource
-                (streamURL, method) = try client.streamURL(itemId: media.id, source: source)
+                try await streamedSource(for: media, prepared: prepared, client: client)
             }
-            mediaSourceId = source.id
-            playMethod = method
-            playingSourceBitrate = source.bitrate
-            // Read a disc image directly only when direct play serves the
-            // image itself. Transcodes and downloads are ordinary streams.
-            let discRequest: DiscPlaybackRequest? = !isLocalPlayback
-                && method == .directPlay
-                && PlaybackSourceLayout(
-                    videoType: source.videoType,
-                    isoType: source.isoType
-                ).isReadableDisc
-                ? DiscPlaybackRequest(
-                    runtimeSeconds: source.runTimeTicks.map(Ticks.seconds)
-                )
-                : nil
-            var resumeSeconds = Self.resumeStartSeconds(
-                fallbackOverrideSeconds: startPositionOverride,
-                startFromBeginning: startFromBeginning,
-                localResumeTicks: localResumeTicks,
-                serverPositionTicks: media.userData?.playbackPositionTicks
+            adopt(resolved)
+            var startSeconds = beginAttempt(for: media, resolved: resolved, startFromBeginning: startFromBeginning)
+            startSeconds = startHooks.pinnedStart(
+                startSeconds,
+                runtimeTicks: resolved.source.runTimeTicks ?? media.runTimeTicks
             )
-            startPositionOverride = nil
-            incidents.beginAttempt(
-                delivery: delivery,
-                method: method,
-                source: source,
-                cached: SampleBufferPlayerEngine.cachesPlayback(
-                    url: streamURL, delivery: method.delivery
-                ),
-                disc: discRequest != nil,
-                resumeSeconds: resumeSeconds
-            )
-            if UserDefaults.standard.bool(forKey: "debug.frameLossBench") {
-                let pinnedStart = UserDefaults.standard.double(forKey: "debug.benchStartSeconds")
-                if pinnedStart > 0 {
-                    resumeSeconds = pinnedStart
-                }
-            }
-            #if DEBUG
-            if UserDefaults.standard.bool(forKey: "debug.regressionStartNearEnd"),
-               !didApplyRegressionNearEnd,
-               let ticks = source.runTimeTicks ?? media.runTimeTicks {
-                didApplyRegressionNearEnd = true
-                resumeSeconds = max(Ticks.seconds(ticks) - 45, 0)
-            }
-            #endif
-
             let resolvedExtras = await extras
             let resolvedSegments = await segments
-            // UI regression hook: start inside the first skippable segment.
-            if UserDefaults.standard.bool(forKey: "debug.playerRegression"),
-               UserDefaults.standard.bool(forKey: "debug.regressionStartAtFirstSkippable"),
-               let segment = resolvedSegments.first(where: { $0.kind.isSkippable }) {
-                resumeSeconds = segment.start + min(max((segment.end - segment.start) / 4, 0.1), 1)
-            }
-
-            playerInfo = itemInfo(
+            startSeconds = startHooks.skippableStart(startSeconds, segments: resolvedSegments)
+            let info = itemInfo(
                 for: media,
-                source: source,
+                source: resolved.source,
                 client: client,
                 extras: resolvedExtras,
                 segments: resolvedSegments
             )
-
-            // A transcoded download is a different file from the source, so
-            // its source streams don't describe it. Empty metadata is safe:
-            // selection falls back to what the file demuxes to.
-            #if os(iOS)
-            let sourceStreams: [MediaStream] = localIsTranscode ? [] : (source.mediaStreams ?? [])
-            #else
-            let sourceStreams = source.mediaStreams ?? []
-            #endif
-            let embeddedAudio = sourceStreams.filter { $0.type == "Audio" }
-            let allSubtitles = sourceStreams.filter { $0.type == "Subtitle" }
-            let embeddedSubtitles = allSubtitles.filter { $0.isExternal != true }
-            // Kept paired: a sidecar whose URL won't resolve is dropped from
-            // both lists, or every later ordinal names the wrong track.
-            let externalPairs: [(stream: MediaStream, track: ExternalSubtitleTrack)] = allSubtitles
-                .filter { $0.isExternal == true }
-                .compactMap { stream in
-                    guard let url = client.externalSubtitleURL(deliveryUrl: stream.deliveryUrl) else { return nil }
-                    return (stream, ExternalSubtitleTrack(
-                        url: url,
-                        title: stream.displayTitle,
-                        language: stream.language,
-                        select: stream.index == source.defaultSubtitleStreamIndex,
-                        isForced: stream.isForced == true,
-                        isHearingImpaired: stream.isHearingImpaired == true
-                    ))
-                }
-            let externalTracks = externalPairs.map(\.track)
-            let memoryScope = AudioTrackMemoryStore.scope(seriesID: media.seriesId, itemID: media.id)
-            let plan = PlaybackTrackPlan(
-                audio: embeddedAudio,
-                embeddedSubtitles: embeddedSubtitles,
-                externalSubtitles: externalPairs.map(\.stream),
-                serverDefaultAudioIndex: source.defaultAudioStreamIndex,
-                serverDefaultSubtitleIndex: source.defaultSubtitleStreamIndex,
-                settings: selection,
-                originalLanguage: resolvedExtras.originalLanguage ?? media.originalLanguage,
-                captionDisplay: Self.systemCaptionDisplay,
-                memoryScope: memoryScope,
-                carry: trackCarry,
-                rememberedAudio: audioTrackMemory?.choice(for: memoryScope),
-                rememberedSubtitle: subtitleTrackMemory?.choice(for: memoryScope),
-                benchSubtitleLanguage: UserDefaults.standard.string(forKey: "debug.benchSubtitleLanguage")
-            )
-            trackPlan = plan
+            playerInfo = info
+            let tracks = startTracks(for: media, resolved: resolved, extras: resolvedExtras, client: client)
+            trackPlan = tracks.plan
 
             configureSystemMediaCallbacks()
-            guard !isClosed else { throw CancellationError() }
-            try Task.checkCancellation()
-            let previousResourcesRetired = await PlaybackLifecycleDiagnostics
-                .waitForMediaResourcesToRetire(timeout: .seconds(15))
-            if !previousResourcesRetired {
-                signpostRetirementTimeout(scope: "start")
-                // Never attach a new engine to the display layer while the
-                // outgoing synchronizer still owns it; that stalls the
-                // autoplayed episode on Apple TV.
-                throw PlaybackStartError.previousEngineDidNotRetire
-            }
-            guard !isClosed else { throw CancellationError() }
-            try Task.checkCancellation()
+            try await waitForPreviousEngineToRetire()
             try audioSession.activate { [weak self] in
                 guard let engine = self?.engine else { return false }
                 return !engine.isPaused
             }
 
-            let engine = SampleBufferPlayerEngine()
-            startStage = .start
-            // Carry the viewer's speed across hand-off and fallback swaps.
-            engine.setRate(self.engine?.rate ?? 1)
-            if startsPaused {
-                // Before priming, so the clock anchors at rate 0 and the
-                // member waits on its first frame.
-                engine.pause()
-            }
-            startsPaused = false
-            engine.prepare(
-                url: streamURL,
-                itemID: media.id,
-                delivery: method.delivery,
-                expectedLength: source.size,
-                disc: discRequest,
-                startSeconds: resumeSeconds,
-                initialAudioOrdinal: plan.initialAudioOrdinal,
-                initialSubtitleOrdinal: plan.initialSubtitleOrdinal,
-                audioTrackMetadata: embeddedAudio.map(Self.trackMetadata),
-                embeddedSubtitleMetadata: embeddedSubtitles.map(Self.trackMetadata),
-                externalSubtitles: externalTracks,
-                authorization: client.mediaRequestAuthorization()
+            let engine = makeEngine(
+                for: media, resolved: resolved, startSeconds: startSeconds, tracks: tracks, client: client
             )
-            engine.onFinished = { [weak self] in self?.playbackDidFinish() }
-            engine.onTimeAdvanced = { [weak self] position, duration in
-                self?.automation.tick(position: position, duration: duration)
-            }
-            engine.onSeekReady = { [weak self, weak engine] in
-                guard let self, let engine, self.engine === engine else { return }
-                self.onEngineReady?()
-            }
-            observedStallCount = 0
-            engine.onBufferingChanged = { [weak self, weak engine] buffering in
-                guard let self, let engine, self.engine === engine else { return }
-                // A timed skip waits out a stall before seeking.
-                self.automation.isBuffering = buffering
-                self.onBufferingChanged?(buffering)
-                // The engine counts a stall just after it starts buffering.
-                if buffering {
-                    Task { @MainActor [weak self, weak engine] in
-                        guard let self, let engine, self.engine === engine else { return }
-                        self.noteStalls(engine.stallCount)
-                    }
-                }
-            }
-            engine.setVideoOutputSuspended(videoOutputSuspended)
-            engine.setHostInBackground(isInBackground)
-            engine.onPlaybackStarted = { [weak self, weak engine] in
-                guard let self, let engine, self.engine === engine else { return }
-                self.engineHasStarted = true
-                self.finishEpisodeHandoff(outcome: "ready")
-                self.incidents.playbackReady(engine: engine)
-                #if DEBUG
-                self.schedulePlaybackStarvationDiagnostics(for: engine)
-                self.scheduleRendererRecoveryRegressionHooks(for: engine)
-                self.scheduleDeliveryFallbackRegression(for: engine)
-                #endif
-            }
-            engine.onError = { [weak self, weak engine] failure in
-                guard let self, let engine, self.engine === engine else { return }
-                self.handleEngineError(failure, engine: engine)
-            }
-            engine.onTrackSelectionChanged = { [weak self, weak engine] in
-                self?.nowPlaying.updateLanguageOptions()
-                // Identity-guarded: a shut-down engine keeps reporting the
-                // track it had, and this writes durable state.
-                if let self, let engine, self.engine === engine {
-                    self.recordTrackChoices(engine: engine)
-                }
-                if let language = engine?.subtitleTracks.first(where: \.isSelected)?.languageTag,
-                   let normalized = SubtitlePreferencesStore.normalizedLanguage(language) {
-                    // Apple's caption contract: feed explicit choices back
-                    // to the system caption-language preferences.
-                    _ = MACaptionAppearanceAddSelectedLanguage(.user, normalized as CFString)
-                }
-            }
-            playbackIdentity = media.id
-            engineHasStarted = false
-            self.engine = engine
-            guard let playerInfo else { throw JellyfinError.unplayable }
-            automation.beginItem(segments: playerInfo.segments)
-            // Seeded: the callback only reports changes.
-            automation.isBuffering = engine.isBuffering
-            // Through the controller, so a skip in a group is a group seek.
-            automation.onSkip = { [weak self] segment in self?.userSeek(to: segment.end) }
-            automation.onPlayNext = { [weak self] in
-                guard let self, !self.isClosed, !self.isAdvancing else { return }
-                // In a group the server starts the next item for everyone.
-                if let groupTransport = self.groupTransport {
-                    groupTransport.requestNextItem()
-                    return
-                }
-                self.isAutoplayPending = true
-                Task { await self.playNextEpisode() }
-            }
+            startStage = .start
+            install(engine, for: media)
+            beginAutomation(segments: info.segments, engine: engine)
             nowPlaying.activate(
-                info: playerInfo,
+                info: info,
                 itemID: itemId,
                 engine: engine,
                 transport: transportActions,
                 replacingActiveSession: handoffStartedAt != nil
             )
-            let preferredSet = Set(selection.preferredSubtitleLanguages.compactMap(
-                SubtitlePreferencesStore.normalizedLanguage
-            ))
-            let hasSuitableLocalTrack = plan.subtitleStreams.contains {
-                guard let language = $0.language.flatMap(SubtitlePreferencesStore.normalizedLanguage) else {
-                    return false
-                }
-                return preferredSet.contains(language)
-            }
-            subtitleSearch.configure(
-                client: client,
-                engine: engine,
-                itemID: itemId,
-                mediaSourceID: mediaSourceId,
-                streams: plan.subtitleStreams,
-                preferredLanguages: selection.preferredSubtitleLanguages,
-                missingMode: missingSubtitleMode,
-                hasSuitableLocalTrack: hasSuitableLocalTrack
-            ) { [weak self] stream in
-                self?.trackPlan?.appendSearchedSubtitle(stream)
-                self?.nowPlaying.updateLanguageOptions()
-            }
-            lastKnownPosition = resumeSeconds
-            let reporting = PlaybackReportingSession(
-                client: client,
-                itemID: itemId,
-                mediaSourceID: mediaSourceId,
-                playSessionID: info?.playSessionId,
-                method: method,
-                signpostID: performanceSignpostID,
-                runtimeTicks: source.runTimeTicks ?? media.runTimeTicks
-            )
-            self.reporting = reporting
+            configureSubtitleSearch(plan: tracks.plan, engine: engine, client: client)
+            lastKnownPosition = startSeconds
+            let reporting = beginReporting(for: media, resolved: resolved, client: client)
 
-            #if DEBUG
-            // UI-test hook: widen the window where dismissal races startup.
-            let startupDelay = UserDefaults.standard.double(
-                forKey: "debug.regressionPlaybackStartDelaySeconds"
-            )
-            if startupDelay > 0 {
-                try await Task.sleep(for: .seconds(startupDelay))
-            }
-            #endif
-
-            if isLocalPlayback {
-                // Not awaited: an unreachable server would stall local
-                // playback for the full request timeout. Failures are dropped.
-                Task {
-                    try? await reporting.reportStart(at: resumeSeconds)
-                }
-            } else {
-                do {
-                    try await reporting.reportStart(at: resumeSeconds)
-                } catch is CancellationError {
-                    // Dismissed mid-request: don't recreate work after teardown.
-                    throw CancellationError()
-                } catch {
-                    // Reporting failure must not interrupt playback.
-                }
-            }
+            try await startHooks.delayStartup()
+            try await reportStart(reporting, at: startSeconds)
             try Task.checkCancellation()
             guard self.engine === engine, self.reporting === reporting, reporting.isActive else {
                 return
             }
-            startProgressLoop()
-            diagnosticSampler.cacheMetrics = { [weak self] in self?.engine?.playbackCacheMetrics }
-            diagnosticSampler.startTrace(engine: engine) { [weak self] in
-                self?.soakExitRequested = true
-                self?.soakExitRequestedAt = ContinuousClock.now
-            }
-            diagnosticSampler.startHUD(
-                source: source, method: method, engine: engine,
-                context: { [weak self] in
-                    guard let self else { return nil }
-                    return .init(
-                        cache: self.engine?.playbackCacheMetrics,
-                        handoffMilliseconds: self.lastHandoffMilliseconds,
-                        fallbackLines: self.deliveryFallbackHUDLines
-                            + (self.groupHUDLines?() ?? [])
-                    )
-                },
-                publish: { [weak self] in self?.hudLines = $0 }
-            )
+            beginSession(engine: engine, resolved: resolved)
             resolveNextUp(after: media, client: client)
         } catch {
-            // `beginStop` also claims the exactly-once stop report.
-            let cancelled = Self.isStartCancellation(error, taskCancelled: Task.isCancelled, closed: isClosed)
-            finishEpisodeHandoff(outcome: cancelled ? "cancelled" : "failed")
-            if !cancelled {
-                incidents.startFailed(error, delivery: delivery, stage: startStage)
+            failStart(error, stage: startStage)
+        }
+    }
+
+    // MARK: - Start steps
+
+    private func beginStartSignpost(itemID: String) {
+        os_signpost(
+            .begin,
+            log: PlaybackPerformance.log,
+            name: "Playback Controller Start",
+            signpostID: performanceSignpostID,
+            "item=%{public}s",
+            itemID
+        )
+    }
+
+    private func endStartSignpost() {
+        os_signpost(
+            .end,
+            log: PlaybackPerformance.log,
+            name: "Playback Controller Start",
+            signpostID: performanceSignpostID
+        )
+    }
+
+    /// Where an attempt's bytes come from, and what the server said about
+    /// them.
+    private struct ResolvedSource {
+        /// Nil for a download, which plays without asking the server.
+        let info: PlaybackInfoResponse?
+        let source: MediaSource
+        let streamURL: URL
+        let method: PlayMethod
+        var isDownload = false
+        /// A download's own position, which replaces the server's.
+        var localResumeTicks: Int64?
+        /// A transcoded download is a different file from the source, so its
+        /// source streams don't describe it.
+        var isTranscodedDownload = false
+
+        /// Empty for a transcoded download. Safe: selection falls back to
+        /// what the file demuxes to.
+        var trackStreams: [MediaStream] {
+            isTranscodedDownload ? [] : (source.mediaStreams ?? [])
+        }
+
+        /// Read a disc image directly only when direct play serves the image
+        /// itself. Transcodes and downloads are ordinary streams.
+        var discRequest: DiscPlaybackRequest? {
+            guard !isDownload, method == .directPlay,
+                  PlaybackSourceLayout(videoType: source.videoType, isoType: source.isoType).isReadableDisc
+            else { return nil }
+            return DiscPlaybackRequest(runtimeSeconds: source.runTimeTicks.map(Ticks.seconds))
+        }
+    }
+
+    /// The tracks an attempt opens with: the plan that selects them, and the
+    /// subtitles the engine is handed.
+    private struct StartTracks {
+        let plan: PlaybackTrackPlan
+        let embeddedAudio: [MediaStream]
+        let embeddedSubtitles: [MediaStream]
+        let externalSubtitles: [ExternalSubtitleTrack]
+    }
+
+    /// Per-start state. The start position and paused start are reset every
+    /// time, so a failed group start cannot leak its position; a new item
+    /// also negotiates from scratch.
+    private func beginStart(
+        media: MediaItem,
+        client: JellyfinClient,
+        startPosition: Double?,
+        startPaused: Bool
+    ) {
+        self.client = client
+        currentMedia = media
+        startPositionOverride = startPosition
+        startsPaused = startPaused
+        if deliveryItemId != media.id {
+            deliveryItemId = media.id
+            delivery = startHooks.initialDelivery()
+            deliveryFallbacks = []
+            skipsLocalPlayback = false
+            qualityOfferPolicy = PlaybackQualityOfferPolicy()
+        }
+        itemId = media.id
+    }
+
+    /// A download plays from disk with no server round trip. Always nil on
+    /// tvOS, and after a downloaded file has failed.
+    private func downloadedSource(for media: MediaItem) -> ResolvedSource? {
+        #if os(iOS)
+        guard !skipsLocalPlayback, let local = DownloadStore.shared.localPlayback(for: media.id) else {
+            return nil
+        }
+        return ResolvedSource(
+            info: nil,
+            source: local.source,
+            streamURL: local.url,
+            method: .directPlay,
+            isDownload: true,
+            localResumeTicks: local.resumeTicks,
+            isTranscodedDownload: local.quality != .original
+        )
+        #else
+        return nil
+        #endif
+    }
+
+    /// The prepared successor when it is this item, otherwise a fresh
+    /// negotiation on the current rung.
+    private func streamedSource(
+        for media: MediaItem,
+        prepared: PlaybackSuccessorPreparation.PreparedPlayback?,
+        client: JellyfinClient
+    ) async throws -> ResolvedSource {
+        if let prepared, prepared.mediaID == media.id {
+            return ResolvedSource(
+                info: prepared.info,
+                source: prepared.source,
+                streamURL: prepared.streamURL,
+                method: prepared.method
+            )
+        }
+        var negotiated = try await negotiatedSource(for: media, client: client)
+        // A disc this rung cannot play steps down before an attempt,
+        // whatever the server says. The HUD still records why.
+        let layout = PlaybackSourceLayout(
+            videoType: negotiated.source.videoType,
+            isoType: negotiated.source.isoType
+        )
+        if delivery == .negotiated, let refusal = layout.directPlayRefusal {
+            skipDelivery(to: PlaybackFallbackPolicy.start(for: layout), refusal: refusal)
+            negotiated = try await negotiatedSource(for: media, client: client)
+        }
+        let (streamURL, method) = try client.streamURL(itemId: media.id, source: negotiated.source)
+        return ResolvedSource(
+            info: negotiated.info,
+            source: negotiated.source,
+            streamURL: streamURL,
+            method: method
+        )
+    }
+
+    private func negotiatedSource(
+        for media: MediaItem,
+        client: JellyfinClient
+    ) async throws -> (info: PlaybackInfoResponse, source: MediaSource) {
+        let info = try await client.playbackInfo(
+            itemId: media.id,
+            delivery: delivery,
+            maxBitrate: qualityCap
+        )
+        guard info.errorCode == nil, let source = info.mediaSources.first else {
+            throw JellyfinError.unplayable
+        }
+        return (info, source)
+    }
+
+    private func adopt(_ resolved: ResolvedSource) {
+        mediaSourceId = resolved.source.id
+        playMethod = resolved.method
+        playingSourceBitrate = resolved.source.bitrate
+    }
+
+    /// Resolves where this attempt starts, spends the one-start override,
+    /// and opens the attempt's incident record there, at the real resume
+    /// position a bench or regression hook may then move.
+    private func beginAttempt(
+        for media: MediaItem,
+        resolved: ResolvedSource,
+        startFromBeginning: Bool
+    ) -> Double {
+        let seconds = Self.resumeStartSeconds(
+            fallbackOverrideSeconds: startPositionOverride,
+            startFromBeginning: startFromBeginning,
+            localResumeTicks: resolved.localResumeTicks,
+            serverPositionTicks: media.userData?.playbackPositionTicks
+        )
+        startPositionOverride = nil
+        incidents.beginAttempt(
+            delivery: delivery,
+            method: resolved.method,
+            source: resolved.source,
+            cached: SampleBufferPlayerEngine.cachesPlayback(
+                url: resolved.streamURL, delivery: resolved.method.delivery
+            ),
+            disc: resolved.discRequest != nil,
+            resumeSeconds: seconds
+        )
+        return seconds
+    }
+
+    private func startTracks(
+        for media: MediaItem,
+        resolved: ResolvedSource,
+        extras: JellyfinClient.PlaybackExtras,
+        client: JellyfinClient
+    ) -> StartTracks {
+        let source = resolved.source
+        let streams = resolved.trackStreams
+        let embeddedAudio = streams.filter { $0.type == "Audio" }
+        let allSubtitles = streams.filter { $0.type == "Subtitle" }
+        let embeddedSubtitles = allSubtitles.filter { $0.isExternal != true }
+        // Kept paired: a sidecar whose URL won't resolve is dropped from
+        // both lists, or every later ordinal names the wrong track.
+        let externalPairs: [(stream: MediaStream, track: ExternalSubtitleTrack)] = allSubtitles
+            .filter { $0.isExternal == true }
+            .compactMap { stream in
+                guard let url = client.externalSubtitleURL(deliveryUrl: stream.deliveryUrl) else { return nil }
+                return (stream, ExternalSubtitleTrack(
+                    url: url,
+                    title: stream.displayTitle,
+                    language: stream.language,
+                    select: stream.index == source.defaultSubtitleStreamIndex,
+                    isForced: stream.isForced == true,
+                    isHearingImpaired: stream.isHearingImpaired == true
+                ))
             }
-            _ = beginStop()
-            if !cancelled {
-                errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+        let memoryScope = AudioTrackMemoryStore.scope(seriesID: media.seriesId, itemID: media.id)
+        let plan = PlaybackTrackPlan(
+            audio: embeddedAudio,
+            embeddedSubtitles: embeddedSubtitles,
+            externalSubtitles: externalPairs.map(\.stream),
+            serverDefaultAudioIndex: source.defaultAudioStreamIndex,
+            serverDefaultSubtitleIndex: source.defaultSubtitleStreamIndex,
+            settings: selection,
+            originalLanguage: extras.originalLanguage ?? media.originalLanguage,
+            captionDisplay: Self.systemCaptionDisplay,
+            memoryScope: memoryScope,
+            carry: trackCarry,
+            rememberedAudio: audioTrackMemory?.choice(for: memoryScope),
+            rememberedSubtitle: subtitleTrackMemory?.choice(for: memoryScope),
+            benchSubtitleLanguage: startHooks.benchSubtitleLanguage
+        )
+        return StartTracks(
+            plan: plan,
+            embeddedAudio: embeddedAudio,
+            embeddedSubtitles: embeddedSubtitles,
+            externalSubtitles: externalPairs.map(\.track)
+        )
+    }
+
+    /// Never attach a new engine to the display layer while the outgoing
+    /// synchronizer still owns it; that stalls the autoplayed episode on
+    /// Apple TV.
+    private func waitForPreviousEngineToRetire() async throws {
+        try checkStartIsWanted()
+        let previousResourcesRetired = await PlaybackLifecycleDiagnostics
+            .waitForMediaResourcesToRetire(timeout: .seconds(15))
+        if !previousResourcesRetired {
+            signpostRetirementTimeout(scope: "start")
+            throw PlaybackStartError.previousEngineDidNotRetire
+        }
+        try checkStartIsWanted()
+    }
+
+    private func checkStartIsWanted() throws {
+        guard !isClosed else { throw CancellationError() }
+        try Task.checkCancellation()
+    }
+
+    private func makeEngine(
+        for media: MediaItem,
+        resolved: ResolvedSource,
+        startSeconds: Double,
+        tracks: StartTracks,
+        client: JellyfinClient
+    ) -> SampleBufferPlayerEngine {
+        let engine = SampleBufferPlayerEngine()
+        // Carry the viewer's speed across hand-off and fallback swaps.
+        engine.setRate(self.engine?.rate ?? 1)
+        if startsPaused {
+            // Before priming, so the clock anchors at rate 0 and the
+            // member waits on its first frame.
+            engine.pause()
+        }
+        startsPaused = false
+        engine.prepare(
+            url: resolved.streamURL,
+            itemID: media.id,
+            delivery: resolved.method.delivery,
+            expectedLength: resolved.source.size,
+            disc: resolved.discRequest,
+            startSeconds: startSeconds,
+            initialAudioOrdinal: tracks.plan.initialAudioOrdinal,
+            initialSubtitleOrdinal: tracks.plan.initialSubtitleOrdinal,
+            audioTrackMetadata: tracks.embeddedAudio.map(Self.trackMetadata),
+            embeddedSubtitleMetadata: tracks.embeddedSubtitles.map(Self.trackMetadata),
+            externalSubtitles: tracks.externalSubtitles,
+            authorization: client.mediaRequestAuthorization()
+        )
+        engine.setVideoOutputSuspended(videoOutputSuspended)
+        engine.setHostInBackground(isInBackground)
+        return engine
+    }
+
+    /// Makes `engine` the current one. Every callback holds it weakly and
+    /// checks it is still current: a retired engine can still report.
+    private func install(_ engine: SampleBufferPlayerEngine, for media: MediaItem) {
+        engine.onFinished = { [weak self] in self?.playbackDidFinish() }
+        engine.onTimeAdvanced = { [weak self] position, duration in
+            self?.automation.tick(position: position, duration: duration)
+        }
+        engine.onSeekReady = { [weak self, weak engine] in
+            guard let self, let engine, self.engine === engine else { return }
+            self.onEngineReady?()
+        }
+        observedStallCount = 0
+        engine.onBufferingChanged = { [weak self, weak engine] buffering in
+            guard let self, let engine, self.engine === engine else { return }
+            // A timed skip waits out a stall before seeking.
+            self.automation.isBuffering = buffering
+            self.onBufferingChanged?(buffering)
+            // The engine counts a stall just after it starts buffering.
+            if buffering {
+                Task { @MainActor [weak self, weak engine] in
+                    guard let self, let engine, self.engine === engine else { return }
+                    self.noteStalls(engine.stallCount)
+                }
             }
+        }
+        engine.onPlaybackStarted = { [weak self, weak engine] in
+            guard let self, let engine, self.engine === engine else { return }
+            self.engineHasStarted = true
+            self.finishEpisodeHandoff(outcome: "ready")
+            self.incidents.playbackReady(engine: engine)
+            #if DEBUG
+            self.schedulePlaybackStarvationDiagnostics(for: engine)
+            self.scheduleRendererRecoveryRegressionHooks(for: engine)
+            self.scheduleDeliveryFallbackRegression(for: engine)
+            #endif
+        }
+        engine.onError = { [weak self, weak engine] failure in
+            guard let self, let engine, self.engine === engine else { return }
+            self.handleEngineError(failure, engine: engine)
+        }
+        engine.onTrackSelectionChanged = { [weak self, weak engine] in
+            self?.nowPlaying.updateLanguageOptions()
+            // Identity-guarded: a shut-down engine keeps reporting the
+            // track it had, and this writes durable state.
+            if let self, let engine, self.engine === engine {
+                self.recordTrackChoices(engine: engine)
+            }
+            if let language = engine?.subtitleTracks.first(where: \.isSelected)?.languageTag,
+               let normalized = SubtitlePreferencesStore.normalizedLanguage(language) {
+                // Apple's caption contract: feed explicit choices back
+                // to the system caption-language preferences.
+                _ = MACaptionAppearanceAddSelectedLanguage(.user, normalized as CFString)
+            }
+        }
+        playbackIdentity = media.id
+        engineHasStarted = false
+        self.engine = engine
+    }
+
+    private func beginAutomation(segments: [MediaSegment], engine: SampleBufferPlayerEngine) {
+        automation.beginItem(segments: segments)
+        // Seeded: the callback only reports changes.
+        automation.isBuffering = engine.isBuffering
+        // Through the controller, so a skip in a group is a group seek.
+        automation.onSkip = { [weak self] segment in self?.userSeek(to: segment.end) }
+        automation.onPlayNext = { [weak self] in
+            guard let self, !self.isClosed, !self.isAdvancing else { return }
+            // In a group the server starts the next item for everyone.
+            if let groupTransport = self.groupTransport {
+                groupTransport.requestNextItem()
+                return
+            }
+            self.isAutoplayPending = true
+            Task { await self.playNextEpisode() }
+        }
+    }
+
+    private func configureSubtitleSearch(
+        plan: PlaybackTrackPlan,
+        engine: SampleBufferPlayerEngine,
+        client: JellyfinClient
+    ) {
+        let preferredSet = Set(selection.preferredSubtitleLanguages.compactMap(
+            SubtitlePreferencesStore.normalizedLanguage
+        ))
+        let hasSuitableLocalTrack = plan.subtitleStreams.contains {
+            guard let language = $0.language.flatMap(SubtitlePreferencesStore.normalizedLanguage) else {
+                return false
+            }
+            return preferredSet.contains(language)
+        }
+        subtitleSearch.configure(
+            client: client,
+            engine: engine,
+            itemID: itemId,
+            mediaSourceID: mediaSourceId,
+            streams: plan.subtitleStreams,
+            preferredLanguages: selection.preferredSubtitleLanguages,
+            missingMode: missingSubtitleMode,
+            hasSuitableLocalTrack: hasSuitableLocalTrack
+        ) { [weak self] stream in
+            self?.trackPlan?.appendSearchedSubtitle(stream)
+            self?.nowPlaying.updateLanguageOptions()
+        }
+    }
+
+    private func beginReporting(
+        for media: MediaItem,
+        resolved: ResolvedSource,
+        client: JellyfinClient
+    ) -> PlaybackReportingSession {
+        let reporting = PlaybackReportingSession(
+            client: client,
+            itemID: itemId,
+            mediaSourceID: mediaSourceId,
+            playSessionID: resolved.info?.playSessionId,
+            method: resolved.method,
+            signpostID: performanceSignpostID,
+            runtimeTicks: resolved.source.runTimeTicks ?? media.runTimeTicks
+        )
+        self.reporting = reporting
+        return reporting
+    }
+
+    /// A reporting failure never interrupts playback. Cancellation does: the
+    /// player was dismissed mid-request, and nothing may be recreated after
+    /// teardown.
+    private func reportStart(_ reporting: PlaybackReportingSession, at seconds: Double) async throws {
+        if isLocalPlayback {
+            // Not awaited: an unreachable server would stall local
+            // playback for the full request timeout. Failures are dropped.
+            Task {
+                try? await reporting.reportStart(at: seconds)
+            }
+            return
+        }
+        do {
+            try await reporting.reportStart(at: seconds)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            // Reporting failure must not interrupt playback.
+        }
+    }
+
+    /// The engine is current and the server knows: start the progress loop
+    /// and the diagnostics that run for the session.
+    private func beginSession(engine: SampleBufferPlayerEngine, resolved: ResolvedSource) {
+        startProgressLoop()
+        diagnosticSampler.cacheMetrics = { [weak self] in self?.engine?.playbackCacheMetrics }
+        diagnosticSampler.startTrace(engine: engine) { [weak self] in
+            self?.soakExitRequested = true
+            self?.soakExitRequestedAt = ContinuousClock.now
+        }
+        diagnosticSampler.startHUD(
+            source: resolved.source, method: resolved.method, engine: engine,
+            context: { [weak self] in
+                guard let self else { return nil }
+                return .init(
+                    cache: self.engine?.playbackCacheMetrics,
+                    handoffMilliseconds: self.lastHandoffMilliseconds,
+                    fallbackLines: self.deliveryFallbackHUDLines
+                        + (self.groupHUDLines?() ?? [])
+                )
+            },
+            publish: { [weak self] in self?.hudLines = $0 }
+        )
+    }
+
+    private func failStart(_ error: Error, stage: PlaybackFailureDetail.Stage) {
+        // `beginStop` also claims the exactly-once stop report.
+        let cancelled = Self.isStartCancellation(error, taskCancelled: Task.isCancelled, closed: isClosed)
+        finishEpisodeHandoff(outcome: cancelled ? "cancelled" : "failed")
+        if !cancelled {
+            incidents.startFailed(error, delivery: delivery, stage: stage)
+        }
+        _ = beginStop()
+        if !cancelled {
+            errorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
         }
     }
 
