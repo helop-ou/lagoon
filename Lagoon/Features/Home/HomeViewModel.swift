@@ -70,102 +70,166 @@ final class HomeViewModel {
             }
         }
         do {
-            let libraries = try await client.userViews()
-                .filter { ["movies", "tvshows"].contains($0.collectionType ?? "") }
-
-            async let resumeItems = try? client.resumeItems()
-            async let nextUpItems = try? client.nextUp()
-            // A failure costs the rail, not the screen.
-            async let favoriteItems = try? client.favorites()
-            async let movieGenreCatalog = try? client.genres(includeTypes: [.movie])
-            async let showGenreCatalog = try? client.genres(includeTypes: [.series])
-            async let movieGenreArtworkCandidates = try? client.items(
-                includeTypes: [.movie],
-                sortBy: "CommunityRating",
-                sortOrder: "Descending",
-                limit: 300,
-                fields: "Genres,CommunityRating"
-            )
-            async let showGenreArtworkCandidates = try? client.items(
-                includeTypes: [.series],
-                sortBy: "CommunityRating",
-                sortOrder: "Descending",
-                limit: 300,
-                fields: "Genres,CommunityRating"
-            )
-
-            let rails = await loadLatestRails(libraries: libraries, client: client)
-
-            let resolvedResume = await resumeItems
-            let resolvedNextUp = await nextUpItems ?? []
-            let resolvedFavorites = await favoriteItems ?? []
-            let resolvedMovieGenres = await movieGenreCatalog ?? []
-            let resolvedShowGenres = await showGenreCatalog ?? []
-            let resolvedMovieGenreCandidates = await movieGenreArtworkCandidates?.items ?? []
-            let resolvedShowGenreCandidates = await showGenreArtworkCandidates?.items ?? []
-            let resolvedPluginRails = await loadPluginRails(
-                client: client,
-                preferences: homeSectionPreferences
-            )
+            let content = try await fetchPrimaryContent(client: client, preferences: homeSectionPreferences)
             guard isCurrent(generation, identity: identity, client: client) else { return }
-            if let resolvedResume { resume = resolvedResume }
-            nextUp = resolvedNextUp
-            favorites = resolvedFavorites
-            movieGenreShelf = GenreShelfResolver.resolve(
-                catalog: resolvedMovieGenres,
-                candidates: resolvedMovieGenreCandidates,
-                includeTypes: [.movie]
+            apply(content, client: client, identity: identity)
+            guard await fillHeroFromLibrarySampleIfEmpty(
+                client: client, generation: generation, identity: identity
+            ) else { return }
+            startDiscoveryLoads(
+                client: client, seerr: seerr,
+                preferences: homeSectionPreferences, generation: generation
             )
-            showGenreShelf = GenreShelfResolver.resolve(
-                catalog: resolvedShowGenres,
-                candidates: resolvedShowGenreCandidates,
-                includeTypes: [.series]
-            )
-            latestRails = rails
-            if let resolvedResume { TopShelfStore.publish(resolvedResume, client: client, identity: identity) }
-            pluginRails = resolvedPluginRails
-            heroItems = HeroSelection.select(tiers: heroTiers)
-            if heroItems.isEmpty {
-                // No other hero source: sample the library so a dormant
-                // server still opens on a hero.
-                let sample = (try? await client.items(
-                    includeTypes: [.movie, .series],
-                    sortBy: "Random",
-                    limit: 24
-                ))?.items ?? []
-                guard isCurrent(generation, identity: identity, client: client) else { return }
-                librarySample = sample
-                heroItems = HeroSelection.select(tiers: heroTiers)
-            }
-            // Not awaited: holding `isLoading` for below-the-fold discovery
-            // rows would delay the whole screen. They appear as they resolve.
-            cancelDiscoveryTasks()
-            discoveryTasks = [
-                Task { [weak self] in
-                    guard let self else { return }
-                    await self.loadCuratedRails(
-                        client: client,
-                        generation: generation
-                    )
-                },
-                Task { [weak self] in
-                    guard let self else { return }
-                    await self.loadTopTenRails(
-                        client: client, seerr: seerr,
-                        preferences: homeSectionPreferences, generation: generation
-                    )
-                },
-                Task { [weak self] in
-                    guard let self else { return }
-                    await self.loadCollections(client: client, generation: generation)
-                },
-            ]
         } catch {
             guard generation == loadGeneration, identity == client.sessionIdentity else { return }
             hasLoaded = false
             guard !Task.isCancelled else { return }
             errorMessage = "Couldn't load your library."
         }
+    }
+
+    /// Everything above the fold, fetched before anything is published.
+    private struct PrimaryContent {
+        /// Nil when the request failed, so the rail keeps its last value.
+        let resume: [MediaItem]?
+        let nextUp: [MediaItem]
+        let favorites: [MediaItem]
+        let movieGenres: [MediaGenre]
+        let showGenres: [MediaGenre]
+        let movieGenreCandidates: [MediaItem]
+        let showGenreCandidates: [MediaItem]
+        let latestRails: [LibraryRail]
+        let pluginRails: [LibraryRail]
+    }
+
+    /// Throws only when the library list fails; that is the one request
+    /// Home cannot draw without.
+    private func fetchPrimaryContent(
+        client: JellyfinClient,
+        preferences: HomeSectionPreferenceValues
+    ) async throws -> PrimaryContent {
+        let libraries = try await client.userViews()
+            .filter { ["movies", "tvshows"].contains($0.collectionType ?? "") }
+
+        async let resumeItems = try? client.resumeItems()
+        async let nextUpItems = try? client.nextUp()
+        // A failure costs the rail, not the screen.
+        async let favoriteItems = try? client.favorites()
+        async let movieGenreCatalog = try? client.genres(includeTypes: [.movie])
+        async let showGenreCatalog = try? client.genres(includeTypes: [.series])
+        async let movieGenreArtworkCandidates = try? client.items(
+            includeTypes: [.movie],
+            sortBy: "CommunityRating",
+            sortOrder: "Descending",
+            limit: 300,
+            fields: "Genres,CommunityRating"
+        )
+        async let showGenreArtworkCandidates = try? client.items(
+            includeTypes: [.series],
+            sortBy: "CommunityRating",
+            sortOrder: "Descending",
+            limit: 300,
+            fields: "Genres,CommunityRating"
+        )
+
+        let rails = await loadLatestRails(libraries: libraries, client: client)
+
+        let resolvedResume = await resumeItems
+        let resolvedNextUp = await nextUpItems ?? []
+        let resolvedFavorites = await favoriteItems ?? []
+        let resolvedMovieGenres = await movieGenreCatalog ?? []
+        let resolvedShowGenres = await showGenreCatalog ?? []
+        let resolvedMovieGenreCandidates = await movieGenreArtworkCandidates?.items ?? []
+        let resolvedShowGenreCandidates = await showGenreArtworkCandidates?.items ?? []
+        let resolvedPluginRails = await loadPluginRails(client: client, preferences: preferences)
+        return PrimaryContent(
+            resume: resolvedResume,
+            nextUp: resolvedNextUp,
+            favorites: resolvedFavorites,
+            movieGenres: resolvedMovieGenres,
+            showGenres: resolvedShowGenres,
+            movieGenreCandidates: resolvedMovieGenreCandidates,
+            showGenreCandidates: resolvedShowGenreCandidates,
+            latestRails: rails,
+            pluginRails: resolvedPluginRails
+        )
+    }
+
+    /// Synchronous, so no suspension splits these writes.
+    private func apply(
+        _ content: PrimaryContent,
+        client: JellyfinClient,
+        identity: JellyfinClient.SessionIdentity?
+    ) {
+        if let resolvedResume = content.resume { resume = resolvedResume }
+        nextUp = content.nextUp
+        favorites = content.favorites
+        movieGenreShelf = GenreShelfResolver.resolve(
+            catalog: content.movieGenres,
+            candidates: content.movieGenreCandidates,
+            includeTypes: [.movie]
+        )
+        showGenreShelf = GenreShelfResolver.resolve(
+            catalog: content.showGenres,
+            candidates: content.showGenreCandidates,
+            includeTypes: [.series]
+        )
+        latestRails = content.latestRails
+        if let resolvedResume = content.resume {
+            TopShelfStore.publish(resolvedResume, client: client, identity: identity)
+        }
+        pluginRails = content.pluginRails
+        heroItems = HeroSelection.select(tiers: heroTiers)
+    }
+
+    /// With no other hero source, samples the library so a dormant server
+    /// still opens on a hero. False when the load went stale meanwhile.
+    private func fillHeroFromLibrarySampleIfEmpty(
+        client: JellyfinClient,
+        generation: Int,
+        identity: JellyfinClient.SessionIdentity?
+    ) async -> Bool {
+        guard heroItems.isEmpty else { return true }
+        let sample = (try? await client.items(
+            includeTypes: [.movie, .series],
+            sortBy: "Random",
+            limit: 24
+        ))?.items ?? []
+        guard isCurrent(generation, identity: identity, client: client) else { return false }
+        librarySample = sample
+        heroItems = HeroSelection.select(tiers: heroTiers)
+        return true
+    }
+
+    /// Not awaited: holding `isLoading` for below-the-fold discovery rows
+    /// would delay the whole screen. They appear as they resolve.
+    private func startDiscoveryLoads(
+        client: JellyfinClient,
+        seerr: SeerrClient?,
+        preferences: HomeSectionPreferenceValues,
+        generation: Int
+    ) {
+        cancelDiscoveryTasks()
+        discoveryTasks = [
+            Task { [weak self] in
+                guard let self else { return }
+                await self.loadCuratedRails(
+                    client: client,
+                    generation: generation
+                )
+            },
+            Task { [weak self] in
+                guard let self else { return }
+                await self.loadTopTenRails(
+                    client: client, seerr: seerr,
+                    preferences: preferences, generation: generation
+                )
+            },
+            Task { [weak self] in
+                guard let self else { return }
+                await self.loadCollections(client: client, generation: generation)
+            },
+        ]
     }
 
     func retry(
