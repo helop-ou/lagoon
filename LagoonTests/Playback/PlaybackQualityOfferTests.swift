@@ -6,8 +6,8 @@ import Testing
 import UniformTypeIdentifiers
 @testable import Lagoon
 
-/// HEL-262: repeated stalls just kept happening, with no way out for the
-/// viewer. Three in a minute bring up an offer, once per item.
+/// Repeated stalls bring up an offer of a lower quality: three in a minute,
+/// once per item.
 @Suite("Playback quality offer")
 @MainActor
 struct PlaybackQualityOfferTests {

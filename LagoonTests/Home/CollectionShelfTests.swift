@@ -2,9 +2,9 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// What Home calls a collection, and what it draws it with. A real library
-/// measured 173 collections: 35 non-empty, 18 with more than one title, and
-/// 11 of those 18 with no landscape artwork.
+/// What Home calls a collection, and what it draws it with: stubs with fewer
+/// than two titles are dropped, and a collection without landscape artwork
+/// borrows it from what it holds.
 @Suite("Collection shelf")
 struct CollectionShelfTests {
     private func collection(

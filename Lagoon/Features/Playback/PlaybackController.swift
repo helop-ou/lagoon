@@ -74,7 +74,7 @@ final class PlaybackController {
         didSet { automation.setNextUpAvailable(nextUp != nil) }
     }
     let automation = PlaybackAutomation()
-    /// The lower quality offered after repeated stalls (HEL-262).
+    /// The lower quality offered after repeated stalls.
     let qualityOffer = PlaybackQualityOffer()
     @ObservationIgnored private var qualityOfferPolicy = PlaybackQualityOfferPolicy()
     /// Stalls of the current engine already counted.
@@ -1181,7 +1181,7 @@ final class PlaybackController {
 
     /// Picture in picture started or stopped, or the AirPlay route changed.
     /// Stopping either while the app is away leaves nothing to show the
-    /// picture, so video is suspended as backgrounding would have (HEL-261).
+    /// picture, so video is suspended as backgrounding would have.
     func pictureRouteDidChange() {
         guard !isClosed, engine != nil else { return }
         suspendVideoIfUnseen()

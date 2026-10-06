@@ -2,12 +2,12 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// HEL-262: a remote viewer on weak Wi-Fi was offered 31–41 Mbps remuxes the
-/// link could not carry, and stalled through them.
+/// A remote viewer on a weak link is not offered remuxes the link cannot
+/// carry.
 @Suite("Playback quality limit")
 struct PlaybackQualityLimitTests {
     @Test func autoCapsARemoteServerBelowWhatTheLinkCarried() {
-        // The tester's link: about 20 Mbit/s against a 35 Mbit/s remux.
+        // A 20 Mbit/s link against a 35 Mbit/s remux.
         let cap = PlaybackQualityLimit.maxBitrate(setting: .auto, connection: .remote(bitsPerSecond: 20_000_000))
         #expect(cap == 14_000_000)
         let profile = DeviceProfile.cappedToBitrate(DeviceProfile.everything, cap)

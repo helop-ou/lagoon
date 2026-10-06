@@ -27,8 +27,8 @@ struct PlayerSystemIntegrationTests {
         ))
     }
 
-    /// HEL-261: picture in picture stopping while the app is away leaves
-    /// nothing to show video, so it is suspended as backgrounding would.
+    /// Picture in picture stopping while the app is away leaves nothing to
+    /// show video, so it is suspended as backgrounding would.
     @Test func videoIsSuspendedOnlyWhenNothingShowsIt() {
         #expect(PlaybackController.videoIsUnseen(inBackground: true, pictureInPicture: false, airPlay: false))
         #expect(!PlaybackController.videoIsUnseen(inBackground: true, pictureInPicture: true, airPlay: false))

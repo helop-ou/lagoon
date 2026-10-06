@@ -10,8 +10,8 @@ private let log = Logger(subsystem: "ee.helop.lagoon", category: "playback-repor
 /// of Resume. Screens call `settle()` before re-fetching; it is bounded by a
 /// timeout.
 final class PlaybackReportLedger {
-    /// Covers a slow server's stop report (2.6 s measured); a dead server
-    /// costs one pause, not a hang.
+    /// Covers a slow server's stop report; a dead server costs one pause,
+    /// not a hang.
     nonisolated static let defaultSettleTimeout: Duration = .seconds(8)
 
     private var openSessions: Set<UUID> = []

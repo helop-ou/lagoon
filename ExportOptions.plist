@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<!-- The command-line equivalent of Organizer's "TestFlight Internal Only"
-	     tile, minus the renumbering it does silently (HEL-94).
+	     tile, minus the renumbering it does silently.
 
 	     Every key here is verified present in Xcode 26.6's IDEDistribution
 	     framework. -->

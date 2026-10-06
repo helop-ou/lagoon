@@ -115,9 +115,8 @@ struct PlaybackIncidentMonitorTests {
         #expect(failed.fields["delivery"] == .string("remux"))
     }
 
-    /// HEL-261: a session fault in the background could not say whether
-    /// picture in picture or AirPlay still showed the picture. The engine's
-    /// own reports inherit the display state too.
+    /// Incidents say whether picture in picture or AirPlay still showed the
+    /// picture. The engine's own reports inherit the display state too.
     @Test func incidentsSayWhatShowedThePictureWhileTheAppWasAway() throws {
         let sink = CapturingSink()
         let hub = DiagnosticsHub(sink: sink, reportingEnabled: { true })
@@ -140,9 +139,9 @@ struct PlaybackIncidentMonitorTests {
         #expect(failed.fields["videoSuspended"] == .bool(true))
     }
 
-    /// HEL-262: stall reports could not tell a slow link from an engine
-    /// problem. The link's rate rides on every incident, the engine's own
-    /// stall reports included, in the unit of the title's `bitrate`.
+    /// The link's rate rides on every incident, the engine's own stall reports
+    /// included, in the unit of the title's `bitrate`, so a slow link can be
+    /// told from an engine problem.
     @Test func incidentsCarryTheLinksMeasuredRate() throws {
         let sink = CapturingSink()
         let hub = DiagnosticsHub(sink: sink, reportingEnabled: { true })
