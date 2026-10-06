@@ -1,14 +1,16 @@
 import Foundation
+import os
 
 /// Keeps one task's transfer time: first response byte to last.
-nonisolated final class TransferMetricsCollector: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
-    private let lock = NSLock()
-    private var seconds: TimeInterval?
+nonisolated final class TransferMetricsCollector: NSObject, URLSessionTaskDelegate, Sendable {
+    private struct State {
+        var seconds: TimeInterval?
+    }
+
+    private let state = OSAllocatedUnfairLock(initialState: State())
 
     var transferSeconds: TimeInterval? {
-        lock.lock()
-        defer { lock.unlock() }
-        return seconds
+        state.withLock { $0.seconds }
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didFinishCollecting metrics: URLSessionTaskMetrics) {
@@ -17,8 +19,6 @@ nonisolated final class TransferMetricsCollector: NSObject, URLSessionTaskDelega
               let end = transaction.responseEndDate else { return }
         let elapsed = end.timeIntervalSince(start)
         guard elapsed.isFinite, elapsed > 0 else { return }
-        lock.lock()
-        seconds = elapsed
-        lock.unlock()
+        state.withLock { $0.seconds = elapsed }
     }
 }

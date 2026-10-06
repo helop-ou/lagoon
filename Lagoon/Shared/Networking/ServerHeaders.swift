@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// A header a forward-auth proxy in front of a server wants on every request,
 /// such as Cloudflare Access's `CF-Access-Client-Id` and `-Secret`. The value
@@ -99,7 +100,7 @@ nonisolated struct CustomHTTPHeader: Codable, Hashable, Identifiable, Sendable {
 ///
 /// One keychain item per host holds every scope, since the values are
 /// credentials. Reads are cached, because every request asks.
-nonisolated final class ServerHeaderStore: @unchecked Sendable {
+nonisolated final class ServerHeaderStore: Sendable {
     static let shared = ServerHeaderStore(credentials: SystemAccountCredentials())
 
     /// A port and a path prefix on one host, as "443/jellyfin"; "" covers the
@@ -108,8 +109,11 @@ nonisolated final class ServerHeaderStore: @unchecked Sendable {
     static let hostWide: Scope = ""
 
     private let credentials: AccountCredentialStorage
-    private let lock = NSLock()
-    private var cache: [String: [Scope: [CustomHTTPHeader]]] = [:]
+    private struct State {
+        var cache: [String: [Scope: [CustomHTTPHeader]]] = [:]
+    }
+
+    private let state = OSAllocatedUnfairLock(initialState: State())
 
     init(credentials: AccountCredentialStorage) {
         self.credentials = credentials
@@ -134,16 +138,16 @@ nonisolated final class ServerHeaderStore: @unchecked Sendable {
     }
 
     private func scopes(forHost host: String) -> [Scope: [CustomHTTPHeader]] {
-        lock.lock()
-        defer { lock.unlock() }
-        if let cached = cache[host] { return cached }
-        let stored = credentials.string(for: Self.keychainAccount(forHost: host)).map { Data($0.utf8) }
-        let decoded = stored.flatMap { try? JSONDecoder().decode([Scope: [CustomHTTPHeader]].self, from: $0) }
-            // Stored before scopes existed: the whole host.
-            ?? stored.flatMap { try? JSONDecoder().decode([CustomHTTPHeader].self, from: $0) }.map { [Self.hostWide: $0] }
-            ?? [:]
-        cache[host] = decoded
-        return decoded
+        state.withLock { state in
+            if let cached = state.cache[host] { return cached }
+            let stored = credentials.string(for: Self.keychainAccount(forHost: host)).map { Data($0.utf8) }
+            let decoded = stored.flatMap { try? JSONDecoder().decode([Scope: [CustomHTTPHeader]].self, from: $0) }
+                // Stored before scopes existed: the whole host.
+                ?? stored.flatMap { try? JSONDecoder().decode([CustomHTTPHeader].self, from: $0) }.map { [Self.hostWide: $0] }
+                ?? [:]
+            state.cache[host] = decoded
+            return decoded
+        }
     }
 
     private func save(_ scopes: [Scope: [CustomHTTPHeader]], forHost host: String) throws {
@@ -155,9 +159,7 @@ nonisolated final class ServerHeaderStore: @unchecked Sendable {
             let data = try JSONEncoder().encode(kept)
             try credentials.set(String(decoding: data, as: UTF8.self), for: account)
         }
-        lock.lock()
-        cache[host] = kept
-        lock.unlock()
+        state.withLock { $0.cache[host] = kept }
     }
 
     /// Every header stored for the host, in any scope: what a redirect off the
@@ -275,7 +277,7 @@ nonisolated final class ServerHeaderStore: @unchecked Sendable {
 
 /// Installed on the app's own sessions, so a redirect never carries one
 /// server's proxy headers to another host.
-nonisolated final class ServerHeaderRedirectGuard: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+nonisolated final class ServerHeaderRedirectGuard: NSObject, URLSessionTaskDelegate, Sendable {
     static let shared = ServerHeaderRedirectGuard(store: .shared)
 
     private let store: ServerHeaderStore
