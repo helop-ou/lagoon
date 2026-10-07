@@ -142,7 +142,7 @@ Use these before writing a screen-specific copy:
 | Need | Existing implementation |
 | --- | --- |
 | Poster and landscape cards, horizontal browsing | `MediaCards.swift`, `MediaRail.swift` |
-| Item, series, collection, and Seerr detail composition | `DetailPageScaffold`, `DetailMetadataHeader`, `DetailActionLayout`, `TitleArtView`, `CastStrip` (Jellyfin people or `CastCredit`s) and `DetailLayout` in `DetailComponents.swift` |
+| Item, series, collection, and Seerr detail composition | `DetailPageScaffold`, `DetailHeader` and `DetailMetadataHeader`, `DetailActionLayout` with `DetailLayout`, `DetailCircleButton`, `TitleArtView`, `CastStrip` (Jellyfin people or `CastCredit`s), each in its own file in `Shared/UI/` |
 | Adaptive actions, metadata wrapping, poster sizing | `AdaptiveActionStack`, `MetadataFlowLayout`, `PosterLayout` |
 | Loading, retry, and failure presentation | `LoadingView`, `InlineRetryView`, `ErrorStateView` |
 | Artwork and palette loading | `CachedAsyncImage`, `ImageCache`, `ArtworkPalette` |
