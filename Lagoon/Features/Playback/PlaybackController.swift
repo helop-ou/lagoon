@@ -6,44 +6,6 @@ import OSLog
 import SwiftUI
 import UIKit
 
-nonisolated enum PlaybackStartError: LocalizedError {
-    case previousEngineDidNotRetire
-
-    var errorDescription: String? {
-        switch self {
-        case .previousEngineDidNotRetire:
-            "The previous video could not release its player resources. Close the player and try again."
-        }
-    }
-}
-
-/// Transport requests routed to a SyncPlay group instead of the local engine.
-///
-/// A request does nothing locally: the group's answering command is what
-/// moves this player.
-@MainActor
-protocol GroupTransportRequests: AnyObject {
-    func requestPlay()
-    func requestPause()
-    /// `resume` means seek and then play, so the implementation can order
-    /// the two requests.
-    func requestSeek(to seconds: Double, resume: Bool)
-    func requestNextItem()
-}
-
-/// The transport actions the player chrome can request.
-///
-/// Closures rather than a controller reference keep the engine out of
-/// anything SwiftUI retains.
-struct PlayerTransportActions {
-    /// Idempotent: system integrations state the wanted state, not a toggle.
-    let play: () -> Void
-    let pause: () -> Void
-    let togglePause: () -> Void
-    let seek: (_ seconds: Double, _ resume: Bool) -> Void
-    let seekBy: (_ seconds: Double) -> Void
-}
-
 /// Milliseconds for a `Duration`, for DecodeTrace and soak lines.
 private func ms(_ duration: Duration) -> Double {
     Double(duration.components.seconds) * 1000 + Double(duration.components.attoseconds) / 1e15
