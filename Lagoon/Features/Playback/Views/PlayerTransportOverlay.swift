@@ -27,47 +27,13 @@ struct PlayerTransportOverlay: View {
     var body: some View {
         VStack {
             #if os(tvOS)
-            if showsPanelHint {
-                VStack(spacing: Metrics.Space.hair) {
-                    Text("Swipe down for Info")
-                        .font(.caption.weight(.semibold))
-                    Image(systemName: "chevron.compact.down")
-                        .font(.title3.weight(.bold))
-                }
-                .foregroundStyle(.white.opacity(0.9))
-                .padding(.top, Metrics.railTopPadding)
-            }
+            panelHint
             #endif
 
             Spacer()
 
             VStack(alignment: .leading, spacing: Metrics.Space.m) {
-                HStack(alignment: .bottom) {
-                    VStack(alignment: .leading, spacing: Metrics.Space.xs) {
-                        if let subtitle = info.subtitle {
-                            Text(subtitle)
-                                .font(.callout)
-                                .foregroundStyle(.secondary)
-                        }
-                        Text(info.title)
-                            .font(.title2.bold())
-                    }
-                    Spacer()
-                    if engine.rate != 1 {
-                        Text(PlaybackRatePolicy.title(engine.rate))
-                            .font(.callout.monospacedDigit().weight(.semibold))
-                            .foregroundStyle(.secondary)
-                            .accessibilityIdentifier("player.playbackRate.value")
-                    }
-                    if engine.isPaused {
-                        Image(systemName: "pause.fill")
-                            .font(.headline)
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                .opacity(isScrubbing ? 0 : 1)
-                .animation(.easeInOut(duration: Motion.fast), value: isScrubbing)
-                .allowsHitTesting(false)
+                titleRow
 
                 PlayerScrubber(
                     engine: engine,
@@ -92,23 +58,70 @@ struct PlayerTransportOverlay: View {
                 )
             }
             .padding(Metrics.screenGutter)
-            .background(
-                LinearGradient(
-                    stops: [
-                        .init(color: .clear, location: 0),
-                        .init(color: .black.opacity(0.22), location: 0.34),
-                        .init(color: .black.opacity(0.76), location: 1),
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-                .ignoresSafeArea()
-                // Taps here belong to the surface; only the iOS bar takes
-                // touch.
-                .allowsHitTesting(false)
-            )
+            .background(scrim)
         }
         .foregroundStyle(.white)
+    }
+
+    #if os(tvOS)
+    @ViewBuilder
+    private var panelHint: some View {
+        if showsPanelHint {
+            VStack(spacing: Metrics.Space.hair) {
+                Text("Swipe down for Info")
+                    .font(.caption.weight(.semibold))
+                Image(systemName: "chevron.compact.down")
+                    .font(.title3.weight(.bold))
+            }
+            .foregroundStyle(.white.opacity(0.9))
+            .padding(.top, Metrics.railTopPadding)
+        }
+    }
+    #endif
+
+    private var titleRow: some View {
+        HStack(alignment: .bottom) {
+            VStack(alignment: .leading, spacing: Metrics.Space.xs) {
+                if let subtitle = info.subtitle {
+                    Text(subtitle)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+                Text(info.title)
+                    .font(.title2.bold())
+            }
+            Spacer()
+            if engine.rate != 1 {
+                Text(PlaybackRatePolicy.title(engine.rate))
+                    .font(.callout.monospacedDigit().weight(.semibold))
+                    .foregroundStyle(.secondary)
+                    .accessibilityIdentifier("player.playbackRate.value")
+            }
+            if engine.isPaused {
+                Image(systemName: "pause.fill")
+                    .font(.headline)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .opacity(isScrubbing ? 0 : 1)
+        .animation(.easeInOut(duration: Motion.fast), value: isScrubbing)
+        .allowsHitTesting(false)
+    }
+
+    private var scrim: some View {
+        LinearGradient(
+            stops: [
+                .init(color: .clear, location: 0),
+                .init(color: .black.opacity(0.22), location: 0.34),
+                .init(color: .black.opacity(0.76), location: 1),
+            ],
+            startPoint: .top,
+            endPoint: .bottom
+        )
+        .ignoresSafeArea()
+        // Taps here belong to the surface; only the iOS bar takes
+        // touch.
+        .allowsHitTesting(false)
     }
 }
 
