@@ -80,7 +80,7 @@ def main():
                     # its checked-in platform scope.
                     command += ["SUPPORTED_PLATFORMS=iphonesimulator", "SDKROOT=iphonesimulator",
                                 "TARGETED_DEVICE_FAMILY=1,2", "IPHONEOS_DEPLOYMENT_TARGET=26.0",
-                                "EXCLUDED_SOURCE_FILE_NAMES=PlayerRegressionUITests.swift ServerSyncUITests.swift LibraryBrowseUITests.swift"]
+                                "EXCLUDED_SOURCE_FILE_NAMES=PlayerRegressionUITests*.swift ServerSyncUITests.swift LibraryBrowseUITests.swift"]
                 print(f"Building {platform}; logs: {results}", flush=True)
                 with (results / "build.log").open("w") as log:
                     subprocess.run(command, cwd=ROOT, stdout=log, stderr=subprocess.STDOUT, check=True)
