@@ -398,16 +398,29 @@ final class HomeViewModel {
     ) async {
         let identity = client.sessionIdentity
         // Watch history decides the genre spotlight.
-        let played = (try? await client.items(
+        let played = await recentlyPlayed(client: client)
+        guard isCurrent(generation, identity: identity, client: client) else { return }
+        let resolved = await fetchCuratedRails(watchHistory: played, on: Date.now, client: client)
+        guard isCurrent(generation, identity: identity, client: client) else { return }
+        publishCuratedRails(resolved)
+    }
+
+    private func recentlyPlayed(client: JellyfinClient) async -> [MediaItem] {
+        (try? await client.items(
             includeTypes: [.movie, .series],
             sortBy: "DatePlayed",
             sortOrder: "Descending",
             limit: 60,
             filters: ["IsPlayed"]
         ))?.items ?? []
-        guard isCurrent(generation, identity: identity, client: client) else { return }
+    }
 
-        let today = Date.now
+    /// Every curated row except Top 10, in display order.
+    private func fetchCuratedRails(
+        watchHistory played: [MediaItem],
+        on today: Date,
+        client: JellyfinClient
+    ) async -> [LibraryRail] {
         let genre = HomeRotation.genre(
             rankedByWatchHistory: HomeRotation.rankGenres(byWatchHistory: played),
             for: today
@@ -465,7 +478,7 @@ final class HomeViewModel {
             filters: ["IsUnplayed"]
         )
 
-        let resolved = await [
+        return await [
             similar,
             highlyRated,
             fourK,
@@ -475,7 +488,9 @@ final class HomeViewModel {
             binge,
             surprise,
         ].compactMap(\.self)
-        guard isCurrent(generation, identity: identity, client: client) else { return }
+    }
+
+    private func publishCuratedRails(_ resolved: [LibraryRail]) {
         // Top 10 loads separately so its scan never delays these; keep its rows.
         let topTen = curatedRails.filter {
             $0.key == HomeCuratedRows.ID.topMovies || $0.key == HomeCuratedRows.ID.topShows
@@ -488,7 +503,6 @@ final class HomeViewModel {
         if heroItems.isEmpty {
             heroItems = HeroSelection.select(tiers: heroTiers)
         }
-
     }
 
     /// Publishes independently of the other shelves but shares their generation.
