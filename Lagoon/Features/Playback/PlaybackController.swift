@@ -577,6 +577,29 @@ final class PlaybackController {
         try checkStartIsWanted()
     }
 
+    /// The outgoing engine still holds the display layer, so nothing new may
+    /// attach to it: stop and say so.
+    private func failRetirement(scope: StaticString) {
+        signpostRetirementTimeout(scope: scope)
+        beginStop()
+        errorMessage = PlaybackStartError.previousEngineDidNotRetire.errorDescription
+    }
+
+    private func signpostRetirementTimeout(scope: StaticString) {
+        let lifecycle = PlaybackLifecycleDiagnostics.snapshot()
+        os_signpost(
+            .event,
+            log: PlaybackPerformance.log,
+            name: "Playback Resource Retirement Timeout",
+            signpostID: performanceSignpostID,
+            "scope=%{public}@ demux=%{public}d renderers=%{public}d footprintMB=%{public}.1f",
+            String(describing: scope) as NSString,
+            lifecycle.activeDemuxLoops,
+            lifecycle.attachedRendererSets,
+            lifecycle.footprintMB
+        )
+    }
+
     private func checkStartIsWanted() throws {
         guard !isClosed else { throw CancellationError() }
         try Task.checkCancellation()
@@ -1171,29 +1194,6 @@ final class PlaybackController {
     #endif
 
     // MARK: - Group playback
-
-    /// The outgoing engine still holds the display layer, so nothing new may
-    /// attach to it: stop and say so.
-    private func failRetirement(scope: StaticString) {
-        signpostRetirementTimeout(scope: scope)
-        beginStop()
-        errorMessage = PlaybackStartError.previousEngineDidNotRetire.errorDescription
-    }
-
-    private func signpostRetirementTimeout(scope: StaticString) {
-        let lifecycle = PlaybackLifecycleDiagnostics.snapshot()
-        os_signpost(
-            .event,
-            log: PlaybackPerformance.log,
-            name: "Playback Resource Retirement Timeout",
-            signpostID: performanceSignpostID,
-            "scope=%{public}@ demux=%{public}d renderers=%{public}d footprintMB=%{public}.1f",
-            String(describing: scope) as NSString,
-            lifecycle.activeDemuxLoops,
-            lifecycle.attachedRendererSets,
-            lifecycle.footprintMB
-        )
-    }
 
     /// Swaps the item in one player session when the group moves on. Same
     /// stop-then-start as `playNextEpisode`, so the video surface survives,
