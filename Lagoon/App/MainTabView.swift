@@ -57,50 +57,7 @@ struct MainTabView: View {
     var body: some View {
         primaryNavigation
         #if os(tvOS)
-        .overlay(alignment: .topLeading) {
-            // Refresh, then the profile button on the tab bar's side of it, so
-            // the profile is one Left from Home. One container: focus crosses
-            // between them, and the profile keeps its place where Refresh is
-            // hidden.
-            HStack(spacing: Metrics.Space.xl) {
-                if hasMountedServerRefresh || serverSync.activeTarget != nil {
-                    // Bound to its isolation here: passed inline, the compiler
-                    // treats it as callable from any actor. UIKit focus calls
-                    // it on the main actor.
-                    let moveDown: (@MainActor @Sendable () -> Void)? = activeRefreshMoveDownAction
-                    let moveRight: (@MainActor @Sendable () -> Void)? = refreshMoveRightAction
-                    ServerRefreshButton(
-                        target: serverSync.activeTarget,
-                        moveDownAction: moveDown,
-                        moveRightAction: moveRight,
-                        topChromeOffset: $refreshTopChromeOffset
-                    )
-                        .focused($refreshFocused)
-                        .onAppear { hasMountedServerRefresh = true }
-                } else {
-                    Color.clear
-                        .frame(width: Metrics.topChromeButtonSize, height: Metrics.topChromeButtonSize)
-                }
-                if let account = session.activeAccount {
-                    let moveDown: (@MainActor @Sendable () -> Void)? = profileMoveDownAction
-                    let moveLeft: (@MainActor @Sendable () -> Void)? = profileMoveLeftAction
-                    ProfileButton(
-                        image: profileImage,
-                        profileName: account.displayName,
-                        isAvailable: showsProfileButton,
-                        moveDownAction: moveDown,
-                        moveLeftAction: moveLeft,
-                        action: openProfilePicker
-                    )
-                        .focused($profileFocused)
-                }
-            }
-                // Aligns Refresh's circle with the hero and rails. The focus
-                // frame overhangs the glass slightly; the alignment UI test
-                // allows for it.
-                .padding(.leading, Metrics.screenGutter)
-                .offset(y: -Metrics.Space.m)
-        }
+        .overlay(alignment: .topLeading) { topChrome }
         #endif
         .task(id: profileImageKey) {
             guard let account = session.activeAccount else {
@@ -132,16 +89,7 @@ struct MainTabView: View {
         }
         .onChange(of: session.activeAccount?.id) { oldAccountID, newAccountID in
             guard oldAccountID != newAccountID else { return }
-            // Content belongs to the account that fetched it; drop the old
-            // user's stacks even if MainTabView is not rebuilt.
-            homeNavigationPath.removeAll()
-            libraryNavigationPath.removeAll()
-            libraries = session.cachedLibraries()
-            librariesLoaded = false
-            discoverNavigationPath = NavigationPath()
-            searchNavigationPath = NavigationPath()
-            playerItem = nil
-            deepLinks.clear()
+            resetForAccountChange()
         }
         // Launch-only harness hooks: resolve a named item with the signed-in
         // client and present it the way a user selection would.
@@ -177,20 +125,7 @@ struct MainTabView: View {
         .environment(\.playerCover, PlayerPresence.shared)
         #endif
         #if DEBUG
-        .overlay(alignment: .topLeading) {
-            VStack(alignment: .leading) {
-                if UserDefaults.standard.bool(forKey: "debug.lifecycleReplayBenchmark") {
-                    PlaybackLifecycleRegressionProbe()
-                }
-                if UserDefaults.standard.bool(forKey: "debug.playerRegression") {
-                    RegressionProbe(
-                        label: "Player fixture resolution",
-                        identifier: "player.regression.resolution",
-                        value: regressionResolution
-                    )
-                }
-            }
-        }
+        .overlay(alignment: .topLeading) { regressionProbes }
         #endif
         // On a cold launch the link arrives before the client exists; it
         // waits here instead of being dropped.
@@ -221,6 +156,83 @@ struct MainTabView: View {
         } message: {
             Text(deepLinkError ?? "The item couldn't be loaded.")
         }
+    }
+
+    #if os(tvOS)
+    // Refresh, then the profile button on the tab bar's side of it, so
+    // the profile is one Left from Home. One container: focus crosses
+    // between them, and the profile keeps its place where Refresh is
+    // hidden.
+    private var topChrome: some View {
+        HStack(spacing: Metrics.Space.xl) {
+            if hasMountedServerRefresh || serverSync.activeTarget != nil {
+                // Bound to its isolation here: passed inline, the compiler
+                // treats it as callable from any actor. UIKit focus calls
+                // it on the main actor.
+                let moveDown: (@MainActor @Sendable () -> Void)? = activeRefreshMoveDownAction
+                let moveRight: (@MainActor @Sendable () -> Void)? = refreshMoveRightAction
+                ServerRefreshButton(
+                    target: serverSync.activeTarget,
+                    moveDownAction: moveDown,
+                    moveRightAction: moveRight,
+                    topChromeOffset: $refreshTopChromeOffset
+                )
+                    .focused($refreshFocused)
+                    .onAppear { hasMountedServerRefresh = true }
+            } else {
+                Color.clear
+                    .frame(width: Metrics.topChromeButtonSize, height: Metrics.topChromeButtonSize)
+            }
+            if let account = session.activeAccount {
+                let moveDown: (@MainActor @Sendable () -> Void)? = profileMoveDownAction
+                let moveLeft: (@MainActor @Sendable () -> Void)? = profileMoveLeftAction
+                ProfileButton(
+                    image: profileImage,
+                    profileName: account.displayName,
+                    isAvailable: showsProfileButton,
+                    moveDownAction: moveDown,
+                    moveLeftAction: moveLeft,
+                    action: openProfilePicker
+                )
+                    .focused($profileFocused)
+            }
+        }
+            // Aligns Refresh's circle with the hero and rails. The focus
+            // frame overhangs the glass slightly; the alignment UI test
+            // allows for it.
+            .padding(.leading, Metrics.screenGutter)
+            .offset(y: -Metrics.Space.m)
+    }
+    #endif
+
+    #if DEBUG
+    private var regressionProbes: some View {
+        VStack(alignment: .leading) {
+            if UserDefaults.standard.bool(forKey: "debug.lifecycleReplayBenchmark") {
+                PlaybackLifecycleRegressionProbe()
+            }
+            if UserDefaults.standard.bool(forKey: "debug.playerRegression") {
+                RegressionProbe(
+                    label: "Player fixture resolution",
+                    identifier: "player.regression.resolution",
+                    value: regressionResolution
+                )
+            }
+        }
+    }
+    #endif
+
+    private func resetForAccountChange() {
+        // Content belongs to the account that fetched it; drop the old
+        // user's stacks even if MainTabView is not rebuilt.
+        homeNavigationPath.removeAll()
+        libraryNavigationPath.removeAll()
+        libraries = session.cachedLibraries()
+        librariesLoaded = false
+        discoverNavigationPath = NavigationPath()
+        searchNavigationPath = NavigationPath()
+        playerItem = nil
+        deepLinks.clear()
     }
 
     /// Resolves a Top Shelf deep link once the signed-in client exists, and
