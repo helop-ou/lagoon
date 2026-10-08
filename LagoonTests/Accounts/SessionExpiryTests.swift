@@ -60,7 +60,7 @@ struct SessionExpiryTests {
     @Test func rejectedLoginDoesNotInvalidateAnExistingSession() async throws {
         let fixture = try Fixture()
         defer { fixture.cleanUp() }
-        let store = fixture.store()
+        let store = try await fixture.settledStore()
         SessionExpiryProtocol.setReply(.http(401, ""))
         do {
             try await store.signIn(username: "First", password: "wrong")
@@ -103,8 +103,8 @@ struct SessionExpiryTests {
         let fixture = try Fixture()
         defer { fixture.cleanUp() }
         let store = fixture.store()
-        SessionExpiryProtocol.setReply(.hold)
-        let pending = Task { try await store.client.currentUser() }
+        SessionExpiryProtocol.hold(pathSuffix: "Items/late")
+        let pending = Task { try await store.client.getData("Items/late") }
         try await waitForHeldRequest()
         store.switchTo(fixture.second)
         SessionExpiryProtocol.releaseHeld(status: 401)
@@ -119,8 +119,9 @@ struct SessionExpiryTests {
         let fixture = try Fixture()
         defer { fixture.cleanUp() }
         let store = fixture.store()
-        SessionExpiryProtocol.setReply(.hold)
-        let pending = Task { try await store.client.currentUser() }
+        // Held by path: activation's own profile reads must not take its place.
+        SessionExpiryProtocol.hold(pathSuffix: "Items/late")
+        let pending = Task { try await store.client.getData("Items/late") }
         try await waitForHeldRequest()
         SessionExpiryProtocol.setReply(.http(200, fixture.authenticationJSON))
         try await store.signIn(username: "First", password: "synthetic-password")
@@ -179,7 +180,7 @@ struct SessionExpiryTests {
         let fixture = try Fixture()
         defer { fixture.cleanUp() }
         let store = fixture.store()
-        SessionExpiryProtocol.setReply(.hold)
+        SessionExpiryProtocol.hold(pathSuffix: "Sessions/Logout")
         let pending = Task { await store.signOut() }
         try await waitForHeldRequest()
         store.switchTo(fixture.second)
@@ -280,6 +281,30 @@ struct SessionExpiryTests {
             return SessionStore(defaults: defaults, sessionConfiguration: config)
         }
 
+        /// A store whose activation reads have all been answered, so the
+        /// next reply reaches only the request under test. Activation reads
+        /// the profile, and on iOS the download permission, on its own.
+        @MainActor
+        func settledStore() async throws -> SessionStore {
+            SessionExpiryProtocol.setReply(.http(200, """
+            {"Id":"\(first.userId)","Name":"First renamed","Policy":{"EnableContentDownloading":false}}
+            """))
+            let store = store()
+            try await Polling.untilMainActor(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
+                Self.activationReadsAnswered(store)
+            }
+            try #require(Self.activationReadsAnswered(store), "The activation reads never completed")
+            return store
+        }
+
+        @MainActor
+        private static func activationReadsAnswered(_ store: SessionStore) -> Bool {
+            #if os(iOS)
+            guard store.client.cachedContentDownloadingAllowed == false else { return false }
+            #endif
+            return store.userName == "First renamed"
+        }
+
         func cleanUp() {
             SessionExpiryProtocol.releaseHeld(status: 500)
             try? KeychainStore.delete(first.keychainAccount)
@@ -295,10 +320,14 @@ private nonisolated final class SessionExpiryProtocol: URLProtocol, @unchecked S
     nonisolated(unsafe) private static var reply: Reply = .http(200, "{}")
     nonisolated(unsafe) private static var recorded: [URLRequest] = []
     nonisolated(unsafe) private static var held: [SessionExpiryProtocol] = []
+    nonisolated(unsafe) private static var heldPathSuffix: String?
     static var requests: [URLRequest] { lock.withLock { recorded } }
     static var hasHeldRequest: Bool { lock.withLock { !held.isEmpty } }
     static func setReply(_ value: Reply) { lock.withLock { reply = value } }
-    static func reset() { lock.withLock { recorded = []; held = []; reply = .http(200, "{}") } }
+    /// Holds only requests whose path ends this way, whatever the reply, so
+    /// background requests a store sends on activation are never the one held.
+    static func hold(pathSuffix: String) { lock.withLock { heldPathSuffix = pathSuffix } }
+    static func reset() { lock.withLock { recorded = []; held = []; heldPathSuffix = nil; reply = .http(200, "{}") } }
 
     static func releaseHeld(status: Int) {
         let pending = lock.withLock { let result = held; held = []; return result }
@@ -310,6 +339,10 @@ private nonisolated final class SessionExpiryProtocol: URLProtocol, @unchecked S
     override func startLoading() {
         let response = Self.lock.withLock {
             Self.recorded.append(request)
+            if let suffix = Self.heldPathSuffix, request.url?.path.hasSuffix(suffix) == true {
+                Self.held.append(self)
+                return Reply.hold
+            }
             if case .hold = Self.reply { Self.held.append(self) }
             return Self.reply
         }
