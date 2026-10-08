@@ -15,9 +15,9 @@ import LagoonEngine
 final class GroupPlaybackDriver: GroupTransportRequests {
     /// Seconds off target before a group start re-seeks. Below it the start
     /// anchor absorbs the difference; a seek would re-prime for nothing.
-    static let resyncThreshold = 0.5
+    nonisolated static let resyncThreshold = 0.5
     /// Same at a pause, which has no anchor. 0.1 s is two to three frames.
-    static let pauseThreshold = 0.1
+    nonisolated static let pauseThreshold = 0.1
     /// "Correct sync drift" in Settings, on by default. Off, drift is still
     /// measured and shown in the HUD.
     nonisolated static let correctionDefaultsKey = "syncplay.correction"
@@ -152,22 +152,37 @@ final class GroupPlaybackDriver: GroupTransportRequests {
     private func unpause(_ command: SyncPlayCommand, at when: Double) {
         guard let controller else { return }
         restoreRate()
-        // A past instant means the group is already running: the server
-        // re-sends its last Unpause, with the start position, to a member
-        // that turned Ready mid-play. Target where the group is now.
-        let now = clock.serverSeconds()
-        let target = when > now
-            ? command.positionSeconds
-            : SyncCorrectionPolicy.expectedPosition(
-                commandPosition: command.positionSeconds,
-                commandWhenServerSeconds: when,
-                serverSeconds: now
-            )
-        if abs(controller.clockPosition - target) > Self.resyncThreshold {
+        let target = Self.unpauseTarget(
+            position: command.positionSeconds,
+            when: when,
+            now: clock.serverSeconds()
+        )
+        if Self.startNeedsSeek(from: controller.clockPosition, to: target) {
             controller.seekGroup(to: target)
         }
         controller.playGroup(atHostTime: clock.hostTime(forServer: when))
         beginDriftLoop()
+    }
+
+    /// The media position a group start presents. A past instant means
+    /// the group is already running: the server re-sends its last Unpause,
+    /// with the start position, to a member that turned Ready mid-play.
+    /// Target where the group is now.
+    nonisolated static func unpauseTarget(position: Double, when: Double, now: Double) -> Double {
+        guard when <= now else { return position }
+        return SyncCorrectionPolicy.expectedPosition(
+            commandPosition: position,
+            commandWhenServerSeconds: when,
+            serverSeconds: now
+        )
+    }
+
+    nonisolated static func startNeedsSeek(from position: Double, to target: Double) -> Bool {
+        abs(position - target) > resyncThreshold
+    }
+
+    nonisolated static func pauseNeedsSeek(from position: Double, to target: Double) -> Bool {
+        abs(position - target) > pauseThreshold
     }
 
     /// A pause has no anchor, so it sleeps until the instant.
@@ -185,7 +200,7 @@ final class GroupPlaybackDriver: GroupTransportRequests {
             guard !Task.isCancelled, let self, let controller = self.controller else { return }
             self.restoreRate()
             controller.pauseGroup()
-            if abs(controller.clockPosition - command.positionSeconds) > Self.pauseThreshold {
+            if Self.pauseNeedsSeek(from: controller.clockPosition, to: command.positionSeconds) {
                 controller.seekGroup(to: command.positionSeconds)
             }
         }
