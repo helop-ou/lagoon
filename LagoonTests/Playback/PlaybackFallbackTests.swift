@@ -82,7 +82,7 @@ struct PlaybackFallbackTests {
         #expect(!PlaybackSourceLayout.file.isDisc)
     }
 
-    @Test func eachRungWithdrawsExactlyOnePermissionFromJellyfin() throws {
+    @Test func remuxRefusesDirectPlayAndTranscodeRefusesTheVideoCopyToo() throws {
         // Jellyfin defaults all four flags to true.
         #expect(PlaybackDelivery.negotiated.flags == PlaybackDeliveryFlags(
             enableDirectPlay: true,
