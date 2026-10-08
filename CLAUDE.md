@@ -43,16 +43,21 @@ clean" in docs/README.md.
   ```
 
 - Test. `LagoonTests` covers the app's logic; the engine's tests live in its
-  repository. Keep it green, and add tests there when new logic is pure
-  enough to pin down:
+  repository. Keep it green on both platforms, one after the other, and add
+  tests there when new logic is pure enough to pin down:
 
   ```
-  xcodebuild test -scheme Lagoon -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)'
+  xcodebuild test -scheme Lagoon -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)' -collect-test-diagnostics never
+  xcodebuild test -scheme Lagoon -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -collect-test-diagnostics never
   ```
 
-  A failing run hangs about ten minutes collecting simulator diagnostics, so
-  iterate on a suspect suite with `-only-testing:LagoonTests/<Suite>` and
-  keep the full run for the final check. UI journeys run under the
+  The iOS run is not optional: downloads, touch seeking, the metered-path cap
+  and the poster grid only compile for iOS. Without
+  `-collect-test-diagnostics never`, a failing run hangs about ten minutes
+  collecting simulator diagnostics. Iterate on a suspect suite with
+  `-only-testing:LagoonTests/<Suite>` and keep the full runs for the final
+  check. A new test earns its place by failing when the behaviour it names
+  breaks: break the code once and watch it fail. UI journeys run under the
   `LagoonHardwareRegression` scheme; see the [regression
   lane](docs/reference/regression-lane.md).
 - Build numbers belong to the repo. Never let Xcode manage them at upload; see

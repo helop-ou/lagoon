@@ -17,7 +17,11 @@ scripts/generate-site-facts.sh                    #  4. the website's facts
 xcodebuild -scheme Lagoon -destination 'generic/platform=tvOS Simulator' build
 xcodebuild -scheme Lagoon -destination 'generic/platform=iOS Simulator' build
 xcodebuild test -scheme Lagoon \                  #  5. both builds, then tests
-  -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)'
+  -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)' \
+  -collect-test-diagnostics never
+xcodebuild test -scheme Lagoon \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  -collect-test-diagnostics never
 #  6. commit, one change per commit, and push
 cp .env.example .env                              #  7. once: fill in the DSN
 scripts/upload-testflight.sh both --archive-only  #  8. archive with the DSN
@@ -35,7 +39,7 @@ scripts/publish-release.sh <build>                # 10. tag and publish
 4. **[Regenerate the website's facts](#version-and-changelog)** and commit
    them in `lagoon-website`. The site serves the old version until its own,
    separate deploy.
-5. **Build both platforms and run the unit suite.** Archiving runs no tests.
+5. **Build both platforms and run the unit suite on both.** Archiving runs no tests.
 6. **Commit and push.** Step 10 refuses a revision the remote lacks.
 7. **Fill in `.env`**, once per checkout. See
    [`.env.example`](../.env.example); the shell still overrides it.

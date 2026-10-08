@@ -32,12 +32,18 @@ xcodebuild -scheme Lagoon -destination 'generic/platform=iOS Simulator' build
 
 ## Tests
 
-The unit suite covers the engine's pure logic, the bundled notices, the
-changelog and the shared models:
+The unit suite covers the app's logic, the bundled notices, the changelog
+and the shared models; the engine's tests live in its own repository. Run it
+on both platforms, one after the other, because some features only compile
+for iOS:
 
 ```sh
 xcodebuild test -scheme Lagoon \
-  -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)'
+  -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)' \
+  -collect-test-diagnostics never
+xcodebuild test -scheme Lagoon \
+  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
+  -collect-test-diagnostics never
 ```
 
 UI journeys live in the `LagoonHardwareRegression` scheme. They run against
