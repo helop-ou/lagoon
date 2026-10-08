@@ -395,6 +395,61 @@ struct HomeRowPreferenceTests {
         #expect(store.choices.count == HomeSectionPreferenceResolver.nativeChoices.count)
     }
 
+    /// The server's sections join a saved arrangement as soon as Settings
+    /// loads them, and the result is saved; rows Lagoon draws natively are
+    /// never offered twice.
+    @Test @MainActor func aLoadedCatalogueJoinsTheArrangementAndIsSaved() async throws {
+        let suiteName = "HomeRowPreferenceTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        var layout = HomeSectionPreferenceResolver.defaultLayout
+        layout.append(HomeSectionPreferenceRow(id: "MyList", isEnabled: true))
+        defaults.set(
+            try JSONEncoder().encode(HomeSectionPreferenceValues(layout: layout)),
+            forKey: HomeSectionPreferencesStore.key("server:user")
+        )
+        StubURLProtocol.register(host: "home-sections.test") { _ in
+            (200, ["Content-Type": "application/json"], Data(#"{"Items":[{"Section":"ContinueWatching","DisplayText":"Continue Watching"},{"Section":"MyList","DisplayText":"My List"},{"Section":"Recommendations","DisplayText":"Recommendations"}]}"#.utf8))
+        }
+        defer { StubURLProtocol.unregister(host: "home-sections.test") }
+        let client = StubURLProtocol.makeJellyfinClient(host: "home-sections.test", deviceId: "home-sections-tests")
+
+        let store = HomeSectionPreferencesStore(defaults: defaults)
+        store.configure(accountID: "server:user")
+        await store.loadCatalog(client: client)
+
+        let plugins = store.choices.filter { $0.source == .plugin }
+        #expect(plugins.map(\.id) == ["MyList", "Recommendations"])
+        #expect(plugins.map(\.isEnabled) == [true, false])
+        let restored = HomeSectionPreferencesStore.savedValues(accountID: "server:user", defaults: defaults)
+        #expect(restored.layout.suffix(2).map(\.id) == ["MyList", "Recommendations"])
+    }
+
+    /// A remembered plugin row the server stopped offering is not listed, so
+    /// a drag must not move it or lose it.
+    @Test @MainActor func draggingRowsLeavesAnUnofferedPluginRowWhereItWas() throws {
+        let suiteName = "HomeRowPreferenceTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        var layout = HomeSectionPreferenceResolver.defaultLayout
+        layout.insert(HomeSectionPreferenceRow(id: "Retired", isEnabled: true), at: 1)
+        defaults.set(
+            try JSONEncoder().encode(HomeSectionPreferenceValues(layout: layout)),
+            forKey: HomeSectionPreferencesStore.key("server:user")
+        )
+        let store = HomeSectionPreferencesStore(defaults: defaults)
+        store.configure(accountID: "server:user")
+        #expect(!store.choices.map(\.id).contains("Retired"))
+
+        // Continue Watching below Next Up.
+        store.move(fromOffsets: IndexSet(integer: 0), toOffset: 2)
+
+        #expect(Array(store.values.layout.prefix(3).map(\.id)) == [
+            HomeRowID.nextUp, "Retired", HomeRowID.continueWatching,
+        ])
+        #expect(store.values.layout.count == layout.count)
+    }
+
     @Test @MainActor func arrangementsDoNotLeakBetweenAccounts() {
         let suiteName = "HomeRowPreferenceTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
