@@ -78,11 +78,15 @@ final class DownloadStore {
     var storageUsed: Int64 { manifest.storageUsed }
     var completedCount: Int { manifest.completedCount }
 
-    init() {
+    /// Tests pass their own directory and a non-background configuration:
+    /// one process may hold only one session per background identifier.
+    init(
+        baseDirectory downloads: URL = DownloadStore.downloadsRootDirectory(),
+        sessionConfiguration configuration: URLSessionConfiguration = DownloadStore.backgroundConfiguration()
+    ) {
         defaultQuality = DownloadQuality(rawValue: UserDefaults.standard.string(forKey: Self.defaultQualityKey) ?? "") ?? .high
         wifiOnly = UserDefaults.standard.object(forKey: Self.wifiOnlyKey) as? Bool ?? true
 
-        let downloads = Self.downloadsRootDirectory()
         try? FileManager.default.createDirectory(at: downloads, withIntermediateDirectories: true)
         Self.excludeFromBackup(downloads)
         baseDirectory = downloads
@@ -90,9 +94,16 @@ final class DownloadStore {
         let delegate = SessionDelegate()
         self.delegate = delegate
 
-        // A background session follows redirects itself and never asks its
-        // delegate, so a transfer carrying a proxy's headers is checked with
-        // `DownloadRedirectCheck` before it starts.
+        // Main-queue callbacks: completion must validate and move its file
+        // serialized with delete/start commands.
+        let delegateQueue = OperationQueue.main
+        session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: delegateQueue)
+    }
+
+    /// A background session follows redirects itself and never asks its
+    /// delegate, so a transfer carrying a proxy's headers is checked with
+    /// `DownloadRedirectCheck` before it starts.
+    nonisolated static func backgroundConfiguration() -> URLSessionConfiguration {
         let configuration = URLSessionConfiguration.background(withIdentifier: Self.sessionIdentifier)
         configuration.sessionSendsLaunchEvents = true
         configuration.isDiscretionary = false
@@ -100,10 +111,7 @@ final class DownloadStore {
         // encode; the resource timeout must outlast a film.
         configuration.timeoutIntervalForResource = 12 * 60 * 60
         configuration.timeoutIntervalForRequest = 10 * 60
-        // Main-queue callbacks: completion must validate and move its file
-        // serialized with delete/start commands.
-        let delegateQueue = OperationQueue.main
-        session = URLSession(configuration: configuration, delegate: delegate, delegateQueue: delegateQueue)
+        return configuration
     }
 
     // MARK: - Settings
@@ -176,7 +184,7 @@ final class DownloadStore {
             for task in tasks where DownloadTaskDescription.parse(task.taskDescription)?.accountKey == key {
                 task.cancel()
             }
-            let directory = Self.downloadsRootDirectory().appending(path: key, directoryHint: .isDirectory)
+            let directory = self.baseDirectory.appending(path: key, directoryHint: .isDirectory)
             try? FileManager.default.removeItem(at: directory)
             // This can run before `SessionStore`'s nil-activation.
             guard self.accountKey == key else { return }
