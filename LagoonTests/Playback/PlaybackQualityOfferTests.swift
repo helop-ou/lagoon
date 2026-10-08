@@ -23,6 +23,43 @@ struct PlaybackQualityOfferTests {
         #expect(offers(at: [0, 50, 61, 70]) == [false, false, false, true])
     }
 
+    /// Stalls as the controller sees them: a running count, read once per
+    /// tick, so one reading can carry several.
+    private func offersAfterStalls(
+        isClosed: Bool = false,
+        isLocalPlayback: Bool = false,
+        isInGroup: Bool = false
+    ) -> Bool {
+        var policy = PlaybackQualityOfferPolicy()
+        let first = PlaybackController.recordStalls(
+            2, after: 0, at: 10, in: &policy,
+            isClosed: isClosed, isLocalPlayback: isLocalPlayback, isInGroup: isInGroup
+        )
+        let repeated = PlaybackController.recordStalls(
+            2, after: 2, at: 11, in: &policy,
+            isClosed: isClosed, isLocalPlayback: isLocalPlayback, isInGroup: isInGroup
+        )
+        let third = PlaybackController.recordStalls(
+            3, after: 2, at: 12, in: &policy,
+            isClosed: isClosed, isLocalPlayback: isLocalPlayback, isInGroup: isInGroup
+        )
+        #expect(!first)
+        #expect(!repeated)
+        return third
+    }
+
+    @Test func aStreamThatKeepsStallingIsOfferedALowerQuality() {
+        #expect(offersAfterStalls())
+    }
+
+    /// A download has no link to blame, a group's restart is the group's,
+    /// and a closed player has nothing to offer it on.
+    @Test func noOfferForADownloadAGroupOrAClosedPlayer() {
+        #expect(!offersAfterStalls(isLocalPlayback: true))
+        #expect(!offersAfterStalls(isInGroup: true))
+        #expect(!offersAfterStalls(isClosed: true))
+    }
+
     @Test func acceptingRunsTheSwitchOnceAndDismissingDoesNot() {
         let offer = PlaybackQualityOffer()
         var accepted = 0
