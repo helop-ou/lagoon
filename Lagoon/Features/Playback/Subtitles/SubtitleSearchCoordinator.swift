@@ -289,12 +289,25 @@ final class SubtitleSearchCoordinator {
             return
         }
 
+        guard let resolved = Self.resolveSearch(outcomes.map(\.1)) else {
+            phase = .idle
+            return
+        }
+        results = resolved.results
+        phase = resolved.phase
+    }
+
+    /// What a finished search shows: the merged results, or why there are
+    /// none. Nil when a language search was cancelled.
+    static func resolveSearch(
+        _ outcomes: [Result<[RemoteSubtitleInfo], Error>]
+    ) -> (results: [SubtitleCandidate], phase: SubtitleSearchPhase)? {
         var merged: [SubtitleCandidate] = []
         var seen: Set<String> = []
         var successfulSearches = 0
         var itemMissing = false
         var failures: [SubtitleDownloadError] = []
-        for (_, result) in outcomes {
+        for result in outcomes {
             switch result {
             case .success(let matches):
                 successfulSearches += 1
@@ -302,8 +315,7 @@ final class SubtitleSearchCoordinator {
                     merged.append(SubtitleCandidate(match))
                 }
             case .failure(let error) where error is CancellationError:
-                phase = .idle
-                return
+                return nil
             case .failure(let error):
                 let classified = SubtitleDownloadError.classify(error)
                 // Jellyfin answers 404 for a missing item, not a missing provider.
@@ -315,16 +327,12 @@ final class SubtitleSearchCoordinator {
             }
         }
 
-        results = merged
-        if !merged.isEmpty {
-            phase = .idle
-        } else if let failure = Self.mostActionable(failures) {
-            phase = failure == .notPermitted ? .notPermitted : .failed(failure.localizedDescription)
-        } else if itemMissing, successfulSearches == 0 {
-            phase = .noProvider
-        } else {
-            phase = .noResults
+        if !merged.isEmpty { return (merged, .idle) }
+        if let failure = mostActionable(failures) {
+            return ([], failure == .notPermitted ? .notPermitted : .failed(failure.localizedDescription))
         }
+        if itemMissing, successfulSearches == 0 { return ([], .noProvider) }
+        return ([], .noResults)
     }
 
     /// A permission or session problem explains every other failure, so it wins.
