@@ -1421,8 +1421,13 @@ final class PlaybackController {
 
     private func handleEngineError(_ failure: PlaybackEngineFailure, engine: SampleBufferPlayerEngine) {
         lastKnownPosition = currentPosition
-        let canFallBack = !isClosed && !isFallingBack && currentMedia != nil && client != nil
-        let next = canFallBack ? PlaybackFallbackPolicy.next(after: delivery, cause: failure.cause) : nil
+        let next = Self.fallbackDelivery(
+            after: failure.cause,
+            from: delivery,
+            isClosed: isClosed,
+            isFallingBack: isFallingBack,
+            canNegotiate: currentMedia != nil && client != nil
+        )
         incidents.engineFailed(failure, delivery: delivery, next: next, engine: engine)
         if let next {
             isFallingBack = true
@@ -1447,6 +1452,20 @@ final class PlaybackController {
         errorMessage = failure.message
         // beginStop claims the report, so a later onDisappear stays idempotent.
         _ = report
+    }
+
+    /// The rung to retry on after an engine failure, or nil when the failure
+    /// is final: the player is closing, a fallback is already under way and
+    /// owns the next attempt, or there is nothing to negotiate with.
+    nonisolated static func fallbackDelivery(
+        after cause: PlaybackEngineFailure.Cause,
+        from current: PlaybackDelivery,
+        isClosed: Bool,
+        isFallingBack: Bool,
+        canNegotiate: Bool
+    ) -> PlaybackDelivery? {
+        guard !isClosed, !isFallingBack, canNegotiate else { return nil }
+        return PlaybackFallbackPolicy.next(after: current, cause: cause)
     }
 
     #if DEBUG
