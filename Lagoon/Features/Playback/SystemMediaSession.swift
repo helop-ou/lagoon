@@ -305,32 +305,25 @@ final class NowPlayingCoordinator {
     private func registerCommands() {
         let center = MPRemoteCommandCenter.shared()
         add(center.playCommand) { [weak self] _ in
-            guard let self else { return }
-            self.transport?.play()
-            self.updateTimeline()
+            self?.perform(.play)
         }
         add(center.pauseCommand) { [weak self] _ in
-            guard let self else { return }
-            self.transport?.pause()
-            self.updateTimeline()
+            self?.perform(.pause)
         }
         add(center.togglePlayPauseCommand) { [weak self] _ in
-            guard let self else { return }
-            self.transport?.togglePause()
-            self.updateTimeline()
+            self?.perform(.togglePlayPause)
         }
         center.skipForwardCommand.preferredIntervals = [10]
         add(center.skipForwardCommand) { [weak self] _ in
-            self?.seek(by: 10)
+            self?.perform(.skip(seconds: 10))
         }
         center.skipBackwardCommand.preferredIntervals = [10]
         add(center.skipBackwardCommand) { [weak self] _ in
-            self?.seek(by: -10)
+            self?.perform(.skip(seconds: -10))
         }
         add(center.changePlaybackPositionCommand) { [weak self] event in
-            guard let self, let position = event as? MPChangePlaybackPositionCommandEvent else { return }
-            self.transport?.seek(position.positionTime, false)
-            self.updateTimeline()
+            guard let position = event as? MPChangePlaybackPositionCommandEvent else { return }
+            self?.perform(.changePosition(seconds: position.positionTime))
         }
         center.changePlaybackRateCommand.supportedPlaybackRates = PlaybackRatePolicy.supported.map {
             NSNumber(value: $0)
@@ -355,9 +348,31 @@ final class NowPlayingCoordinator {
         }
     }
 
-    private func seek(by seconds: Double) {
-        transport?.seekBy(seconds)
+    /// A transport command from the lock screen, Control Center, a headset
+    /// or the Siri Remote.
+    enum SystemCommand: Equatable {
+        case play
+        case pause
+        case togglePlayPause
+        case skip(seconds: Double)
+        case changePosition(seconds: Double)
+    }
+
+    private func perform(_ command: SystemCommand) {
+        if let transport { Self.route(command, to: transport) }
         updateTimeline()
+    }
+
+    /// Play and pause state the wanted state rather than toggle, so a
+    /// command repeated by the system cannot flip playback back.
+    static func route(_ command: SystemCommand, to transport: PlayerTransportActions) {
+        switch command {
+        case .play: transport.play()
+        case .pause: transport.pause()
+        case .togglePlayPause: transport.togglePause()
+        case .skip(let seconds): transport.seekBy(seconds)
+        case .changePosition(let seconds): transport.seek(seconds, false)
+        }
     }
 
     private func add(_ command: MPRemoteCommand, handler: @escaping @MainActor (MPRemoteCommandEvent) -> Void) {
