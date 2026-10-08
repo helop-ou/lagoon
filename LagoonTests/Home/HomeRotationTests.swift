@@ -12,10 +12,17 @@ struct HomeRotationTests {
         return calendar
     }()
 
-    private func date(_ iso: String) -> Date {
+    private let auckland = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "Pacific/Auckland")!
+        return calendar
+    }()
+
+    private func date(_ iso: String, in calendar: Calendar? = nil) -> Date {
+        let calendar = calendar ?? utc
         let formatter = DateFormatter()
-        formatter.calendar = utc
-        formatter.timeZone = utc.timeZone
+        formatter.calendar = calendar
+        formatter.timeZone = calendar.timeZone
         formatter.dateFormat = "yyyy-MM-dd HH:mm"
         return formatter.date(from: iso)!
     }
@@ -25,16 +32,18 @@ struct HomeRotationTests {
     // MARK: - Stable within a day
 
     @Test func theSpotlightHoldsStillFromMorningToNight() {
-        let morning = date("2026-08-25 06:00")
-        let night = date("2026-08-25 23:30")
+        // Auckland is UTC+12 in August, so this local day straddles a UTC
+        // midnight: the day must be the viewer's, not the epoch's.
+        let morning = date("2026-08-25 06:00", in: auckland)
+        let night = date("2026-08-25 23:30", in: auckland)
 
         #expect(
-            HomeRotation.genre(rankedByWatchHistory: genres, for: morning, calendar: utc)
-                == HomeRotation.genre(rankedByWatchHistory: genres, for: night, calendar: utc)
+            HomeRotation.genre(rankedByWatchHistory: genres, for: morning, calendar: auckland)
+                == HomeRotation.genre(rankedByWatchHistory: genres, for: night, calendar: auckland)
         )
         #expect(
-            HomeRotation.decade(for: morning, calendar: utc)
-                == HomeRotation.decade(for: night, calendar: utc)
+            HomeRotation.decade(for: morning, calendar: auckland)
+                == HomeRotation.decade(for: night, calendar: auckland)
         )
     }
 
