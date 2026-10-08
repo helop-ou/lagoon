@@ -224,7 +224,8 @@ final class SessionStore {
             serverName: account.serverName,
             userId: account.userId,
             userName: name,
-            primaryImageTag: user.primaryImageTag
+            primaryImageTag: user.primaryImageTag,
+            lastUsedAt: account.lastUsedAt
         )
     }
 

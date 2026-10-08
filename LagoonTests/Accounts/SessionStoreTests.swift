@@ -77,6 +77,16 @@ struct SessionStoreTests {
         #expect(SessionStore.refreshedProfile(of: account, from: try user(#"{"Id":"user","Name":"Old","PrimaryImageTag":"tag-1"}"#)) == nil)
     }
 
+    /// Activation stamps the record just before the refresh replaces it, so
+    /// the replacement keeps the profile's place in the picker.
+    @Test func aRefreshedProfileKeepsWhenItWasLastUsed() throws {
+        var account = StoredAccount(serverURL: URL(string: "https://jellyfin.test")!, serverName: "Server",
+                                    userId: "user", userName: "Old", primaryImageTag: "tag-1")
+        account.lastUsedAt = 1_700_000_000
+        let renamed = SessionStore.refreshedProfile(of: account, from: try user(#"{"Id":"user","Name":"New","PrimaryImageTag":"tag-2"}"#))
+        #expect(renamed?.lastUsedAt == 1_700_000_000)
+    }
+
     @Test func aProfileForAnotherUserIsIgnored() throws {
         let account = StoredAccount(serverURL: URL(string: "https://jellyfin.test")!, serverName: "Server",
                                     userId: "user", userName: "Old")
