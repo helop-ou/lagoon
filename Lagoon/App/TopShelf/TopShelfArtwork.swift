@@ -17,13 +17,6 @@ nonisolated enum TopShelfArtwork {
     /// Artwork is cached by item id, so without a bump upgraders keep the old
     /// pictures forever.
     static let layoutVersion = 2
-    private static let layoutVersionKey = "topShelf.artworkLayoutVersion"
-
-    static func discardArtworkFromEarlierLayouts(defaults: UserDefaults, appGroupID: String) {
-        guard defaults.integer(forKey: layoutVersionKey) != layoutVersion else { return }
-        removeArtwork(notIn: [], appGroupID: appGroupID)
-        defaults.set(layoutVersion, forKey: layoutVersionKey)
-    }
 
     #if os(tvOS)
     /// Composes one carousel image: backdrop, scrim, and the title as logo
@@ -166,16 +159,5 @@ nonisolated enum TopShelfArtwork {
             return nil
         }
         return directory
-    }
-
-    /// Removes composed images that no longer belong to any published item,
-    /// so stale 4K JPEGs do not pile up.
-    static func removeArtwork(notIn keep: Set<String>, appGroupID: String) {
-        guard let directory = directoryURL(appGroupID: appGroupID),
-              let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path)
-        else { return }
-        for name in names where !keep.contains(name) {
-            try? FileManager.default.removeItem(at: directory.appending(path: name))
-        }
     }
 }

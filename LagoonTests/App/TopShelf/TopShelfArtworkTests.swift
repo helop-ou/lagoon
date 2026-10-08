@@ -60,22 +60,5 @@ struct TopShelfArtworkTests {
         // the literal.
         #expect(TopShelfArtwork.containerSubpath == "Library/Caches/TopShelf")
     }
-
-    @Test func artworkIsThrownAwayWhenTheLayoutChanges() {
-        // The cache is keyed by item id forever; only the version invalidates it.
-        let suite = "TopShelfArtworkTests.\(UUID().uuidString)"
-        let defaults = UserDefaults(suiteName: suite)!
-        defer { defaults.removePersistentDomain(forName: suite) }
-
-        #expect(defaults.integer(forKey: "topShelf.artworkLayoutVersion") == 0)
-        TopShelfArtwork.discardArtworkFromEarlierLayouts(
-            defaults: defaults,
-            appGroupID: TopShelfStore.appGroupID
-        )
-        #expect(
-            defaults.integer(forKey: "topShelf.artworkLayoutVersion")
-                == TopShelfArtwork.layoutVersion
-        )
-    }
     #endif
 }
