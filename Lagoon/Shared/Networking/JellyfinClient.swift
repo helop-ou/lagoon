@@ -80,6 +80,8 @@ final class JellyfinClient {
     private let downloads: BoundedDownload
     /// The proxy headers this client sends; see `ServerHeaderStore`.
     let headerStore: ServerHeaderStore
+    /// Where failed requests are recorded and reported.
+    let diagnostics: DiagnosticsHub
 
     nonisolated static let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
@@ -102,10 +104,12 @@ final class JellyfinClient {
     init(
         deviceId: String,
         sessionConfiguration: URLSessionConfiguration = .default,
-        headerStore: ServerHeaderStore = .shared
+        headerStore: ServerHeaderStore = .shared,
+        diagnostics: DiagnosticsHub = Diagnostics.shared
     ) {
         self.deviceId = deviceId
         self.headerStore = headerStore
+        self.diagnostics = diagnostics
         let config = sessionConfiguration
         config.timeoutIntervalForRequest = 30
         // API calls bypass the URL cache; see `request(for:)`.
@@ -148,7 +152,8 @@ final class JellyfinClient {
         let copy = JellyfinClient(
             deviceId: deviceId,
             sessionConfiguration: session.configuration,
-            headerStore: headerStore
+            headerStore: headerStore,
+            diagnostics: diagnostics
         )
         if let serverURL { copy.configure(serverURL: serverURL) }
         if let accessToken, let userId { copy.activateSession(token: accessToken, userId: userId) }
@@ -498,7 +503,7 @@ final class JellyfinClient {
             return try Self.decoder.decode(T.self, from: data)
         } catch {
             if !request.probe {
-                APIDiagnostics.decodeFailed(error, request: request.request, serverURL: serverURL, client: "jellyfin")
+                APIDiagnostics.decodeFailed(error, request: request.request, serverURL: serverURL, client: "jellyfin", hub: diagnostics)
             }
             throw error
         }
@@ -509,7 +514,7 @@ final class JellyfinClient {
     private func throwTransportFailure(_ error: Error, request: PreparedRequest, startedAt: TimeInterval) throws -> Never {
         if let identity = request.session, identity != sessionIdentity { throw CancellationError() }
         if !request.probe {
-            APIDiagnostics.transportFailed(error, request: request.request, serverURL: serverURL, client: "jellyfin", startedAt: startedAt)
+            APIDiagnostics.transportFailed(error, request: request.request, serverURL: serverURL, client: "jellyfin", startedAt: startedAt, hub: diagnostics)
         }
         throw error
     }
@@ -546,7 +551,7 @@ final class JellyfinClient {
             return data
         case 401:
             if let identity = request.session {
-                APIDiagnostics.statusFailed(status, request: request.request, serverURL: serverURL, client: "jellyfin", startedAt: startedAt)
+                APIDiagnostics.statusFailed(status, request: request.request, serverURL: serverURL, client: "jellyfin", startedAt: startedAt, hub: diagnostics)
                 clearSession()
                 onSessionExpired?(identity)
                 throw JellyfinError.sessionExpired
@@ -554,7 +559,7 @@ final class JellyfinClient {
             throw JellyfinError.unauthorized
         default:
             if !request.probe {
-                APIDiagnostics.statusFailed(status, request: request.request, serverURL: serverURL, client: "jellyfin", startedAt: startedAt)
+                APIDiagnostics.statusFailed(status, request: request.request, serverURL: serverURL, client: "jellyfin", startedAt: startedAt, hub: diagnostics)
             }
             throw JellyfinError.server(
                 status: status,
