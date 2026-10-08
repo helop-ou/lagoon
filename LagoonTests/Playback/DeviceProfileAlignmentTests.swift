@@ -74,8 +74,10 @@ struct DeviceProfileAlignmentTests {
         }
         let audioCodecs = directVideo?.audioCodec?.split(separator: ",").map(String.init) ?? []
 
-        #expect(audioCodecs.contains("mp2"))
-        #expect(audioCodecs.contains("alac"))
+        for codec in ["mp2", "alac"] {
+            #expect(audioCodecs.contains(codec))
+            #expect(avcodec_find_decoder_by_name(codec) != nil, "no decoder for \(codec)")
+        }
         let containers = directVideo?.container.split(separator: ",").map(String.init) ?? []
         #expect(containers.contains("mpg"))
         #expect(containers.contains("ts"))

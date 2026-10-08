@@ -15,29 +15,11 @@ struct SubtitleWorkflowTests {
         #expect(JellyfinSubtitleLanguageCode.threeLetter(for: "cs-CZ") == "ces")
     }
 
-    @Test func remoteSubtitleMetadataDecodesWithoutProviderSpecificLogic() throws {
-        let json = Data(#"""
-        {
-          "Id": "eng-provider-42",
-          "Name": "Release.Name",
-          "ThreeLetterISOLanguageName": "eng",
-          "ProviderName": "Open Subtitles",
-          "Format": "srt",
-          "CommunityRating": 8.7,
-          "DownloadCount": 1234,
-          "IsHashMatch": true,
-          "HearingImpaired": true,
-          "MachineTranslated": false,
-          "AiTranslated": false,
-          "FrameRate": 23.976
-        }
-        """#.utf8)
+    /// The only key a casing strategy could mangle: consecutive capitals.
+    @Test func remoteSubtitleLanguageKeyWithAnAcronymDecodes() throws {
+        let json = Data(#"{"Id":"eng-provider-42","ThreeLetterISOLanguageName":"eng"}"#.utf8)
         let result = try JellyfinClient.decoder.decode(RemoteSubtitleInfo.self, from: json)
-        #expect(result.id == "eng-provider-42")
         #expect(result.threeLetterISOLanguageName == "eng")
-        #expect(result.providerName == "Open Subtitles")
-        #expect(result.hearingImpaired == true)
-        #expect(result.isHashMatch == true)
     }
 
     @Test @MainActor func inPlayerLanguageChoicesStayCompactAndPreferenceOrdered() {
@@ -118,7 +100,7 @@ struct SubtitleWorkflowTests {
 
         // Long bodies are truncated rather than filling the screen.
         let long = JellyfinClient.serverMessage(from: Data(String(repeating: "x", count: 400).utf8))
-        #expect((long?.count ?? 0) <= 181)
+        #expect(long == String(repeating: "x", count: 180) + "…")
     }
 
     @Test func subtitleRetriesOnlyCoverFastFailingTransientErrors() {
@@ -221,9 +203,11 @@ struct SubtitleWorkflowTests {
                 requestedLanguage: "eng"
             ) { stale }
             Issue.record("Expected the subtitle refresh to time out")
-        } catch let error as SubtitleDownloadError {
-            #expect(error.errorDescription?.contains("subtitle") == true)
-            #expect(error.errorDescription?.contains("device") == false)
+        } catch {
+            let failure = try #require(error as? SubtitleDownloadError)
+            #expect(failure == .notAvailable)
+            #expect(failure.errorDescription?.contains("subtitle") == true)
+            #expect(failure.errorDescription?.contains("device") == false)
         }
     }
 

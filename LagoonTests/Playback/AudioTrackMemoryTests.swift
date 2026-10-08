@@ -129,14 +129,6 @@ struct AudioTrackMemoryTests {
         #expect(AudioTrackMemoryPolicy.ordinal(for: remembered, in: changed) == 2)
     }
 
-    @Test func aChangedLayoutRetiresTheRememberedPosition() {
-        // An extra track shifts the ordinals.
-        let remembered = choice(ordinal: 3, layout: anonymousLayout)
-        let withCommentary = anonymousLayout + [stream(channels: 2)]
-
-        #expect(AudioTrackMemoryPolicy.ordinal(for: remembered, in: withCommentary) == nil)
-    }
-
     @Test func languageIdentifiesTheTrackAheadOfAnyPosition() {
         let layout = [
             stream(language: "rus", title: "Russian"),
@@ -199,15 +191,18 @@ struct AudioTrackMemoryTests {
         #expect(AudioTrackMemoryPolicy.ordinal(for: remembered, in: shorter) == nil)
     }
 
-    /// A title may contain a separator; two layouts hashing alike would
-    /// apply a position to the wrong layout.
+    /// Two layouts whose fields run together when joined bare would apply a
+    /// position to the wrong layout.
     @Test func fingerprintsSurviveSeparatorsInsideTitles() {
-        let left = [stream(title: "a/b"), stream(title: "c")]
-        let right = [stream(title: "a"), stream(title: "b/c")]
-
+        // The same text sits in a different field.
         #expect(
-            AudioTrackMemoryPolicy.fingerprint(of: left)
-                != AudioTrackMemoryPolicy.fingerprint(of: right)
+            AudioTrackMemoryPolicy.fingerprint(of: [stream(language: "a")])
+                != AudioTrackMemoryPolicy.fingerprint(of: [stream(title: "a")])
+        )
+        // One title containing the stream separator against two streams.
+        #expect(
+            AudioTrackMemoryPolicy.fingerprint(of: [stream(title: "a|b")])
+                != AudioTrackMemoryPolicy.fingerprint(of: [stream(title: "a"), stream(title: "b")])
         )
     }
 

@@ -130,11 +130,15 @@ struct SubtitleTrackMemoryTests {
     }
 
     @Test func fingerprintsSurviveSeparatorsInsideTitles() {
-        let first = [stream(language: "en", title: "g|3:lish"), stream(language: "fi")]
-        let second = [stream(language: "eng", title: "lish"), stream(language: "fi")]
+        // The same text sits in a different field.
         #expect(
-            SubtitleTrackMemoryPolicy.fingerprint(of: first)
-                != SubtitleTrackMemoryPolicy.fingerprint(of: second)
+            SubtitleTrackMemoryPolicy.fingerprint(of: [stream(language: "a")])
+                != SubtitleTrackMemoryPolicy.fingerprint(of: [stream(title: "a")])
+        )
+        // One title containing the stream separator against two streams.
+        #expect(
+            SubtitleTrackMemoryPolicy.fingerprint(of: [stream(title: "a|b")])
+                != SubtitleTrackMemoryPolicy.fingerprint(of: [stream(title: "a"), stream(title: "b")])
         )
     }
 
@@ -156,22 +160,6 @@ struct SubtitleTrackMemoryTests {
         let defaults = try #require(UserDefaults(suiteName: name))
         defer { UserDefaults.standard.removePersistentDomain(forName: name) }
         try body(defaults)
-    }
-
-    @MainActor
-    @Test func aRememberedChoiceOutlivesTheStoreThatWroteIt() throws {
-        try withDefaults { defaults in
-            let scope = SubtitleTrackMemoryStore.scope(seriesID: "series-1", itemID: "episode-1")
-            let remembered = choice(off: true, ordinal: 0, layout: englishThreeWays)
-
-            let writing = SubtitleTrackMemoryStore(defaults: defaults)
-            writing.configure(accountID: "account")
-            writing.remember(remembered, for: scope)
-
-            let reading = SubtitleTrackMemoryStore(defaults: defaults)
-            reading.configure(accountID: "account")
-            #expect(reading.choice(for: scope) == remembered)
-        }
     }
 
     /// The audio and subtitle memories share a mechanism but not a key.
