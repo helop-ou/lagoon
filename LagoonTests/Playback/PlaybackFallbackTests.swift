@@ -132,6 +132,47 @@ struct PlaybackFallbackTests {
         }
     }
 
+    // MARK: - After an engine failure
+
+    private func retry(
+        _ cause: PlaybackEngineFailure.Cause,
+        from current: PlaybackDelivery = .negotiated,
+        isClosed: Bool = false,
+        isFallingBack: Bool = false,
+        canNegotiate: Bool = true
+    ) -> PlaybackDelivery? {
+        PlaybackController.fallbackDelivery(
+            after: cause,
+            from: current,
+            isClosed: isClosed,
+            isFallingBack: isFallingBack,
+            canNegotiate: canNegotiate
+        )
+    }
+
+    /// A delivery failure on the first rung costs a remux, never a straight
+    /// re-encode; only the engine's verdict on the samples skips to one.
+    @Test func aLiveSessionDescendsOneRungForTheEnginesVerdict() {
+        #expect(retry(.delivery) == .remux)
+        #expect(retry(.undecodable) == .transcode)
+        #expect(retry(.delivery, from: .remux) == .transcode)
+        #expect(retry(.delivery, from: .transcode) == nil)
+    }
+
+    /// The fallback under way owns the next attempt. A second failure from
+    /// the dying engine must not start another one beside it.
+    @Test func noSecondFallbackWhileOneIsUnderWay() {
+        #expect(retry(.delivery, isFallingBack: true) == nil)
+        #expect(retry(.undecodable, isFallingBack: true) == nil)
+    }
+
+    @Test func aClosedPlayerOrNothingToNegotiateWithEndsPlayback() {
+        #expect(retry(.delivery, isClosed: true) == nil)
+        #expect(retry(.undecodable, isClosed: true) == nil)
+        #expect(retry(.delivery, canNegotiate: false) == nil)
+        #expect(retry(.undecodable, canNegotiate: false) == nil)
+    }
+
     // MARK: - The rung that re-encodes
 
     /// The bound the transcode rung carries, or nil where it carries none.
