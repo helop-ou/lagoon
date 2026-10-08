@@ -383,11 +383,12 @@ struct VideoPlayerView: View {
                 // closure past an episode handoff, and a strong capture
                 // would pin the outgoing engine. Never capture it strongly.
                 if let engine {
-                    SampleBufferVideoSurface(engine: engine) { displayLayer in
+                    SampleBufferVideoSurface(engine: engine) { [weak engine] displayLayer in
                         let identity = String(ObjectIdentifier(displayLayer).hashValue)
                         Task { @MainActor in
                             controller.recordPlayerSurface(identity: identity)
                         }
+                        guard let engine else { return }
                         pictureInPicture.attach(displayLayer: displayLayer, engine: engine)
                     }
                 }

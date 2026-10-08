@@ -3,9 +3,10 @@ import LagoonEngine
 import SwiftUI
 import UIKit
 
-/// Hosts the display layer the engine renders into.
+/// Hosts the display layer the engine renders into. Holds the engine weakly,
+/// like `PlayerEngineRef`: SwiftUI can keep this value past a handoff.
 struct SampleBufferVideoSurface: UIViewRepresentable {
-    let engine: SampleBufferPlayerEngine
+    weak var engine: SampleBufferPlayerEngine?
     var onDisplayLayerReady: ((AVSampleBufferDisplayLayer) -> Void)?
 
     init(
@@ -24,6 +25,7 @@ struct SampleBufferVideoSurface: UIViewRepresentable {
 
     func makeUIView(context: Context) -> SampleBufferVideoView {
         let view = SampleBufferVideoView()
+        guard let engine else { return view }
         engine.attach(displayLayer: view.displayLayer)
         context.coordinator.engine = engine
         onDisplayLayerReady?(view.displayLayer)
@@ -31,7 +33,7 @@ struct SampleBufferVideoSurface: UIViewRepresentable {
     }
 
     func updateUIView(_ uiView: SampleBufferVideoView, context: Context) {
-        guard context.coordinator.engine !== engine else { return }
+        guard let engine, context.coordinator.engine !== engine else { return }
         // The controller detaches the old renderers before publishing the
         // successor, so the layer never has two synchronizers.
         engine.attach(displayLayer: uiView.displayLayer)
