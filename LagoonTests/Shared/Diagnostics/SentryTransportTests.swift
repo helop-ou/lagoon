@@ -123,7 +123,9 @@ struct SentryTransportTests {
         await Self.wait { SentryFixture.requests.count == 1 && Self.pendingCount(directory) == 0 }
         SentryFixture.responder = { _ in (200, [:]) }
         transport.submit(Self.incident(.playbackFailed))
-        await Self.wait { SentryFixture.requests.count == 2 }
+        // The stub records a request before its response reaches the
+        // transport, so wait for the accepted file to go as well.
+        await Self.wait { SentryFixture.requests.count == 2 && Self.pendingCount(directory) == 0 }
         #expect(SentryFixture.requests.count == 2)
         #expect(Self.pendingCount(directory) == 0)
     }
