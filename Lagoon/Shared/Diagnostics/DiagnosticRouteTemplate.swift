@@ -23,7 +23,8 @@ nonisolated enum DiagnosticRouteTemplate {
             let trimmedBase = basePath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
             if !trimmedBase.isEmpty {
                 let trimmedPath = remaining.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-                if trimmedPath.hasPrefix(trimmedBase) {
+                // Whole segments only: `/jellyfin` is not a prefix of `/jellyfinx`.
+                if trimmedPath == trimmedBase || trimmedPath.hasPrefix(trimmedBase + "/") {
                     remaining = Substring(trimmedPath.dropFirst(trimmedBase.count))
                 }
             }

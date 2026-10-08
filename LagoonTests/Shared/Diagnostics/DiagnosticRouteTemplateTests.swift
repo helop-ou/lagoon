@@ -15,6 +15,16 @@ struct DiagnosticRouteTemplateTests {
         #expect(APIDiagnostics.routeToken(.string("Users/{id}/Items/{id}/PlaybackInfo")) == "Users.id.Items.id.PlaybackInfo")
     }
 
+    /// The base path goes only as whole segments: a server at `/jellyfin`
+    /// does not turn `/jellyfinx/Items` into `x/Items`.
+    @Test func theBasePathIsRemovedOnlyAsWholeSegments() {
+        #expect(DiagnosticRouteTemplate.template(path: "/jellyfinx/Items", basePath: "/jellyfin") == "jellyfinx/Items")
+        #expect(DiagnosticRouteTemplate.template(path: "/jellyfin/Items", basePath: "/jellyfin/") == "Items")
+        #expect(DiagnosticRouteTemplate.template(path: "/jellyfin", basePath: "/jellyfin") == "{id}")
+        #expect(DiagnosticRouteTemplate.template(path: "/media/jellyfin/Items", basePath: "/media/jellyfin") == "Items")
+        #expect(DiagnosticRouteTemplate.template(path: "/media/jellyfinstuff/Items", basePath: "/media/jellyfin") == "media/jellyfinstuff/Items")
+    }
+
     /// Seerr mounts every route under `api/v1`; blanking `v1` to `{id}` merges them.
     @Test func versionSegmentsSurviveSoSeerrRoutesStayDistinct() {
         #expect(DiagnosticRouteTemplate.template(path: "/api/v1/search") == "api/v1/search")
