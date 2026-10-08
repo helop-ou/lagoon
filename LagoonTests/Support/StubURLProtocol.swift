@@ -5,6 +5,9 @@ import Foundation
 /// request to a fixed status, headers and body (or an error) by host.
 /// Suites with holds, streaming, byte-range serving or other extra modes
 /// keep their own `URLProtocol` subclass; this only covers the simple case.
+///
+/// A session built on `configuration()` never reaches the network: a request
+/// to a host nobody registered fails with `unregisteredHostError`.
 nonisolated final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     typealias Handler = @Sendable (URLRequest) throws -> (Int, [String: String], Data)
 
@@ -36,17 +39,24 @@ nonisolated final class StubURLProtocol: URLProtocol, @unchecked Sendable {
         lock.withLock { state.requests[host] ?? [] }
     }
 
-    override class func canInit(with request: URLRequest) -> Bool {
-        guard let host = request.url?.host else { return false }
-        return lock.withLock { state.handlers[host] != nil }
+    /// What a request to an unregistered host fails with, rather than
+    /// reaching a real server.
+    static func unregisteredHostError(_ host: String?) -> URLError {
+        URLError(.unsupportedURL, userInfo: [
+            NSLocalizedDescriptionKey: "StubURLProtocol: no handler registered for host \(host ?? "(none)")",
+        ])
     }
+
+    /// Every request on a stub session, so an unregistered host fails here
+    /// instead of falling through to the network.
+    override class func canInit(with request: URLRequest) -> Bool { true }
 
     override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
     override func startLoading() {
         guard let url = request.url, let host = url.host,
               let handler = Self.lock.withLock({ Self.state.handlers[host] }) else {
-            client?.urlProtocol(self, didFailWithError: URLError(.badURL))
+            client?.urlProtocol(self, didFailWithError: Self.unregisteredHostError(request.url?.host))
             return
         }
         Self.lock.withLock { Self.state.requests[host, default: []].append(request) }

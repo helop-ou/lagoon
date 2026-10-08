@@ -48,4 +48,14 @@ struct StubURLProtocolTests {
         #expect(Self.stubHosts(in: first) == ["shared.test"])
         #expect(Self.stubHosts(in: second) == ["shared.test"])
     }
+
+    @Test func anUnregisteredHostFailsInsteadOfReachingTheNetwork() async throws {
+        let session = URLSession(configuration: StubURLProtocol.configuration())
+        let url = URL(string: "https://unregistered.stub.test/System/Info/Public")!
+        let error = await #expect(throws: URLError.self) {
+            _ = try await session.data(from: url)
+        }
+        #expect(error?.code == .unsupportedURL)
+        #expect(StubURLProtocol.requests(host: "unregistered.stub.test").isEmpty)
+    }
 }
