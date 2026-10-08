@@ -220,6 +220,13 @@ struct PlaybackIncidentMonitorTests {
         // No attempt exists yet, so the token is omitted, not sent empty.
         #expect(incident.fields["attempt"] == nil)
         #expect(incident.fields["schemaRejected"] == nil)
+        // The server's message names the title and its path.
+        for value in incident.fields.values {
+            let text = "\(value.jsonObject)"
+            #expect(!text.contains("Transcoding"))
+            #expect(!text.contains("Nobody"))
+            #expect(!text.contains("secret"))
+        }
     }
 
     @Test func aDismissalDuringNegotiationIsNotAStartFailure() {
