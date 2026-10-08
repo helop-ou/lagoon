@@ -191,9 +191,62 @@ struct SeerrQualityProfileTests {
         #expect(services[0].name == "Radarr")
     }
 
+    /// The request's own server wins; without one, the default for its
+    /// resolution; failing that, any default.
+    @Test func theProfileComesFromTheServerTheRequestWasSentTo() throws {
+        let services = try JSONDecoder().decode([SeerrService].self, from: Data("""
+        [{"id":0,"isDefault":true,"is4k":false,"activeProfileId":1},
+         {"id":1,"isDefault":true,"is4k":true,"activeProfileId":2},
+         {"id":2,"isDefault":false,"is4k":false,"activeProfileId":3}]
+        """.utf8))
+        func source(_ json: String) throws -> [Int]? {
+            let request = try JSONDecoder().decode(SeerrMediaRequest.self, from: Data(json.utf8))
+            return SeerrRequestDetailModel.profileSource(for: request, among: services).map { [$0.serverID, $0.profileID] }
+        }
+
+        #expect(try source(#"{"id":1,"status":2,"type":"movie","serverId":2}"#) == [2, 3])
+        #expect(try source(#"{"id":1,"status":2,"type":"movie","is4k":true}"#) == [1, 2])
+        #expect(try source(#"{"id":1,"status":2,"type":"movie"}"#) == [0, 1])
+        // An explicit choice beats the server's active profile.
+        #expect(try source(#"{"id":1,"status":2,"type":"movie","serverId":2,"profileId":9}"#) == [2, 9])
+    }
+
+    @Test func aRequestWithNoServerAndNoDefaultHasNoProfile() throws {
+        let services = try JSONDecoder().decode([SeerrService].self, from: Data(#"[{"id":3,"isDefault":false,"activeProfileId":1}]"#.utf8))
+        let request = try JSONDecoder().decode(SeerrMediaRequest.self, from: Data(#"{"id":1,"status":2,"type":"movie"}"#.utf8))
+
+        #expect(SeerrRequestDetailModel.profileSource(for: request, among: services) == nil)
+    }
+
     @Test @MainActor func aServiceMissingItsFieldsDoesNotThrow() throws {
         let services = try JSONDecoder().decode([SeerrService].self, from: Data("[{}]".utf8))
         #expect(services[0].id == 0)
         #expect(!services[0].isDefault)
+    }
+}
+
+@Suite("Seerr requests list")
+struct SeerrRequestsPagingTests {
+    private func user(permissions: Int) -> SeerrUser {
+        SeerrUser(id: 7, email: nil, username: "alex", displayName: nil, jellyfinUsername: nil, permissions: permissions)
+    }
+
+    @Test func aUserWhoMayNotSeeEveryonesRequestsIsAlwaysScopedToTheirOwn() {
+        let requester = user(permissions: SeerrPermission.request.rawValue)
+
+        #expect(SeerrRequestsPaging.onlyMine(chosen: false, user: requester))
+        #expect(SeerrRequestsPaging.onlyMine(chosen: true, user: requester))
+    }
+
+    @Test func aManagerSeesEveryonesUnlessTheyChooseTheirOwn() {
+        let manager = user(permissions: SeerrPermission.manageRequests.rawValue)
+
+        #expect(!SeerrRequestsPaging.onlyMine(chosen: false, user: manager))
+        #expect(SeerrRequestsPaging.onlyMine(chosen: true, user: manager))
+    }
+
+    @Test func pagesAreOneBasedAndSkipWholePages() {
+        #expect(SeerrRequestsPaging.skip(forPage: 1) == 0)
+        #expect(SeerrRequestsPaging.skip(forPage: 3) == 2 * SeerrRequestsPaging.pageSize)
     }
 }
