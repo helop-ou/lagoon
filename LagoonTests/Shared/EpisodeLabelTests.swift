@@ -35,11 +35,16 @@ struct EpisodeLabelTests {
         #expect(page.items[0].railTitle == "Show")
     }
 
-    @Test func downloadsLabelLikeTheirSource() throws {
-        let item = try JellyfinClient.decoder.decode(
-            MediaItem.self,
-            from: Data(#"{"Id":"e1","Type":"Episode","ParentIndexNumber":0,"IndexNumber":3,"IndexNumberEnd":4}"#.utf8)
-        )
+    /// A download names an episode exactly as the item it came from, even
+    /// when the server sent no season or no episode number.
+    @Test(arguments: [
+        #"{"Id":"e1","Type":"Episode","ParentIndexNumber":0,"IndexNumber":3,"IndexNumberEnd":4}"#,
+        #"{"Id":"e1","Type":"Episode","IndexNumber":4}"#,
+        #"{"Id":"e1","Type":"Episode","ParentIndexNumber":0}"#,
+        #"{"Id":"e1","Type":"Episode","ParentIndexNumber":2}"#,
+    ])
+    func downloadsLabelLikeTheirSource(json: String) throws {
+        let item = try JellyfinClient.decoder.decode(MediaItem.self, from: Data(json.utf8))
         let entry = DownloadEntry(
             itemID: item.id, type: .episode, title: "Special",
             seriesID: "show", seriesName: "Show",
@@ -50,6 +55,17 @@ struct EpisodeLabelTests {
             mediaSourceID: "source1", eTag: nil, createdAt: nil
         )
         #expect(entry.episodeLabel == item.episodeLabel)
+    }
+
+    @Test func aDownloadedDoubleSpecialIsLabelledAsOne() throws {
+        let entry = DownloadEntry(
+            itemID: "e1", type: .episode, title: "Special",
+            seriesID: "show", seriesName: "Show",
+            seasonNumber: 0, episodeNumber: 3, episodeNumberEnd: 4,
+            productionYear: nil, runTimeTicks: nil,
+            requestedQuality: .original, quality: .original, fileName: "e1.mkv",
+            mediaSourceID: "source1", eTag: nil, createdAt: nil
+        )
         #expect(entry.episodeLabel == "Special 3–4")
     }
 

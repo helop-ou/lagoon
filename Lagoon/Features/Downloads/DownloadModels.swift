@@ -136,7 +136,7 @@ nonisolated struct DownloadEntry: Codable, Identifiable, Hashable, Sendable {
     }
 
     var episodeLabel: String? {
-        guard type == .episode, seasonNumber != nil, episodeNumber != nil else { return nil }
+        guard type == .episode else { return nil }
         return EpisodeLabel.text(season: seasonNumber, episode: episodeNumber, episodeEnd: episodeNumberEnd)
     }
 }
