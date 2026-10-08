@@ -115,6 +115,15 @@ struct RecentSearchStoreTests {
         #expect(reopened.terms.isEmpty)
     }
 
+    /// Signed out, there is no one to remember the term for.
+    @Test @MainActor func aTermRecordedWithNoAccountIsNotKept() {
+        let (store, defaults) = makeStore()
+        store.configure(accountID: nil)
+        store.record("dune")
+        #expect(store.terms.isEmpty)
+        #expect(!defaults.dictionaryRepresentation().keys.contains { $0.hasPrefix("search.recents") })
+    }
+
     /// A future build may store more than this build's limit.
     @Test @MainActor func anOverlongStoredListIsTrimmedOnLoad() throws {
         let (_, defaults) = makeStore()
