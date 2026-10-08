@@ -95,21 +95,30 @@ final class SeerrRequestDetailModel {
             return nil
         }
         let services = (try? await client.services(mediaType)) ?? []
+        guard let source = Self.profileSource(for: request, among: services) else {
+            return nil
+        }
+        let profiles = (try? await client.qualityProfiles(mediaType, serverID: source.serverID)) ?? []
+        return profiles.first { $0.id == source.profileID }?.name
+    }
+
+    /// The server and profile a request was fulfilled with: the named server,
+    /// else the default for its resolution, else any default.
+    nonisolated static func profileSource(
+        for request: SeerrMediaRequest,
+        among services: [SeerrService]
+    ) -> (serverID: Int, profileID: Int)? {
         let wants4k = request.is4k == true
-        // The named server, else the default for its resolution.
         let service = services.first { $0.id == request.serverId }
             ?? services.first { $0.isDefault && $0.is4k == wants4k }
             ?? services.first(where: \.isDefault)
 
         // `profileId` is set only by an explicit choice (REQUEST_ADVANCED);
         // otherwise the server's active profile applies.
-        guard let profileID = request.profileId ?? service?.activeProfileId,
-              let serverID = service?.id
-        else {
+        guard let service, let profileID = request.profileId ?? service.activeProfileId else {
             return nil
         }
-        let profiles = (try? await client.qualityProfiles(mediaType, serverID: serverID)) ?? []
-        return profiles.first { $0.id == profileID }?.name
+        return (service.id, profileID)
     }
 
     /// Matches like `SeerrMediaDetailView`: Seerr's recorded Jellyfin id,
