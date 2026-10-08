@@ -42,10 +42,10 @@ struct HeroSelectionTests {
     }
 
     @Test func atMostSixAndNoDuplicates() throws {
-        let latest = try (1...9).map { try item("new-\($0)") } + [try item("new-1")]
+        // The repeat sits inside the first six, where it would take a slot.
+        let latest = try ["new-1", "new-2", "new-1", "new-3", "new-4", "new-5", "new-6", "new-7"].map { try item($0) }
         let hero = HeroSelection.select(tiers: [latest], shuffle: keepOrder)
-        #expect(hero.count == HeroSelection.count)
-        #expect(Set(hero.map(\.id)).count == hero.count)
+        #expect(hero.map(\.id) == ["new-1", "new-2", "new-3", "new-4", "new-5", "new-6"])
     }
 
     @Test func shuffleIsApplied() throws {
