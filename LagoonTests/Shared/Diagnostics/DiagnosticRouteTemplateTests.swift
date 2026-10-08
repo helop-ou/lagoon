@@ -12,7 +12,7 @@ struct DiagnosticRouteTemplateTests {
         let url = URL(string: "https://lagoonfix.example.eu/jf/Sessions/Playing?positionTicks=5")!
         #expect(DiagnosticRouteTemplate.template(url: url, serverURL: URL(string: "https://lagoonfix.example.eu/jf")) == "Sessions/Playing")
         #expect(DiagnosticSchema.isRoute(DiagnosticRouteTemplate.template(path: "/Users/8f3a/Items/12c4/PlaybackInfo")))
-        #expect(APIDiagnostics.routeToken(.string("Users/{id}/Items/{id}/PlaybackInfo")) == "Users.id.Items.id.PlaybackInfo")
+        #expect(APIDiagnostics.routeToken(.string("Users/{id}/Items/{id}/PlaybackInfo")) == "Users_id_Items_id_PlaybackInfo")
     }
 
     /// The base path goes only as whole segments: a server at `/jellyfin`
@@ -30,7 +30,7 @@ struct DiagnosticRouteTemplateTests {
         #expect(DiagnosticRouteTemplate.template(path: "/api/v1/search") == "api/v1/search")
         #expect(DiagnosticRouteTemplate.template(path: "/api/v1/movie/603") == "api/v1/movie/{id}")
         #expect(DiagnosticRouteTemplate.template(path: "/api/v2/request/41") == "api/v2/request/{id}")
-        #expect(APIDiagnostics.routeToken(.string("api/v1/search")) == "api.v1.search")
+        #expect(APIDiagnostics.routeToken(.string("api/v1/search")) == "api_v1_search")
     }
 
     /// Only `v` plus digits survives, and the schema must agree or the route

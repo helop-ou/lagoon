@@ -38,8 +38,24 @@ struct APIDiagnosticsTests {
         let incident = try #require(sink.all.first)
         #expect(sink.all.count == 1)
         #expect(incident.code == .apiRequestFailed)
-        #expect(incident.fingerprint == ["api.requestFailed", "jellyfin", "Users.id.Items.id.PlaybackInfo", "status500"])
+        #expect(incident.fingerprint == ["api.requestFailed", "jellyfin", "Users_id_Items_id_PlaybackInfo", "status500"])
         #expect(incident.fields["httpStatus"] == .int(500))
+    }
+
+    /// The route is what tells one failing endpoint from another, so it must
+    /// survive the fingerprint's token filter whatever its last segment is.
+    @Test(arguments: [
+        ("Items/12c4", "Items_id"),
+        ("Users/8f3a/Items/12c4", "Users_id_Items_id"),
+        ("api/v1/auth/me", "api_v1_auth_me"),
+        ("api/v1/tv/1399", "api_v1_tv_id"),
+    ])
+    func everyRouteKeepsItsPlaceInTheFingerprint(path: String, token: String) throws {
+        let sink = CapturingSink()
+        let hub = DiagnosticsHub(sink: sink, reportingEnabled: { true })
+        APIDiagnostics.statusFailed(500, request: Self.request(path), serverURL: Self.server, client: "jellyfin", startedAt: 0, hub: hub)
+        let incident = try #require(sink.all.first)
+        #expect(incident.fingerprint == ["api.requestFailed", "jellyfin", token, "status500"])
     }
 
     @Test(arguments: [URLError.Code.notConnectedToInternet, .timedOut, .cannotFindHost, .networkConnectionLost])

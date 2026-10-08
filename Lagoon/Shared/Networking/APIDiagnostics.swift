@@ -122,12 +122,14 @@ nonisolated enum APIDiagnostics {
         return fields
     }
 
-    /// The route as a fingerprint token: `Users.id.Items.id.PlaybackInfo`.
+    /// The route as a fingerprint token: `Users_id_Items_id_PlaybackInfo`.
+    /// Not dotted: a token ending in a short lowercase label, like `Items.id`
+    /// or `auth.me`, reads as an address and the schema drops it.
     static func routeToken(_ value: DiagnosticValue?) -> String {
         guard case .string(let route)? = value else { return "route" }
         let token = route
             .replacingOccurrences(of: "{id}", with: "id")
-            .replacingOccurrences(of: "/", with: ".")
+            .replacingOccurrences(of: "/", with: "_")
         return String(token.prefix(DiagnosticSchema.tokenMaximumLength))
     }
 }
