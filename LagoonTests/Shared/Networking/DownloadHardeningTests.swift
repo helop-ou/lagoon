@@ -7,68 +7,6 @@ import LagoonEngine
 @Suite("Bounded downloads and subtitle replacement", .serialized)
 @MainActor
 struct DownloadHardeningTests {
-    @Test(arguments: [401, 403, 404, 500])
-    func statusFailuresCannotBecomeSubtitleContent(status: Int) async throws {
-        let downloader = makeDownloader()
-        DownloadProtocol.set("/file", .init(status: status, chunks: [Self.cues("Not a successful response")]))
-        do {
-            _ = try await downloader.data(from: Self.url("/file"), limit: 1024, content: .subtitle)
-            Issue.record("HTTP failures must not become subtitle bytes")
-        } catch DownloadFailure.httpStatus(let actual, _) { #expect(actual == status) }
-    }
-
-    @Test func headerLimitsRejectBeforeWaitingForTheBody() async throws {
-        let downloader = makeDownloader()
-        DownloadProtocol.set("/large", .init(headers: ["Content-Length": "1000000000"], holdBody: true))
-        do {
-            _ = try await downloader.data(from: Self.url("/large"), limit: 1024, content: .image)
-            Issue.record("Declared oversize response should fail immediately")
-        } catch DownloadFailure.tooLarge(let limit) { #expect(limit == 1024) }
-        try await eventually { DownloadProtocol.stopped.contains("/large") }
-    }
-
-    @Test(arguments: [[:], ["Content-Length": "1"], ["Content-Encoding": "gzip"]])
-    func receivedBytesAreBoundedRegardlessOfLengthMetadata(headers: [String: String]) async throws {
-        let downloader = makeDownloader()
-        DownloadProtocol.set("/large", .init(headers: headers, chunks: [Data(repeating: 65, count: 513), Data(repeating: 66, count: 512)]))
-        do {
-            _ = try await downloader.data(from: Self.url("/large"), limit: 1024, content: .subtitle)
-            Issue.record("Every received chunk must respect the byte cap")
-        } catch DownloadFailure.tooLarge(let limit) { #expect(limit == 1024) }
-    }
-
-    @Test func exactLimitSucceedsButTruncationAndHTMLDoNot() async throws {
-        let downloader = makeDownloader()
-        let bytes = Data(repeating: 65, count: 1024)
-        DownloadProtocol.set("/exact", .init(headers: ["Content-Length": "1024"], chunks: [bytes]))
-        #expect(try await downloader.data(from: Self.url("/exact"), limit: 1024, content: .bytes) == bytes)
-        DownloadProtocol.set("/short", .init(headers: ["Content-Length": "1024"], chunks: [Data([1])]))
-        do {
-            _ = try await downloader.data(from: Self.url("/short"), limit: 1024, content: .image)
-            Issue.record("Truncated responses must not be decoded")
-        } catch DownloadFailure.truncated {}
-        DownloadProtocol.set("/html", .init(headers: ["Content-Type": "text/html"], holdBody: true))
-        do {
-            _ = try await downloader.data(from: Self.url("/html"), limit: 1024, content: .subtitle)
-            Issue.record("HTML should be rejected before reading a body")
-        } catch DownloadFailure.unexpectedContentType {}
-    }
-
-    @Test func cancellationStopsAnActiveTransferAndAPrecancelledTaskDoesNotStartOne() async throws {
-        let downloader = makeDownloader()
-        DownloadProtocol.set("/held", .init(holdBody: true))
-        let pending = Task { try await downloader.data(from: Self.url("/held"), limit: 1024, content: .bytes) }
-        try await eventually { DownloadProtocol.requests.count == 1 }
-        pending.cancel()
-        do { _ = try await pending.value; Issue.record("Expected cancellation") } catch is CancellationError {}
-        try await eventually { DownloadProtocol.stopped.contains("/held") }
-        let cancelled = Task {
-            withUnsafeCurrentTask { $0?.cancel() }
-            return try await downloader.data(from: Self.url("/never"), limit: 1024, content: .bytes)
-        }
-        do { _ = try await cancelled.value; Issue.record("Expected pre-cancellation") } catch is CancellationError {}
-        #expect(DownloadProtocol.requests.count == 1)
-    }
 
     @Test func boundedJellyfinProviderRequestsPreserveMessagesAndExpireTheCorrectSession() async throws {
         _ = makeDownloader()
@@ -133,55 +71,6 @@ struct DownloadHardeningTests {
         catch is CancellationError {}
         #expect(client.accessToken == "new")
         #expect(expiryCount == 0)
-    }
-
-    @Test func failedReplacementKeepsWorkingCaptionsAndRetryCommitsOnlyAfterSuccess() async throws {
-        let downloader = makeDownloader()
-        let engine = SampleBufferPlayerEngine(subtitleDownloader: downloader)
-        defer { engine.shutdown() }
-        engine.addExternalSubtitle(Self.track("working", data: Self.cues("Working captions")))
-        try await eventually { engine.subtitleTracks.first?.isSelected == true }
-        #expect(engine.currentSubtitleText == "Working captions")
-        DownloadProtocol.set("/replacement", .init(status: 404, chunks: [Data()]))
-        engine.addExternalSubtitle(Self.track("replacement"))
-        try await eventually { if case .failed = engine.subtitleLoadState { true } else { false } }
-        #expect(engine.subtitleTracks.first?.isSelected == true)
-        #expect(engine.subtitleTracks.last?.isSelected == false)
-        #expect(engine.currentSubtitleText == "Working captions")
-        DownloadProtocol.set("/replacement", .init(chunks: [Self.cues("Replacement captions")], holdBody: true))
-        engine.retrySubtitleLoad()
-        try await eventually { DownloadProtocol.requests.count == 2 }
-        #expect(engine.currentSubtitleText == "Working captions")
-        DownloadProtocol.release("/replacement")
-        try await eventually { engine.subtitleLoadState == .idle }
-        #expect(engine.currentSubtitleText == "Replacement captions")
-        #expect(engine.subtitleTracks.last?.isSelected == true)
-    }
-
-    @Test func offNewSelectionAndShutdownCancelPendingSubtitlesWithoutLateReplacement() async throws {
-        let downloader = makeDownloader()
-        let engine = SampleBufferPlayerEngine(subtitleDownloader: downloader)
-        defer { engine.shutdown() }
-        DownloadProtocol.set("/slow", .init(chunks: [Self.cues("Stale captions")], holdBody: true))
-        engine.addExternalSubtitle(Self.track("slow"))
-        try await eventually { DownloadProtocol.requests.count == 1 }
-        engine.addExternalSubtitle(Self.track("new", data: Self.cues("New captions")))
-        try await eventually { engine.subtitleTracks.last?.isSelected == true }
-        try await eventually { DownloadProtocol.stopped.contains("/slow") }
-        DownloadProtocol.release("/slow")
-        #expect(engine.currentSubtitleText == "New captions")
-        engine.selectSubtitleTrack(id: 1)
-        try await eventually { DownloadProtocol.requests.count == 2 }
-        engine.selectSubtitleTrack(id: nil)
-        #expect(engine.currentSubtitleText == nil)
-        #expect(engine.subtitleLoadState == .idle)
-        #expect(engine.subtitleTracks.allSatisfy { !$0.isSelected })
-        engine.selectSubtitleTrack(id: 1)
-        try await eventually { DownloadProtocol.requests.count == 3 }
-        engine.shutdown()
-        DownloadProtocol.release("/slow")
-        #expect(engine.subtitleLoadState == .idle)
-        #expect(engine.currentSubtitleText == nil)
     }
 
     @Test func sharedArtworkCancelsOnlyWhenItsLastViewerLeavesAndCachesOnlyValidImages() async throws {

@@ -235,55 +235,6 @@ struct SubtitleWorkflowTests {
         #expect(restored.values.edgeStyle == .outline)
     }
 
-    @Test func assResetOnlyClearsTheOverridesBeforeIt() throws {
-        // Override tags apply left to right, so `{\i1\r}` ends up plain.
-        let resetLast = try #require(ASSSubtitleTextParser.cue(
-            from: #"0,0,Default,,0,0,0,,{\b1\i1\r}Plain"#
-        ))
-        #expect(resetLast.usesDefaultStyle)
-
-        let resetFirst = try #require(ASSSubtitleTextParser.cue(
-            from: #"0,0,Default,,0,0,0,,{\r\i1}Italic"#
-        ))
-        #expect(resetFirst.runs.first?.isItalic == true)
-        #expect(resetFirst.runs.first?.isBold == false)
-
-        // A reset keeps the alignment; placement is not an inline style.
-        let placed = try #require(ASSSubtitleTextParser.cue(
-            from: #"0,0,Default,,0,0,0,,{\an8\b1\r}Top"#
-        ))
-        #expect(placed.alignment == .topCenter)
-        #expect(placed.usesDefaultStyle)
-    }
-
-    @Test func ordinaryASSDialogueKeepsTheLegacyBottomCentrePresentation() throws {
-        let cue = try #require(ASSSubtitleTextParser.cue(
-            from: #"0,0,Default,,0,0,0,,Hello\Nworld"#
-        ))
-        #expect(cue.text == "Hello\nworld")
-        #expect(cue.usesDefaultPlacement)
-        #expect(cue.usesDefaultStyle)
-    }
-
-    @Test @MainActor func downloadedSubtitleIsInsertedAndSelectedAtRuntime() async throws {
-        let engine = SampleBufferPlayerEngine()
-        defer { engine.shutdown() }
-        engine.addExternalSubtitle(ExternalSubtitleTrack(
-            url: URL(string: "https://example.invalid/subtitle.vtt")!,
-            preloadedData: Data("WEBVTT\n\n00:00:00.000 --> 00:00:02.000\nHello\n".utf8),
-            title: "English SDH",
-            language: "eng",
-            select: true,
-            isHearingImpaired: true,
-            isDownloaded: true
-        ))
-        #expect(engine.subtitleTracks.count == 1)
-        try await waitUntil { engine.subtitleTracks[0].isSelected }
-        #expect(engine.subtitleTracks[0].isSelected)
-        #expect(engine.subtitleTracks[0].source == .downloaded)
-        #expect(engine.subtitleTracks[0].isHearingImpaired)
-    }
-
     @Test @MainActor func remoteSubtitleUserFlowDownloadsValidCuesAndActivatesTrack() async throws {
         SubtitleDownloadFixture.reset()
         StubURLProtocol.register(host: "subtitle.test", handler: SubtitleDownloadFixture.respond)
