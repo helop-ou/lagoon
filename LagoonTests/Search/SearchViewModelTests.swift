@@ -121,7 +121,7 @@ private actor DebounceGate {
 }
 
 /// Answers each search with one movie named after the term.
-private enum SearchFixture {
+private nonisolated enum SearchFixture {
     private static let lock = NSLock()
     private nonisolated(unsafe) static var isFailing = false
 
