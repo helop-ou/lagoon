@@ -1549,19 +1549,40 @@ final class PlaybackController {
 
     // MARK: - Lower quality after stalls
 
-    /// Offers a lower quality once repeated stalls show the link cannot keep
-    /// up. Not for a download, which has no link, nor in a group, where a
-    /// restart is the group's to make.
     private func noteStalls(_ count: Int) {
         guard count > observedStallCount else { return }
-        let now = ProcessInfo.processInfo.systemUptime
-        var offers = false
-        for _ in observedStallCount..<count {
-            offers = qualityOfferPolicy.recordStall(at: now) || offers
-        }
+        let offers = Self.recordStalls(
+            count,
+            after: observedStallCount,
+            at: ProcessInfo.processInfo.systemUptime,
+            in: &qualityOfferPolicy,
+            isClosed: isClosed,
+            isLocalPlayback: isLocalPlayback,
+            isInGroup: groupTransport != nil
+        )
         observedStallCount = count
-        guard offers, !isClosed, !isLocalPlayback, groupTransport == nil else { return }
-        qualityOffer.present()
+        if offers { qualityOffer.present() }
+    }
+
+    /// Records the stalls since the last count. True when they should bring
+    /// up the offer of a lower quality, which never applies to a download,
+    /// which has no link, nor in a group, where a restart is the group's to
+    /// make.
+    nonisolated static func recordStalls(
+        _ count: Int,
+        after observed: Int,
+        at now: TimeInterval,
+        in policy: inout PlaybackQualityOfferPolicy,
+        isClosed: Bool,
+        isLocalPlayback: Bool,
+        isInGroup: Bool
+    ) -> Bool {
+        guard count > observed else { return false }
+        var offers = false
+        for _ in observed..<count {
+            offers = policy.recordStall(at: now) || offers
+        }
+        return offers && !isClosed && !isLocalPlayback && !isInGroup
     }
 
     /// Re-negotiates under a lower ceiling and resumes at the playhead, on
@@ -1599,11 +1620,29 @@ final class PlaybackController {
 
     /// The attempt's end, as the diagnostics history names it.
     private var stopOutcome: String {
-        if errorMessage != nil { return "failed" }
-        if didFinish { return "finished" }
-        if handoffStartedAt != nil { return "handoff" }
-        if isFallingBack { return "fallback" }
-        if isChangingQuality { return "quality" }
+        Self.stopOutcome(
+            failed: errorMessage != nil,
+            finished: didFinish,
+            handingOff: handoffStartedAt != nil,
+            fallingBack: isFallingBack,
+            changingQuality: isChangingQuality
+        )
+    }
+
+    /// The first that applies wins: a failure outranks everything, and an
+    /// attempt that played to its end is finished whatever follows it.
+    nonisolated static func stopOutcome(
+        failed: Bool,
+        finished: Bool,
+        handingOff: Bool,
+        fallingBack: Bool,
+        changingQuality: Bool
+    ) -> String {
+        if failed { return "failed" }
+        if finished { return "finished" }
+        if handingOff { return "handoff" }
+        if fallingBack { return "fallback" }
+        if changingQuality { return "quality" }
         return "stopped"
     }
 
