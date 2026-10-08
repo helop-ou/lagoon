@@ -115,7 +115,7 @@ final class PlaybackSuccessorPreparation {
         preparationTask = nil
     }
 
-    private static func negotiate(itemID: String, client: JellyfinClient) async throws -> PreparedPlayback? {
+    static func negotiate(itemID: String, client: JellyfinClient) async throws -> PreparedPlayback? {
         let info = try await client.playbackInfo(itemId: itemID)
         guard !Task.isCancelled,
               info.errorCode == nil,
