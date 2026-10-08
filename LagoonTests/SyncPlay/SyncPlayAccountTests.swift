@@ -33,6 +33,26 @@ struct SyncPlayAccountTests {
         #expect(request.value(forHTTPHeaderField: "Authorization")?.contains("renewed-token") == true)
     }
 
+    /// The group belongs to the account that joined it, so its Leave goes
+    /// to that account's server with that account's token.
+    @Test func switchingAccountsWhileJoinedLeavesWithTheOldCredentials() async throws {
+        let (client, store) = try makeStore()
+        joinFixture(store)
+        client.configure(serverURL: try #require(URL(string: "https://second.syncplay.test")))
+        client.activateSession(token: "second-token", userId: "second-user")
+
+        store.configure(client: client, accountID: "second")
+
+        #expect(!store.isJoined)
+        try await Polling.untilMainActor(timeout: .seconds(2), pollInterval: .milliseconds(10)) {
+            StubURLProtocol.requests(host: "first.syncplay.test").contains { $0.url?.path == "/SyncPlay/Leave" }
+        }
+        let leave = try #require(StubURLProtocol.requests(host: "first.syncplay.test").last { $0.url?.path == "/SyncPlay/Leave" })
+        #expect(leave.httpMethod == "POST")
+        #expect(leave.value(forHTTPHeaderField: "Authorization")?.hasSuffix(#", Token="first-token""#) == true)
+        #expect(!StubURLProtocol.requests(host: "second.syncplay.test").contains { $0.url?.path == "/SyncPlay/Leave" })
+    }
+
     @Test(arguments: [true, false])
     func refusedWaitingTogglePreservesLastAcknowledgedState(requested: Bool) async throws {
         let (_, store) = try makeStore()
