@@ -81,24 +81,60 @@ struct QRCodeTests {
     }
 
     /// The quiet zone is measured in modules, not points: a shorter address
-    /// makes wider modules, so no fixed margin fits every address.
+    /// makes wider modules, so no fixed margin fits every address. Measured
+    /// off the rendered view: the finder pattern's top edge is seven modules
+    /// wide, and everything between it and the view's edge is margin.
     @Test func theQuietZoneIsAlwaysAtLeastTheSpecifiedFourModules() throws {
         for text in [
             "https://lagoon.helop.dev",
             address,
             "https://lagoon.helop.dev/legal/privacy-policy/full-text/",
         ] {
-            let code = try #require(QRCode.image(for: text))
-            let module = Metrics.qrCodeSize / CGFloat(code.width)
+            let renderer = ImageRenderer(content: QRCodeView(text: text))
+            renderer.scale = 1
+            let image = try #require(renderer.cgImage)
+            let finder = try #require(try firstDarkRun(in: image), "\(text) drew no modules")
+            let module = CGFloat(finder.length) / 7
 
-            let zone = QRCode.quietZone(side: Metrics.qrCodeSize, modulesAcross: code.width)
-
-            #expect(zone >= module * 4, "\(text) is drawn without a full quiet zone")
+            #expect(CGFloat(finder.x) >= module * 4, "\(text) is drawn without a full quiet zone at the side")
+            #expect(CGFloat(finder.y) >= module * 4, "\(text) is drawn without a full quiet zone on top")
         }
     }
 
+    /// The top-left finder's top edge: the first dark run in the first row
+    /// that has one. Transparent corners read as light.
+    private func firstDarkRun(in image: CGImage) throws -> (x: Int, y: Int, length: Int)? {
+        let width = image.width, height = image.height
+        var pixels = [UInt8](repeating: 0, count: width * height * 4)
+        let context = try #require(CGContext(
+            data: &pixels,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ))
+        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+
+        // Rows run from the top in memory for a bitmap context.
+        func isDark(_ x: Int, _ y: Int) -> Bool {
+            let offset = (y * width + x) * 4
+            let sum = Int(pixels[offset]) + Int(pixels[offset + 1]) + Int(pixels[offset + 2])
+            return sum < 3 * 128
+        }
+        for y in 0..<height {
+            guard let x = (0..<width).first(where: { isDark($0, y) }) else { continue }
+            let length = (x..<width).prefix { isDark($0, y) }.count
+            return (x, y, length)
+        }
+        return nil
+    }
+
     @Test func aCodeThatCouldNotBeGeneratedStillGetsAMargin() {
-        #expect(QRCode.quietZone(side: Metrics.qrCodeSize, modulesAcross: 0) > 0)
+        #expect(QRCode.quietZone(side: Metrics.qrCodeSize, modulesAcross: 0) == Metrics.qrCodeMinimumQuietZone)
     }
 
     /// Renders the real view, not a filled-square stand-in for the mark, and
