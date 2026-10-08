@@ -61,15 +61,16 @@ struct SyncPlayRequestQueueTests {
         #expect(attempts == 1)
     }
 
+    /// A request whose own work was cancelled (a superseded HTTP call) is
+    /// not a failure, even while the queue itself is still attached.
     @Test func failureIsReportedButCancellationIsQuiet() async {
         let queue = SyncPlayRequestQueue()
         var failures = 0
+        let cancelled = queue.enqueue({ throw CancellationError() }, onFailure: { failures += 1 })
+        await cancelled.value
+        #expect(failures == 0)
         let failed = queue.enqueue({ throw URLError(.cannotConnectToHost) }, onFailure: { failures += 1 })
         await failed.value
-        #expect(failures == 1)
-        let cancelled = queue.enqueue({ throw CancellationError() }, onFailure: { failures += 1 })
-        queue.cancel()
-        await cancelled.value
         #expect(failures == 1)
     }
 
