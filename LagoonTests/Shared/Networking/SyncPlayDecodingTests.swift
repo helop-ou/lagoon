@@ -126,8 +126,16 @@ struct SyncPlayDecodingTests {
 
     // MARK: - Groups and access
 
-    @Test func anEmptyGroupListIsAnEmptyList() throws {
-        #expect(try decode([SyncPlayGroup].self, "[]").isEmpty)
+    /// A bad shape in a group's optional fields degrades that group, never
+    /// the `SyncPlay/List` answer around it.
+    @Test func aMalformedGroupKeepsItsPlaceInTheList() throws {
+        let groups = try decode([SyncPlayGroup].self, """
+        [{"GroupId":"ea96","GroupName":"Film night","State":"Playing","Participants":["Alex"]},
+         {"GroupId":"b2c3","GroupName":"Late show","State":3,"Participants":"Sam"}]
+        """)
+        #expect(groups.map(\.id) == ["ea96", "b2c3"])
+        #expect(groups.map(\.state) == [.playing, .unknown])
+        #expect(groups.map(\.participants) == [["Alex"], []])
     }
 
     @Test func anUnknownGroupStateDoesNotFailTheGroup() throws {
