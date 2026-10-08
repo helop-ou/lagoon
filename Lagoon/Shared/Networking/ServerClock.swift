@@ -155,13 +155,23 @@ final class ServerClock {
         let hostTime = CMClockGetTime(CMClockGetHostTimeClock())
         guard let requestReceived = JellyfinTimestamp.seconds(response.requestReceptionTime),
               let responseSent = JellyfinTimestamp.seconds(response.responseTransmissionTime) else { return }
-        estimate.record(ServerClockSample(
-            requestSent: requestSent,
-            requestReceived: requestReceived,
-            responseSent: responseSent,
-            responseReceived: responseReceived.timeIntervalSince1970
-        ))
-        anchor = (date: responseReceived, hostTime: hostTime)
+        record(
+            ServerClockSample(
+                requestSent: requestSent,
+                requestReceived: requestReceived,
+                responseSent: responseSent,
+                responseReceived: responseReceived.timeIntervalSince1970
+            ),
+            receivedAt: responseReceived,
+            hostTime: hostTime
+        )
+    }
+
+    /// Takes one sample, anchored at the `Date` and host time read together
+    /// when its response arrived.
+    func record(_ sample: ServerClockSample, receivedAt date: Date, hostTime: CMTime) {
+        estimate.record(sample)
+        anchor = (date: date, hostTime: hostTime)
         if let pingMilliseconds { onSample?(pingMilliseconds) }
     }
 }
