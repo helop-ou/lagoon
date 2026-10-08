@@ -78,7 +78,8 @@ struct AccountPrivacyTests {
         defer { fixture.cleanUp() }
         let store = fixture.store()
         store.recentSearches.record("A private search")
-        PrivacyProtocol.setMode(.hold)
+        // Held by path: activation's own profile read must not take its place.
+        PrivacyProtocol.hold(pathSuffix: "Sessions/Logout")
         let pending = Task { await store.signOut() }
         try await PrivacyProtocol.waitUntilHeld()
         #expect(store.activeAccount == nil)
@@ -269,14 +270,16 @@ nonisolated final class MemoryAccountCredentials: AccountCredentialStorage, @unc
 }
 
 private nonisolated final class PrivacyProtocol: URLProtocol, @unchecked Sendable {
-    enum Mode { case offline, hold, authenticated }
+    enum Mode { case offline, authenticated }
     private static let lock = NSLock()
     private nonisolated(unsafe) static var mode: Mode = .offline
     private nonisolated(unsafe) static var recorded: [URLRequest] = []
     private nonisolated(unsafe) static var held: [PrivacyProtocol] = []
+    private nonisolated(unsafe) static var heldPathSuffix: String?
     static var requests: [URLRequest] { lock.withLock { recorded } }
     static func setMode(_ value: Mode) { lock.withLock { mode = value } }
-    static func reset() { lock.withLock { recorded = []; mode = .offline } }
+    static func hold(pathSuffix: String) { lock.withLock { heldPathSuffix = pathSuffix } }
+    static func reset() { lock.withLock { recorded = []; mode = .offline; heldPathSuffix = nil } }
     static func waitUntilHeld() async throws {
         for _ in 0..<200 {
             if lock.withLock({ !held.isEmpty }) { return }
@@ -293,9 +296,13 @@ private nonisolated final class PrivacyProtocol: URLProtocol, @unchecked Sendabl
     override func startLoading() {
         let shouldHold = Self.lock.withLock {
             Self.recorded.append(request)
-            if Self.mode == .hold { Self.held.append(self); return true }
+            if let suffix = Self.heldPathSuffix, request.url?.path.hasSuffix(suffix) == true {
+                Self.held.append(self)
+                return true
+            }
             return false
         }
+        if shouldHold { return }
         if Self.lock.withLock({ Self.mode == .authenticated }), let url = request.url {
             let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!
             client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
@@ -303,7 +310,7 @@ private nonisolated final class PrivacyProtocol: URLProtocol, @unchecked Sendabl
             client?.urlProtocolDidFinishLoading(self)
             return
         }
-        if !shouldHold { client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet)) }
+        client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
     }
     override func stopLoading() {}
 }
