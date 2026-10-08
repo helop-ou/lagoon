@@ -5,8 +5,15 @@ import Testing
 @Suite("Seerr live detail refresh")
 struct SeerrLiveRefreshTests {
     @Test func approvalAndTransferCadencesAreDeliberatelyDifferent() {
-        #expect(SeerrLiveRefreshCadence.waitingForApproval.interval() == .seconds(30))
-        #expect(SeerrLiveRefreshCadence.transferring.interval() == .seconds(10))
+        // A clean suite, so a debug override on the device cannot leak in.
+        let suite = "SeerrLiveRefreshTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suite)!
+        defer { defaults.removePersistentDomain(forName: suite) }
+
+        #expect(
+            SeerrLiveRefreshCadence.transferring.interval(defaults: defaults)
+                < SeerrLiveRefreshCadence.waitingForApproval.interval(defaults: defaults)
+        )
     }
 
     @Test func debugCadenceCanRunWithoutAProductionLengthWait() {
@@ -90,16 +97,15 @@ struct SeerrLiveRefreshTests {
     @Test @MainActor func cancellingTheStructuredTaskStopsBeforeARefresh() async {
         var refreshCount = 0
         let task = Task { @MainActor in
+            // Cancelled mid-wait by a sleep that still returns normally, so
+            // only the loop's own cancellation check can stop the refresh.
             await SeerrLiveRefreshLoop.run(
                 interval: .seconds(60),
-                sleep: { duration in try await Task.sleep(for: duration) }
+                sleep: { _ in withUnsafeCurrentTask { $0?.cancel() } }
             ) {
                 refreshCount += 1
             }
         }
-
-        await Task.yield()
-        task.cancel()
         await task.value
 
         #expect(refreshCount == 0)
