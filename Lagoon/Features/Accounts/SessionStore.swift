@@ -41,6 +41,8 @@ final class SessionStore {
     private var draftCancelled = false
     private var pendingAuthentication: AuthenticationResult?
     private var connectionGeneration = 0
+    /// The latest profile read, kept so tests can wait for it to settle.
+    @ObservationIgnored private(set) var profileRefresh: Task<Void, Never>?
 
     #if DEBUG
     private static var didResetStateForRegression = false
@@ -199,25 +201,31 @@ final class SessionStore {
     /// server keeps the stored record; a switch or sign-out mid-read discards it.
     private func refreshProfile(of account: StoredAccount) {
         let generation = connectionGeneration
-        Task { [weak self] in
+        profileRefresh = Task { [weak self] in
             guard let self, let user = try? await client.currentUser() else { return }
             guard connectionGeneration == generation,
                   phase == .signedIn,
                   activeAccount?.id == account.id,
-                  user.id == account.userId else { return }
-            let name = user.name ?? account.userName
-            guard user.primaryImageTag != account.primaryImageTag || name != account.userName else { return }
-            let updated = StoredAccount(
-                serverURL: account.serverURL,
-                serverName: account.serverName,
-                userId: account.userId,
-                userName: name,
-                primaryImageTag: user.primaryImageTag
-            )
+                  let updated = Self.refreshedProfile(of: account, from: user) else { return }
             save(accounts: accounts.map { $0.id == updated.id ? updated : $0 })
             activeAccount = updated
             userName = updated.userName
         }
+    }
+
+    /// The record a fetched profile replaces `account` with: nil when the
+    /// reply is for another user or changes neither name nor picture.
+    nonisolated static func refreshedProfile(of account: StoredAccount, from user: UserDto) -> StoredAccount? {
+        guard user.id == account.userId else { return nil }
+        let name = user.name ?? account.userName
+        guard user.primaryImageTag != account.primaryImageTag || name != account.userName else { return nil }
+        return StoredAccount(
+            serverURL: account.serverURL,
+            serverName: account.serverName,
+            userId: account.userId,
+            userName: name,
+            primaryImageTag: user.primaryImageTag
+        )
     }
 
     /// What a profile is in the middle of, for the picker. nil when its
