@@ -76,7 +76,8 @@ final class JellyfinClient {
     var cachedContentDownloadingAllowed: Bool? { contentDownloadingAllowed }
     var cachedVideoTranscodingAllowed: Bool? { videoTranscodingAllowed }
 
-    private let session: URLSession
+    /// Internal so tests can check its cache and redirect configuration.
+    let session: URLSession
     private let downloads: BoundedDownload
     /// The proxy headers this client sends; see `ServerHeaderStore`.
     let headerStore: ServerHeaderStore
@@ -583,7 +584,7 @@ final class JellyfinClient {
 
     /// The profile picker's status dot: a quick, unauthenticated answer or
     /// none. Never waits for connectivity, unlike `fetchPublicInfo`.
-    private nonisolated static let reachabilitySession: URLSession = {
+    nonisolated static let reachabilitySession: URLSession = {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.urlCache = nil
         configuration.httpCookieStorage = nil

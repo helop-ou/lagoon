@@ -100,7 +100,8 @@ final class ServerSocket {
     private let continuation: AsyncStream<ServerSocketMessage>.Continuation
     private let url: URL?
     private let headerStore: ServerHeaderStore
-    private let session: URLSession
+    /// Internal so tests can check its cache and redirect configuration.
+    let session: URLSession
     private var connectionTask: Task<Void, Never>?
     private var socketTask: URLSessionWebSocketTask?
     private var keepAliveTask: Task<Void, Never>?
