@@ -64,7 +64,9 @@ struct SessionExpiryTests {
         let fixture = try Fixture()
         defer { fixture.cleanUp() }
         let store = try await fixture.settledStore()
-        SessionExpiryProtocol.setReply(.http(401, ""))
+        // Only the sign-in is refused; a background read with the live token
+        // must not be what decides the outcome.
+        SessionExpiryProtocol.setReply(.http(401, ""), forPathSuffix: "AuthenticateByName")
         do {
             try await store.signIn(username: "First", password: "wrong")
             Issue.record("Incorrect credentials must fail")
