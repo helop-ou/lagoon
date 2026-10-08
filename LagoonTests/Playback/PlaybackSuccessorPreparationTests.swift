@@ -154,6 +154,59 @@ struct PlaybackSuccessorPreparationTests {
         #expect(staging.discarded == [expected.mediaID])
     }
 
+    // MARK: - What the server answers
+
+    /// Negotiates against a stub server answering PlaybackInfo with `sources`.
+    private func negotiate(
+        host: String,
+        sources: String,
+        errorCode: String? = nil
+    ) async throws -> PlaybackSuccessorPreparation.PreparedPlayback? {
+        let error = errorCode.map { #","ErrorCode":"\#($0)""# } ?? ""
+        let body = Data(#"{"MediaSources":[\#(sources)],"PlaySessionId":"session"\#(error)}"#.utf8)
+        StubURLProtocol.register(host: host) { request in
+            if request.url?.path.hasSuffix("/System/Endpoint") == true {
+                return (200, [:], Data(#"{"IsLocal":true,"IsInNetwork":true}"#.utf8))
+            }
+            return (200, [:], body)
+        }
+        defer { StubURLProtocol.unregister(host: host) }
+        let client = StubURLProtocol.makeJellyfinClient(host: host, deviceId: "successor-tests")
+        return try await PlaybackSuccessorPreparation.negotiate(itemID: "episode-2", client: client)
+    }
+
+    private static let plainFile = #"{"Id":"file","Container":"mkv","SupportsDirectPlay":true}"#
+
+    @Test func aPlainFileIsPreparedForDirectPlay() async throws {
+        let prepared = try #require(try await negotiate(host: "successor-file.test", sources: Self.plainFile))
+        #expect(prepared.mediaID == "episode-2")
+        #expect(prepared.source.id == "file")
+        #expect(prepared.method == .directPlay)
+        #expect(prepared.streamURL.path == "/Videos/episode-2/stream")
+    }
+
+    /// The server could not offer a stream, so there is nothing to warm.
+    @Test func anErrorCodePreparesNothing() async throws {
+        let prepared = try await negotiate(
+            host: "successor-error.test",
+            sources: Self.plainFile,
+            errorCode: "NoCompatibleStream"
+        )
+        #expect(prepared == nil)
+    }
+
+    /// A disc picks its own rung when it starts, so the warmed stream would
+    /// be the wrong one.
+    @Test(arguments: [
+        #"{"Id":"image","Container":"ts","VideoType":"Iso","IsoType":"BluRay","SupportsDirectPlay":true}"#,
+        #"{"Id":"folder","Container":"ts","VideoType":"BluRay","SupportsDirectPlay":true}"#,
+    ])
+    func aDiscPreparesNothing(source: String) async throws {
+        let host = "successor-disc-\(source.contains("Iso") ? "image" : "folder").test"
+        let prepared = try await negotiate(host: host, sources: source)
+        #expect(prepared == nil)
+    }
+
     private func prepared(sourceID: String) throws -> PlaybackSuccessorPreparation.PreparedPlayback {
         let data = Data("""
         {"MediaSources":[{"Id":"\(sourceID)","Size":1024,"Container":"mkv"}],"PlaySessionId":"session"}
