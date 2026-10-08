@@ -150,8 +150,8 @@ struct SeerrRequestsView: View {
     private func load(user: SeerrUser, reset: Bool = false) async {
         await viewModel.load(reset: reset) { pageNumber in
             let result = try await seerr.client.requests(
-                take: 20,
-                skip: (pageNumber - 1) * 20,
+                take: SeerrRequestsPaging.pageSize,
+                skip: SeerrRequestsPaging.skip(forPage: pageNumber),
                 filter: filter,
                 requestedBy: effectiveOnlyMine(for: user) ? user.id : nil
             )
@@ -160,7 +160,23 @@ struct SeerrRequestsView: View {
     }
 
     private func effectiveOnlyMine(for user: SeerrUser) -> Bool {
-        !user.canViewAllRequests || onlyMine
+        SeerrRequestsPaging.onlyMine(chosen: onlyMine, user: user)
+    }
+}
+
+/// Which page of whose requests the list asks Seerr for.
+nonisolated enum SeerrRequestsPaging {
+    static let pageSize = 20
+
+    /// Seerr pages are 1-based; `skip` counts requests.
+    static func skip(forPage page: Int) -> Int {
+        (page - 1) * pageSize
+    }
+
+    /// A user who may not see everyone's requests is always scoped to their
+    /// own, whatever the toggle last said.
+    static func onlyMine(chosen: Bool, user: SeerrUser) -> Bool {
+        !user.canViewAllRequests || chosen
     }
 }
 
