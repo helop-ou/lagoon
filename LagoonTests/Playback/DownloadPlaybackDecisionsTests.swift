@@ -57,12 +57,13 @@ struct DownloadResumeStartSecondsTests {
         #expect(seconds == 0)
     }
 
-    @Test func zeroServerPositionNeverResumes() {
+    @Test(arguments: [Int64(0), -Ticks.ticks(30)])
+    func aServerPositionAtOrBeforeTheStartNeverResumes(ticks: Int64) {
         let seconds = PlaybackController.resumeStartSeconds(
             fallbackOverrideSeconds: nil,
             startFromBeginning: false,
             localResumeTicks: nil,
-            serverPositionTicks: 0
+            serverPositionTicks: ticks
         )
         #expect(seconds == 0)
     }
