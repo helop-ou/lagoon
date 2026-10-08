@@ -98,6 +98,28 @@ struct SeerrMediaDetailsTests {
         details.requestableSeasons(includingSpecials: includingSpecials).map(\.seasonNumber)
     }
 
+    @Test func moreSeasonsAreOfferedOnlyForAShowWithSomeLeftToAViewerWhoMayAsk() throws {
+        let partial = try show(mediaInfo: #"{"status": 4, "seasons": [{"id": 1, "seasonNumber": 1, "status": 5}]}"#)
+        let complete = try show(mediaInfo: """
+        {"status": 5, "seasons": [
+          {"id": 1, "seasonNumber": 1, "status": 5}, {"id": 2, "seasonNumber": 2, "status": 5},
+          {"id": 3, "seasonNumber": 3, "status": 5}, {"id": 4, "seasonNumber": 4, "status": 5}
+        ]}
+        """)
+        func viewer(_ permission: SeerrPermission) -> SeerrUser {
+            SeerrUser(id: 1, email: nil, username: "u", displayName: nil, jellyfinUsername: nil, permissions: permission.rawValue)
+        }
+        func canAsk(_ details: SeerrMediaDetails, _ user: SeerrUser?, as type: SeerrMediaType = .tv) -> Bool {
+            SeerrMediaDetailModel.canRequestMoreSeasons(details, mediaType: type, user: user, includingSpecials: false)
+        }
+
+        #expect(canAsk(partial, viewer(.requestTV)))
+        #expect(!canAsk(partial, viewer(.request), as: .movie))
+        #expect(!canAsk(partial, viewer(.requestMovie)))
+        #expect(!canAsk(partial, nil))
+        #expect(!canAsk(complete, viewer(.requestTV)))
+    }
+
     @Test func anAvailableShowStillOffersASeasonNobodyRequested() throws {
         let details = try show(mediaInfo: """
         {"status": 5, "seasons": [
