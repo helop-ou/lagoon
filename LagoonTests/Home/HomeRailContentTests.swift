@@ -300,6 +300,20 @@ struct HomeRailContentTests {
         #expect(model.collections.isEmpty)
     }
 
+    @Test func pluginRailsAreFiledUnderTheSectionHomeDrawsThemFor() async throws {
+        let client = makeClient()
+        let model = HomeViewModel()
+        HomeRailURLProtocol.set(
+            homeSections: #"[{"Section":"MyList","DisplayText":"My List"}]"#,
+            homeSectionItems: #"[{"Id":"listed","Type":"Movie"}]"#
+        )
+
+        await model.load(client: client, accountID: "account")
+
+        #expect(model.pluginRails.map(\.title) == ["My List"])
+        #expect(model.pluginRails.map { HomeRowID.section(forPluginRailID: $0.id) } == ["MyList"])
+    }
+
     /// Four movies the Top 10 stub's TMDB ids match, eligible for the hero,
     /// with a genre for the genre shelf.
     private static let matchableMovies = #"""
