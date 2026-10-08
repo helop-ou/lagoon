@@ -144,6 +144,34 @@ struct SeriesDetailViewModelTests {
         #expect(!model.isLoadingEpisodes)
     }
 
+    @Test func aCompleteReReadHandsTheToggleBackToTheServer() async throws {
+        let client = makeClient()
+        SeriesDetailURLProtocol.set(nextUp: Self.upNextInS1, episodes: ["s1": Self.s1Episodes])
+        let viewModel = SeriesDetailViewModel()
+        await viewModel.load(client: client, seriesId: "show")
+
+        #expect(await viewModel.reloadUserData(client: client, seriesId: "show"))
+    }
+
+    /// A toggle keeps its optimistic value until a re-read succeeds, so any
+    /// part that failed must report the reload as incomplete.
+    @Test(arguments: ["/Users/user/Items/show", "/Shows/NextUp", "/Shows/show/Episodes"])
+    func aFailedReReadKeepsTheTogglesChoice(failingPath: String) async throws {
+        let client = makeClient()
+        SeriesDetailURLProtocol.set(nextUp: Self.upNextInS1, episodes: ["s1": Self.s1Episodes])
+        let viewModel = SeriesDetailViewModel()
+        await viewModel.load(client: client, seriesId: "show")
+        var watched = OptimisticToggleState()
+        _ = watched.begin(server: false)
+
+        SeriesDetailURLProtocol.fail(failingPath)
+        let refreshed = await viewModel.reloadUserData(client: client, seriesId: "show")
+        watched.succeed(refreshed: refreshed)
+
+        #expect(!refreshed)
+        #expect(watched.value(server: false))
+    }
+
     private func makeClient() -> JellyfinClient {
         SeriesDetailURLProtocol.reset()
         let configuration = URLSessionConfiguration.ephemeral
@@ -174,6 +202,7 @@ private nonisolated final class SeriesDetailURLProtocol: URLProtocol, @unchecked
         var episodesBySeasonId: [String: String] = [:]
         var holdNextEpisodes = false
         var pending: (SeriesDetailURLProtocol, String)?
+        var failingPaths: Set<String> = []
     }
 
     private static let lock = NSLock()
@@ -183,6 +212,8 @@ private nonisolated final class SeriesDetailURLProtocol: URLProtocol, @unchecked
     static var hasPending: Bool { lock.withLock { state.pending != nil } }
 
     static func holdNextEpisodes() { lock.withLock { state.holdNextEpisodes = true } }
+    /// Answers every later request for `path` with a server error.
+    static func fail(_ path: String) { lock.withLock { _ = state.failingPaths.insert(path) } }
 
     static func release() {
         let pending = lock.withLock {
@@ -209,7 +240,16 @@ private nonisolated final class SeriesDetailURLProtocol: URLProtocol, @unchecked
 
     override func startLoading() {
         guard let url = request.url else { return }
-        Self.lock.withLock { Self.state.urls.append(url) }
+        let fails = Self.lock.withLock {
+            Self.state.urls.append(url)
+            return Self.state.failingPaths.contains(url.path)
+        }
+        if fails {
+            let response = HTTPURLResponse(url: url, statusCode: 500, httpVersion: "HTTP/1.1", headerFields: nil)!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocolDidFinishLoading(self)
+            return
+        }
         respond()
     }
 
