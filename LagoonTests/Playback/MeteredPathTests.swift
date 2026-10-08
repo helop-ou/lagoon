@@ -38,30 +38,32 @@ struct MeteredPathTests {
     }
 
     /// The server checks the static ceiling before offering the original
-    /// file, so it must come down too.
+    /// file, so it must come down too, and the picture with it.
     @Test func theStaticCeilingComesDownToo() {
         let capped = DeviceProfile.cappedForMeteredPath(
             DeviceProfile.everything,
             cost: cellular,
             allowFullQuality: false
         )
-        #if os(iOS)
         #expect(capped.maxStreamingBitrate == MeteredPathPolicy.maxBitrate)
-        #expect(capped.maxStaticBitrate <= MeteredPathPolicy.maxBitrate)
-        #else
-        // tvOS is a wired appliance; no cap.
-        #expect(capped.maxStreamingBitrate == DeviceProfile.everything.maxStreamingBitrate)
-        #endif
+        #expect(capped.maxStaticBitrate == MeteredPathPolicy.maxBitrate)
+        let hevc = capped.codecProfiles.first { $0.codec == "hevc" }?.conditions ?? []
+        #expect(hevc.first { $0.property == "Width" }?.value == String(MeteredPathPolicy.maxWidth))
+        #expect(hevc.first { $0.property == "Height" }?.value == String(MeteredPathPolicy.maxHeight))
     }
 
     @Test func anOrdinaryPathIsUntouched() {
-        let same = DeviceProfile.cappedForMeteredPath(
-            DeviceProfile.everything,
-            cost: .unrestricted,
-            allowFullQuality: false
-        )
-        #expect(same.maxStreamingBitrate == DeviceProfile.everything.maxStreamingBitrate)
-        #expect(same.maxStaticBitrate == DeviceProfile.everything.maxStaticBitrate)
+        for (cost, allowFullQuality) in [(NetworkPathCost.unrestricted, false), (cellular, true)] {
+            let same = DeviceProfile.cappedForMeteredPath(
+                DeviceProfile.everything,
+                cost: cost,
+                allowFullQuality: allowFullQuality
+            )
+            #expect(same.maxStreamingBitrate == DeviceProfile.everything.maxStreamingBitrate)
+            #expect(same.maxStaticBitrate == DeviceProfile.everything.maxStaticBitrate)
+            #expect(same.codecProfiles.map(\.conditions.count)
+                == DeviceProfile.everything.codecProfiles.map(\.conditions.count))
+        }
     }
 
     /// The tighter bound wins, or a 1080p fallback bound would undo a
