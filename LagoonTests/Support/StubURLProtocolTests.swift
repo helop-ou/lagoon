@@ -24,16 +24,17 @@ struct StubURLProtocolTests {
         // The scan must see the suites it guards, or it passes vacuously.
         #expect(owners["library.test"] == ["LibraryBrowseTests.swift"])
         #expect(owners["quality-local.test"] == ["PlaybackQualityLimitTests.swift"])
+        #expect(owners["client-requests.test"] == ["JellyfinClientRequestTests.swift"])
         for (host, files) in owners.sorted(by: { $0.key < $1.key }) {
             #expect(files.count == 1, "\(host) is registered by \(files.sorted().joined(separator: ", "))")
         }
     }
 
     /// Hosts passed to `register(host:)` as literals, plus the `let host`
-    /// literals of a file that registers through a variable.
+    /// literals of a file that registers through a variable or constant.
     static func stubHosts(in source: String) -> Set<String> {
         var hosts = Set(source.matches(of: /register\(host:\s*"([^"]+)"/).map { String($0.output.1) })
-        if source.contains("register(host: host") {
+        if source.contains("register(host: host") || source.contains("register(host: Self.host") {
             hosts.formUnion(source.matches(of: /let host = "([^"]+)"/).map { String($0.output.1) })
         }
         return hosts.filter { $0.wholeMatch(of: /[A-Za-z0-9.-]+/) != nil }
