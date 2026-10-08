@@ -82,9 +82,16 @@ struct HeroSection<Route: Hashable>: View {
     }
 
     private var canCycle: Bool {
-        isActive && isVisible && scenePhase == .active && items.count > 1
-            && !reduceMotion && !voiceOverEnabled && !isScrolling
-            && !(focus ?? $fallbackFocus).wrappedValue
+        HeroAutoAdvance(
+            isActive: isActive,
+            isVisible: isVisible,
+            isSceneActive: scenePhase == .active,
+            itemCount: items.count,
+            reduceMotion: reduceMotion,
+            voiceOverEnabled: voiceOverEnabled,
+            isScrolling: isScrolling,
+            isFocused: (focus ?? $fallbackFocus).wrappedValue
+        ).isAllowed
     }
 
     private struct CycleID: Equatable {
