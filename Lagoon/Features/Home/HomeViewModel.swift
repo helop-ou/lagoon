@@ -734,7 +734,7 @@ final class HomeViewModel {
                     return (
                         index: index,
                         rail: LibraryRail(
-                            id: "plugin-" + section.section,
+                            id: HomeRowID.pluginRailID(forSection: section.section),
                             title: section.displayText ?? section.section,
                             items: items
                         )
