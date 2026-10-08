@@ -133,4 +133,25 @@ struct JellyfinClientRequestTests {
         #expect(uncached.configuration.urlCache == nil)
         #expect(uncached.configuration.httpCookieStorage == nil)
     }
+
+    // MARK: - Incidents
+
+    /// A probe's failure is an answer, so it never becomes an incident; an
+    /// ordinary request failing the same way does.
+    @Test func aFailedProbeIsNeverAnIncident() async throws {
+        let sink = CapturingSink()
+        let client = makeClient(diagnostics: DiagnosticsHub(sink: sink, reportingEnabled: { true }), status: 500)
+        #expect(await client.isSyncPlayAvailable() == false)
+        #expect(sink.codes.isEmpty)
+        _ = try? await client.syncPlayGroups()
+        #expect(sink.codes == [.apiRequestFailed])
+    }
+
+    nonisolated final class CapturingSink: DiagnosticSink, @unchecked Sendable {
+        private let lock = NSLock()
+        private var incidents: [DiagnosticIncident] = []
+        var codes: [DiagnosticIncidentCode] { lock.withLock { incidents.map(\.code) } }
+        func submit(_ incident: DiagnosticIncident) { lock.withLock { incidents.append(incident) } }
+        func flush() {}
+    }
 }
