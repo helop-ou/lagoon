@@ -55,7 +55,9 @@ struct RootView: View {
         .onChange(of: scenePhase, initial: true) { _, phase in
             // October may have begun or ended while the app slept.
             if phase == .active { ThemeStore.shared.refreshSeason() }
-            guard phase == .active, session.phase == .signedIn else { return }
+            guard ServerSyncState.foregroundAdvancesGeneration(
+                sceneIsActive: phase == .active, isSignedIn: session.phase == .signedIn
+            ) else { return }
             serverSync.requestRefresh()
             #if os(tvOS)
             // Safety net: otherwise only a successful Home load publishes,

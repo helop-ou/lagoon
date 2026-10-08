@@ -12,14 +12,20 @@ private struct ServerRefreshModifier: ViewModifier {
 
     @Environment(\.scenePhase) private var scenePhase
     @Environment(ServerSyncState.self) private var serverSync
-    @State private var isVisible = false
+    @State private var gate = ServerRefreshGate()
     @State private var isRefreshing = false
-    // Baselined on first appearance, so a bump that arrives while hidden
-    // is replayed when the tab comes back.
-    @State private var handledGeneration: Int?
+
+    private var conditions: ServerRefreshGate.Conditions {
+        ServerRefreshGate.Conditions(
+            isActive: isActive,
+            isEnabled: isEnabled,
+            isPaused: isPaused,
+            sceneIsActive: scenePhase == .active
+        )
+    }
 
     private var canRefresh: Bool {
-        isActive && isEnabled && !isPaused && isVisible && scenePhase == .active
+        gate.canRefresh(conditions)
     }
 
     func body(content: Content) -> some View {
@@ -36,18 +42,16 @@ private struct ServerRefreshModifier: ViewModifier {
     private func managed(_ content: Content) -> some View {
         content
             .onAppear {
-                isVisible = true
-                if handledGeneration == nil { handledGeneration = serverSync.generation }
+                gate.appear(generation: serverSync.generation)
             }
             .onDisappear {
-                isVisible = false
+                gate.disappear()
                 serverSync.deactivate(target)
             }
             .onChange(of: canRefresh, initial: true) { _, available in
                 if available {
                     serverSync.activate(target)
-                    if let handled = handledGeneration, serverSync.generation > handled {
-                        handledGeneration = serverSync.generation
+                    if gate.replaysMissedGeneration(serverSync.generation, conditions) {
                         Task { await refresh(trigger: .foreground) }
                     }
                 } else {
@@ -55,12 +59,11 @@ private struct ServerRefreshModifier: ViewModifier {
                 }
             }
             .onChange(of: serverSync.generation) { _, generation in
-                guard canRefresh else { return }
-                handledGeneration = generation
+                guard gate.takesGeneration(generation, conditions) else { return }
                 Task { await refresh(trigger: .foreground) }
             }
             .onChange(of: serverSync.manualRefreshGeneration) { _, _ in
-                guard canRefresh, serverSync.manualRefreshTarget == target else { return }
+                guard gate.takesManualRefresh(for: serverSync.manualRefreshTarget, as: target, conditions) else { return }
                 Task { await refresh(trigger: .manual) }
             }
             .task(id: canRefresh) {

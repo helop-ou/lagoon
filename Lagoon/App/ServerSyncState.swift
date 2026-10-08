@@ -64,6 +64,12 @@ final class ServerSyncState {
         generation &+= 1
     }
 
+    /// Returning to the foreground invalidates content only for a signed-in
+    /// session in an active scene; the sign-in screens have nothing to refresh.
+    nonisolated static func foregroundAdvancesGeneration(sceneIsActive: Bool, isSignedIn: Bool) -> Bool {
+        sceneIsActive && isSignedIn
+    }
+
     func activate(_ target: ServerSyncTarget) {
         activeTarget = target
     }
