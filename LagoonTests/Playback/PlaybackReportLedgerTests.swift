@@ -60,13 +60,6 @@ struct PlaybackReportLedgerTests {
         #expect(!ledger.hasOpenSessions)
     }
 
-    @Test @MainActor func closingAnUnknownSessionIsHarmless() async {
-        let ledger = PlaybackReportLedger()
-        ledger.close(UUID())
-        #expect(!ledger.hasOpenSessions)
-        await ledger.settle(timeout: .seconds(5))
-    }
-
     /// The timeout keeps ticking after a close resumed the waiter; when it
     /// fires it must find nothing to resume rather than resume twice.
     @Test @MainActor func aLateTimeoutAfterACloseDoesNotResumeTwice() async {

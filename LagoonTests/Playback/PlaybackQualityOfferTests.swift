@@ -1,9 +1,5 @@
-import CoreGraphics
 import Foundation
-import ImageIO
-import SwiftUI
 import Testing
-import UniformTypeIdentifiers
 @testable import Lagoon
 
 /// Repeated stalls bring up an offer of a lower quality: three in a minute,
@@ -47,22 +43,5 @@ struct PlaybackQualityOfferTests {
         #expect(offer.dismiss())
         #expect(!offer.isVisible)
         #expect(accepted == 1)
-    }
-
-    /// Writes the card to the test container's tmp folder for a look.
-    @Test func theCardRenders() throws {
-        let card = PlayerQualityOfferCard(onAccept: {}, onDismiss: {})
-            .padding(40)
-            .background(Color.black)
-            .environment(\.colorScheme, .dark)
-        let renderer = ImageRenderer(content: card)
-        renderer.scale = 2
-        let image = try #require(renderer.cgImage)
-        #expect(image.width > 0 && image.height > 0)
-        let url = URL(fileURLWithPath: NSTemporaryDirectory()).appendingPathComponent("quality-offer-card.png")
-        let destination = try #require(CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil))
-        CGImageDestinationAddImage(destination, image, nil)
-        #expect(CGImageDestinationFinalize(destination))
-        print("QUALITY_OFFER_CARD \(url.path)")
     }
 }

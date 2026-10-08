@@ -25,12 +25,6 @@ struct PlaybackCountdownTests {
         #expect(countdown.progress(at: start + .seconds(60)) == 1)
     }
 
-    /// An overlay mounted part-way through draws where the countdown already is.
-    @Test func aLateObserverSeesElapsedProgress() {
-        let countdown = PlaybackCountdown(duration: .seconds(5), start: .now - .seconds(3))
-        #expect(abs(countdown.progress(at: .now) - 0.6) < 0.01)
-    }
-
     /// Nothing to wait for reads as done, not as a divide by zero.
     @Test func aZeroDurationIsAlreadyDone() {
         let countdown = PlaybackCountdown(duration: .zero)

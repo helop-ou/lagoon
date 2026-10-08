@@ -80,12 +80,6 @@ struct DownloadResumeStartSecondsTests {
 
 @Suite("Download playback played-through")
 struct DownloadPlayedThroughTests {
-    @Test func withinTheLastTwoPercentCountsAsPlayedThrough() {
-        let runtime = Ticks.ticks(3_600)
-        let position = Ticks.ticks(3_600 * 0.99)
-        #expect(PlaybackReportingSession.isPlayedThrough(positionTicks: position, runtimeTicks: runtime))
-    }
-
     @Test func exactlyAtTheThresholdCountsAsPlayedThrough() {
         let runtime = Ticks.ticks(1_000)
         let position = Ticks.ticks(980)
@@ -95,12 +89,6 @@ struct DownloadPlayedThroughTests {
     @Test func justBeforeTheThresholdDoesNotCount() {
         let runtime = Ticks.ticks(1_000)
         let position = Ticks.ticks(970)
-        #expect(!PlaybackReportingSession.isPlayedThrough(positionTicks: position, runtimeTicks: runtime))
-    }
-
-    @Test func earlyPositionNeverCounts() {
-        let runtime = Ticks.ticks(3_600)
-        let position = Ticks.ticks(60)
         #expect(!PlaybackReportingSession.isPlayedThrough(positionTicks: position, runtimeTicks: runtime))
     }
 

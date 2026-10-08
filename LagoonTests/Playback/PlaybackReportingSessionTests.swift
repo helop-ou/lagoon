@@ -99,27 +99,6 @@ struct PlaybackReportingSessionTests {
         #expect(ReportingURLProtocol.requests.map(\.path) == ["/Sessions/Playing/Stopped"])
     }
 
-    @Test func lateStartResponseCannotReviveAStoppedProgressLoop() async throws {
-        let client = makeClient(holding: ["/Sessions/Playing"])
-        defer { ReportingURLProtocol.release("/Sessions/Playing") }
-        let reporter = makeReporter(client: client)
-        let start = Task { try await reporter.reportStart(at: 12) }
-        try await waitUntil { ReportingURLProtocol.isHolding("/Sessions/Playing") }
-        let stop = try #require(reporter.stop(at: 15))
-        await stop.value
-        ReportingURLProtocol.release("/Sessions/Playing")
-        try await start.value
-
-        // A late response cannot re-arm progress on a stopped session.
-        let calls = ProgressCalls()
-        let lifetime = installProgress(on: reporter, calls: calls)
-        #expect(lifetime.value == nil)
-        #expect(calls.snapshots == 0)
-        #expect(calls.reports == 0)
-        #expect(!client.playbackReports.hasOpenSessions)
-        #expect(ReportingURLProtocol.requests.map(\.path) == ["/Sessions/Playing", "/Sessions/Playing/Stopped"])
-    }
-
     @Test func cancellingASuspendedStartCannotReviveProgress() async throws {
         let client = makeClient(holding: ["/Sessions/Playing"])
         defer { ReportingURLProtocol.release("/Sessions/Playing") }

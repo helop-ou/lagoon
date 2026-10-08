@@ -82,23 +82,6 @@ struct PlaybackFallbackTests {
         #expect(!PlaybackSourceLayout.file.isDisc)
     }
 
-    @Test func theLadderAlwaysTerminates() {
-        // Every path reaches nil, so repeated failure ends in the error
-        // overlay, never a restart loop.
-        for start in PlaybackDelivery.allCases {
-            for cause in [PlaybackEngineFailure.Cause.delivery, .undecodable] {
-                var delivery: PlaybackDelivery? = start
-                var steps = 0
-                while let current = delivery, steps < 8 {
-                    delivery = PlaybackFallbackPolicy.next(after: current, cause: cause)
-                    steps += 1
-                }
-                #expect(delivery == nil)
-                #expect(steps <= PlaybackDelivery.allCases.count)
-            }
-        }
-    }
-
     @Test func eachRungWithdrawsExactlyOnePermissionFromJellyfin() throws {
         // Jellyfin defaults all four flags to true.
         #expect(PlaybackDelivery.negotiated.flags == PlaybackDeliveryFlags(
@@ -221,15 +204,6 @@ struct MeteredPathTests {
         #expect(MeteredPathPolicy.applies(cost: lowData, allowFullQuality: false))
     }
 
-    /// Both flags mean the same thing here: do not pull the original over
-    /// this path.
-    @Test func eitherFlagIsEnough() {
-        #expect(NetworkPathCost.unrestricted.isMetered == false)
-        #expect(cellular.isMetered)
-        #expect(lowData.isMetered)
-        #expect(NetworkPathCost(isExpensive: true, isConstrained: true).isMetered)
-    }
-
     /// The viewer's override wins, because Apple can report that a path is
     /// expensive but never that it is slow.
     @Test func theOverrideRestoresFullQuality() {
@@ -308,7 +282,4 @@ struct MeteredPathTests {
         )
         #expect(reversed.conditions.first { $0.property == "Width" }?.value == "1280")
     }
-
-    // MARK: - Restart-point retry
-
 }

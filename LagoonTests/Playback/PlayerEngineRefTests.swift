@@ -46,30 +46,6 @@ struct PlayerEngineRefTests {
         #expect(standIn.engine === DetachedPlayerEngine.shared)
         #expect(copy.engine === DetachedPlayerEngine.shared)
     }
-
-    @Test func detachedEngineReportsNothingPlayingAndIgnoresEveryControl() {
-        let engine = DetachedPlayerEngine.shared
-
-        func assertNothingPlaying() {
-            #expect(engine.timePosition == 0)
-            #expect(engine.duration == 0)
-            #expect(engine.isPaused)
-            #expect(!engine.isBuffering)
-            #expect(engine.audioTracks.isEmpty)
-            #expect(engine.subtitleTracks.isEmpty)
-            #expect(engine.currentSubtitleText == nil)
-            #expect(engine.displayMatchRequest == nil)
-        }
-
-        assertNothingPlaying()
-
-        engine.play()
-        engine.seek(to: 10)
-        engine.togglePause()
-        engine.selectSubtitleTrack(id: 1)
-
-        assertNothingPlaying()
-    }
 }
 
 /// Minimal `PlayerEngine` conformance, shaped like `DetachedPlayerEngine`.

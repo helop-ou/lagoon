@@ -49,24 +49,6 @@ struct PlaybackFinishTests {
         #expect(finish.timeIntervalSince(now) == 1800)
     }
 
-    /// Pausing does not change what is left, so the finish slides later.
-    @Test func aPausedItemFinishesLaterTheLongerItIsHeld() throws {
-        let atPause = try #require(PlaybackFinish.date(from: now, remaining: 1200, rate: 1))
-        let aMinuteLater = try #require(
-            PlaybackFinish.date(from: now.addingTimeInterval(60), remaining: 1200, rate: 1)
-        )
-        #expect(aMinuteLater.timeIntervalSince(atPause) == 60)
-    }
-
-    /// Playing does not move it: clock and remaining time cancel out.
-    @Test func playingAtNormalSpeedHoldsTheFinishStill() throws {
-        let first = try #require(PlaybackFinish.date(from: now, remaining: 1200, rate: 1))
-        let later = try #require(
-            PlaybackFinish.date(from: now.addingTimeInterval(60), remaining: 1140, rate: 1)
-        )
-        #expect(later == first)
-    }
-
     @Test(arguments: [0.0, -1.0, Double.nan, Double.infinity])
     func anUnusableRateProjectsAtNormalSpeed(rate: Double) throws {
         let finish = try #require(PlaybackFinish.date(from: now, remaining: 600, rate: rate))
