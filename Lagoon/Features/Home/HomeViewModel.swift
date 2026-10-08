@@ -43,8 +43,8 @@ final class HomeViewModel {
     private var loadGeneration = 0
     private var isRefreshing = false
     /// Discovery rails load after the primary content; held here so an
-    /// account switch can cancel them.
-    private var discoveryTasks: [Task<Void, Never>] = []
+    /// account switch can cancel them, and readable so tests can await them.
+    private(set) var discoveryTasks: [Task<Void, Never>] = []
 
     func load(
         client: JellyfinClient,
