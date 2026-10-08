@@ -14,23 +14,27 @@ struct SeerrMediaDetailView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     #endif
-    @State private var details: SeerrMediaDetails?
-    @State private var jellyfinItem: MediaItem?
-    @State private var recommendations: [SeerrDiscoverResult] = []
-    @State private var isLoading = true
+    @State private var model: SeerrMediaDetailModel
     @State private var isRequesting = false
-    @State private var errorMessage: String?
     @State private var popup: Popup?
     @State private var seasonRequestDetails: SeerrMediaDetails?
     @State private var reloadID = 0
 
+    init(mediaID: Int, mediaType: SeerrMediaType) {
+        self.mediaID = mediaID
+        self.mediaType = mediaType
+        _model = State(initialValue: SeerrMediaDetailModel(mediaID: mediaID, mediaType: mediaType))
+    }
+
+    private var jellyfinItem: MediaItem? { model.jellyfinItem }
+
     var body: some View {
         Group {
-            if isLoading, details == nil {
+            if model.isLoading, model.details == nil {
                 LoadingView()
-            } else if let errorMessage, details == nil {
+            } else if let errorMessage = model.errorMessage, model.details == nil {
                 ErrorStateView(message: errorMessage) { reloadID += 1 }
-            } else if let details {
+            } else if let details = model.details {
                 DetailPageScaffold(
                     backdropURL: SeerrClient.imageURL(path: details.backdropPath, width: Metrics.detailBackdropRequestWidth),
                     posterURL: SeerrClient.imageURL(path: details.posterPath, width: Metrics.detailPosterRequestWidth)
@@ -52,16 +56,16 @@ struct SeerrMediaDetailView: View {
                         }
                     }
                     CastStrip(credits: castCredits(details))
-                    if !recommendations.isEmpty {
-                        SeerrMediaRail(title: String(localized: "More Like This"), items: recommendations)
+                    if !model.recommendations.isEmpty {
+                        SeerrMediaRail(title: String(localized: "More Like This"), items: model.recommendations)
                     }
                 }
             }
         }
         .task(id: reloadID) { await load() }
         .seerrLiveRefreshable(
-            cadence: SeerrLiveRefreshCadence.mediaDetails(details),
-            isPaused: isLoading || isRequesting || seasonRequestDetails != nil
+            cadence: SeerrLiveRefreshCadence.mediaDetails(model.details),
+            isPaused: model.isLoading || isRequesting || seasonRequestDetails != nil
         ) {
             await load(isRefresh: true)
         }
@@ -309,11 +313,12 @@ struct SeerrMediaDetailView: View {
     }
 
     private func canRequestMoreSeasons(_ details: SeerrMediaDetails) -> Bool {
-        mediaType == .tv
-            && seerr.user?.canRequest(.tv) == true
-            && !details.requestableSeasons(
-                includingSpecials: seerr.publicSettings?.enableSpecialEpisodes == true
-            ).isEmpty
+        SeerrMediaDetailModel.canRequestMoreSeasons(
+            details,
+            mediaType: mediaType,
+            user: seerr.user,
+            includingSpecials: seerr.publicSettings?.enableSpecialEpisodes == true
+        )
     }
 
     /// The primary button when nothing is playable yet; a pill otherwise.
@@ -361,51 +366,11 @@ struct SeerrMediaDetailView: View {
     }
 
     private var availability: SeerrAvailabilityStatus {
-        details?.mediaInfo?.availability ?? .unknown
+        model.details?.mediaInfo?.availability ?? .unknown
     }
 
     private func load(isRefresh: Bool = false) async {
-        if !isRefresh {
-            isLoading = true
-            errorMessage = nil
-        }
-        defer {
-            if !isRefresh { isLoading = false }
-        }
-        do {
-            // Static metadata: the live refresh leaves recommendations alone.
-            async let loadedRecommendations: [SeerrDiscoverResult]? = isRefresh
-                ? nil
-                : (try? await seerr.client.recommendations(id: mediaID, mediaType: mediaType))?.results
-            let loaded = try await seerr.client.details(id: mediaID, mediaType: mediaType)
-            let loadedJellyfinItem: MediaItem?
-            if loaded.mediaInfo?.availability == .available || loaded.mediaInfo?.availability == .partiallyAvailable {
-                if let jellyfinID = loaded.mediaInfo?.jellyfinMediaId, !jellyfinID.isEmpty {
-                    loadedJellyfinItem = try? await session.client.item(id: jellyfinID)
-                } else {
-                    loadedJellyfinItem = try? await session.client.item(
-                        tmdbID: mediaID,
-                        mediaType: mediaType
-                    )
-                }
-            } else {
-                loadedJellyfinItem = nil
-            }
-            let newRecommendations = await loadedRecommendations
-            // Commit one coherent snapshot, never half of a terminal transition
-            // that cancels the polling task.
-            guard !Task.isCancelled else { return }
-            details = loaded
-            jellyfinItem = loadedJellyfinItem
-            if !isRefresh {
-                recommendations = (newRecommendations ?? []).filter { $0.mediaType == .movie || $0.mediaType == .tv }
-            }
-            errorMessage = nil
-        } catch is CancellationError {
-        } catch {
-            // A failed poll keeps the last progress and retries next interval.
-            if details == nil { errorMessage = error.localizedDescription }
-        }
+        await model.load(client: seerr.client, jellyfin: session.client, isRefresh: isRefresh)
     }
 
     private func unblock() {
@@ -427,7 +392,7 @@ struct SeerrMediaDetailView: View {
     private func requestMovie() {
         guard !isRequesting else { return }
         isRequesting = true
-        errorMessage = nil
+        model.errorMessage = nil
         Task {
             do {
                 let request = try await seerr.client.createRequest(SeerrCreateRequest(
