@@ -142,7 +142,17 @@ struct TopShelfPayloadTests {
 
     @Test func theSnapshotDecodesIntoTheShapeTheExtensionMirrors() throws {
         // LagoonTopShelf/ContentProvider.swift redeclares these fields by
-        // hand, so pin the key names it reads.
+        // hand, so check the names it reads against what the app writes.
+        let provider = try TopShelfExtensionSource()
+        #expect(provider.stringConstant("snapshotName") == TopShelfPublisher.snapshotName)
+        let snapshot = try JSONEncoder().encode(TopShelfPublisher.Snapshot(
+            owner: "owner", generation: UUID(), publishedAt: .now, items: []
+        ))
+        let snapshotKeys = try #require(
+            try JSONSerialization.jsonObject(with: snapshot) as? [String: Any]
+        ).keys
+        #expect(Set(provider.propertyNames(ofStruct: "TopShelfSnapshot")) == Set(snapshotKeys))
+
         let encoded = try JSONEncoder().encode(
             TopShelfStore.Item(
                 id: "abc",
@@ -164,6 +174,31 @@ struct TopShelfPayloadTests {
             "id", "title", "context", "artwork2x", "artwork1x",
             "summary", "genre", "duration", "mediaOptions",
         ])
+        #expect(Set(provider.propertyNames(ofStruct: "TopShelfItem")) == Set(keys))
+    }
+
+    @Test func theExtensionsActionLinksAreOnesTheAppFollows() throws {
+        // Build each link from the hosts and query names the extension
+        // writes; the app must act on every one.
+        let provider = try TopShelfExtensionSource()
+        let hosts = provider.captures(of: #"actionURL\("(\w+)""#)
+        let queryNames = provider.captures(of: #"URLQueryItem\(name: "(\w+)""#)
+        #expect(hosts == ["play", "item"])
+        #expect(queryNames.count == 2)
+
+        let owner = TopShelfPublisher.accountOwner("https://jellyfin.test|user")
+        let values = ["owner": owner, "generation": UUID().uuidString]
+        for host in hosts {
+            var components = URLComponents()
+            components.scheme = "lagoon"
+            components.host = host
+            components.path = "/item-1"
+            components.queryItems = queryNames.map { URLQueryItem(name: $0, value: values[$0]) }
+            let router = DeepLinkRouter()
+            router.handle(try #require(components.url))
+            #expect(router.owner == owner, "lagoon://\(host) was ignored")
+            #expect((router.pendingItemID ?? router.pendingDetailItemID) == "item-1")
+        }
     }
     #endif
 }

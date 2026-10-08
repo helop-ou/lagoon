@@ -58,14 +58,15 @@ struct TopShelfArtworkTests {
         #expect(composed.size == CGSize(width: 3840, height: 2160))
     }
 
-    @Test func artworkLivesSomewhereTvOSWillLetItBeWritten() {
+    @Test func artworkLivesSomewhereTvOSWillLetItBeWritten() throws {
         // Apple TV allows 500 KB of persistent storage and the rest must be
         // purgeable; the container root is refused on device, not in the sim.
         #expect(TopShelfArtwork.containerSubpath.hasPrefix("Library/Caches/"))
 
-        // LagoonTopShelf/ContentProvider.swift hard-codes this path, so pin
-        // the literal.
-        #expect(TopShelfArtwork.containerSubpath == "Library/Caches/TopShelf")
+        // The extension hard-codes the container and directory it reads.
+        let provider = try TopShelfExtensionSource()
+        #expect(provider.stringConstant("artworkDirectory") == TopShelfArtwork.containerSubpath)
+        #expect(provider.stringConstant("appGroupID") == TopShelfStore.appGroupID)
     }
     #endif
 }
