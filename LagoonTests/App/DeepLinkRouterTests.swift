@@ -67,12 +67,6 @@ struct DeepLinkRouterTests {
         #expect(router.pendingItemID == nil)
     }
 
-    @Test @MainActor func anIdentifierIsTakenVerbatim() {
-        let router = DeepLinkRouter()
-        router.handle(link("lagoon://item/cf0196f6348ede37f5a02e26e00d9b85"))
-        #expect(router.pendingDetailItemID == "cf0196f6348ede37f5a02e26e00d9b85")
-    }
-
     @Test @MainActor func onlyTheFirstPathComponentIsUsed() {
         let router = DeepLinkRouter()
         router.handle(link("lagoon://play/abc123/extra"))

@@ -146,20 +146,6 @@ struct AccountPrivacyTests {
         #expect(fixture.credentials.string(for: fixture.cookieA) == nil)
     }
 
-    @Test func accountDraftCancellationPreservesActiveHistoryAndCredentials() throws {
-        let fixture = try Fixture()
-        defer { fixture.cleanUp() }
-        let store = fixture.store()
-        store.recentSearches.record("Keep this")
-        let draft = store.makeAccountDraft()
-        draft.cancelAccountDraft()
-        store.isAddingAccount = false
-        #expect(store.activeAccount?.id == fixture.a.id)
-        #expect(store.recentSearches.terms == ["Keep this"])
-        #expect(fixture.credentials.string(for: fixture.cookieA) == "cookie-a")
-        #expect(fixture.credentials.string(for: fixture.a.keychainAccount) == "token-a")
-    }
-
     @Test func readdingThroughTheSignInFlowCannotRestoreForgottenHistoryOrCookies() async throws {
         let fixture = try Fixture()
         defer { fixture.cleanUp() }

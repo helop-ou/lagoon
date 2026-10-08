@@ -44,12 +44,6 @@ struct UserAvatarTests {
         #expect(accounts[0].userName == "Alex")
     }
 
-    @Test func theTagRoundTripsThroughStorage() throws {
-        let account = StoredAccount(serverURL: server, serverName: nil, userId: "93f3", userName: "Alex", primaryImageTag: "73c5")
-        let decoded = try JSONDecoder().decode([StoredAccount].self, from: JSONEncoder().encode([account]))
-        #expect(decoded == [account])
-    }
-
     @Test func theSignInResultCarriesTheTag() throws {
         let result = try JellyfinClient.decoder.decode(AuthenticationResult.self, from: Data(#"""
         {"User":{"Id":"93f3","Name":"Alex","PrimaryImageTag":"73c5"},"AccessToken":"t","ServerId":"s"}

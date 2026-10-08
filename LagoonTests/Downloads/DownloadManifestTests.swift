@@ -188,21 +188,6 @@ struct DownloadManifestTests {
         #expect(Self.makeEntry(quality: .standard).resumesFromStart == true)
     }
 
-    @Test func attemptTokenDecodesAsNilFromAManifestSavedBeforeItExisted() throws {
-        // Manifests written before `attemptToken` must still decode.
-        let json = """
-        {"entries":[{"itemID":"item1","type":"Movie","title":"Old Entry",
-        "runTimeTicks":36000000000,"requestedQuality":"original","quality":"original",
-        "fileName":"item1.mp4","mediaSourceID":"source1","receivedBytes":0,"state":"queued",
-        "artworkFiles":{},"createdAt":"2024-01-01T00:00:00Z"}],"pendingReports":[]}
-        """
-        // `DownloadStore` is iOS only; decoding directly runs everywhere.
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
-        let manifest = try decoder.decode(DownloadManifest.self, from: Data(json.utf8))
-        #expect(manifest.entry(for: "item1")?.attemptToken == nil)
-    }
-
     @Test func anEntryDecodesWithoutTheFieldsNothingReads() throws {
         // A later build stops writing these; this one must still open its manifest.
         let json = """
@@ -213,6 +198,9 @@ struct DownloadManifestTests {
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         let manifest = try decoder.decode(DownloadManifest.self, from: Data(json.utf8))
-        #expect(manifest.entry(for: "item1")?.isComplete == true)
+        let entry = try #require(manifest.entry(for: "item1"))
+        #expect(entry.isComplete)
+        // Older manifests predate the attempt token.
+        #expect(entry.attemptToken == nil)
     }
 }

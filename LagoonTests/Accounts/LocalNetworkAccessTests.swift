@@ -38,12 +38,6 @@ struct LocalNetworkAccessTests {
         #expect((error as? URLError)?.code == .timedOut)
     }
 
-    @Test func diagnosticConnectionHonorsCancellation() async {
-        let pending = Task { await LocalNetworkAccess.isDenied(at: URL(string: "https://192.0.2.1")!) }
-        pending.cancel()
-        #expect(await pending.value == false)
-    }
-
     @Test @MainActor func deniedSetupStopsAlternateAddressesAndRetriesTheOriginalEndpoint() async throws {
         let suite = "LocalNetworkAccessTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suite)!

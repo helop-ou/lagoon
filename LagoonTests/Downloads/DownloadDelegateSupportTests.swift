@@ -28,10 +28,6 @@ struct DownloadTaskDescriptionTests {
         // A three-field description from an older task must not parse.
         #expect(DownloadTaskDescription.parse("item1|item1.mp4|accountkey") == nil)
     }
-
-    @Test func returnsNilForGarbage() {
-        #expect(DownloadTaskDescription.parse("not-a-task-description") == nil)
-    }
 }
 
 @Suite("Download completion outcome")

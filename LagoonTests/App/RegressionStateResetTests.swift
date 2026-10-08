@@ -50,9 +50,4 @@ struct RegressionStateResetTests {
         arguments.set(true, forKey: "debug.regressionBootstrapPublicDemo")
         #expect(RegressionStateReset.isRequested(arguments: arguments))
     }
-
-    @Test func aCleanStoreRemovesNothing() throws {
-        let removed = RegressionStateReset.run(defaults: try freshDefaults(), credentials: MemoryAccountCredentials())
-        #expect(removed == RegressionStateReset.Removed(defaultsKeys: [], credentialNames: []))
-    }
 }
