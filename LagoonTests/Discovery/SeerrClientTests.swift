@@ -201,13 +201,14 @@ struct SeerrClientTests {
     }
 
     @Test func requestDeadlineEndsAStalledSearch() async throws {
-        let client = makeClient(requestTimeout: 0.05)
+        // Far longer than the dribble's gaps, far shorter than its total.
+        let client = makeClient(requestTimeout: 0.3)
         client.configure(serverURL: URL(string: "https://seerr.test")!)
         client.setSessionCookie("session")
 
         do {
             _ = try await client.search(query: "alien")
-            Issue.record("A stalled Seerr search did not reach its absolute deadline")
+            Issue.record("A dribbling Seerr search outlived its absolute deadline")
         } catch let error as URLError {
             #expect(error.code == .timedOut)
         }
@@ -331,9 +332,11 @@ private nonisolated final class SeerrMockURLProtocol: URLProtocol, @unchecked Se
             return
         }
 
-        // Never finishes: the client needs an absolute deadline, not just
-        // URLSession's inactivity timer.
+        // Keeps the connection active with a byte at a time, so URLSession's
+        // inactivity timer never fires and only the client's absolute
+        // deadline can end it before the answer finally arrives.
         if url.path == "/api/v1/search" {
+            dribble(url: url)
             return
         }
 
@@ -352,7 +355,38 @@ private nonisolated final class SeerrMockURLProtocol: URLProtocol, @unchecked Se
         client?.urlProtocolDidFinishLoading(self)
     }
 
-    override func stopLoading() {}
+    override func stopLoading() {
+        dribbleQueue.sync { stopped = true }
+    }
+
+    static let dribbleInterval: TimeInterval = 0.02
+    static let dribbleCount = 75
+    private let dribbleQueue = DispatchQueue(label: "SeerrMockURLProtocol.dribble")
+    private var stopped = false
+
+    private func dribble(url: URL) {
+        let response = HTTPURLResponse(
+            url: url,
+            statusCode: 200,
+            httpVersion: "HTTP/1.1",
+            headerFields: ["Content-Type": "application/json"]
+        )!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        dribble(remaining: Self.dribbleCount)
+    }
+
+    private func dribble(remaining: Int) {
+        dribbleQueue.asyncAfter(deadline: .now() + Self.dribbleInterval) { [self] in
+            guard !stopped else { return }
+            guard remaining > 0 else {
+                client?.urlProtocol(self, didLoad: Data(#"{"page":1,"totalPages":1,"totalResults":0,"results":[]}"#.utf8))
+                client?.urlProtocolDidFinishLoading(self)
+                return
+            }
+            client?.urlProtocol(self, didLoad: Data(" ".utf8))
+            dribble(remaining: remaining - 1)
+        }
+    }
 
     private func bodyString(from request: URLRequest) -> String? {
         if let body = request.httpBody {
