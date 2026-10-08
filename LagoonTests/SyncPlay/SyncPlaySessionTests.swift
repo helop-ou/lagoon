@@ -116,6 +116,8 @@ struct SyncPlaySessionTests {
         #expect(session.currentPlaylistItemId == Self.playlistItemID)
     }
 
+    /// Only the reason decides: even a `Queue` update whose playing index
+    /// moved must not restart the item on screen.
     @Test func queueingSomethingBehindTheCurrentItemLoadsNothing() throws {
         var session = SyncPlayGroupSession()
         _ = session.apply(try Self.groupJoined())
@@ -125,10 +127,10 @@ struct SyncPlaySessionTests {
          "Data":{"Reason":"Queue","LastUpdate":"2026-09-14T11:46:00.0000000Z",
                  "Playlist":[{"ItemId":"\(Self.itemID)","PlaylistItemId":"\(Self.playlistItemID)"},
                              {"ItemId":"b2","PlaylistItemId":"p2"}],
-                 "PlayingItemIndex":0,"StartPositionTicks":0,"IsPlaying":true,
+                 "PlayingItemIndex":1,"StartPositionTicks":0,"IsPlaying":true,
                  "ShuffleMode":"Sorted","RepeatMode":"RepeatNone"}}
         """))
-        #expect(queued.isEmpty)
+        #expect(queued == [])
     }
 
     @Test func movingToTheNextItemLoadsIt() throws {
