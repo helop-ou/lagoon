@@ -487,7 +487,7 @@ final class HomeSectionPreferencesStore {
         defaults.set(data, forKey: Self.key(accountID))
     }
 
-    private nonisolated static func key(_ accountID: String) -> String {
+    nonisolated static func key(_ accountID: String) -> String {
         "home.sectionPreferences.\(accountID)"
     }
 
