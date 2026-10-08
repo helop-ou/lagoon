@@ -9,18 +9,18 @@ struct SessionExpiryTests {
     func authenticatedRejectionPreservesIdentityAndPreferences(path: String) async throws {
         let fixture = try Fixture()
         defer { fixture.cleanUp() }
-        let store = fixture.store()
+        let store = try await fixture.settledStore()
         #expect(store.phase == .signedIn)
-        #expect(SessionExpiryProtocol.requests.isEmpty) // Offline restore never probes.
+        let sentBefore = SessionExpiryProtocol.requests.count
         SessionExpiryProtocol.setReply(.http(401, ""))
         do {
             _ = try await store.client.getData(path)
             Issue.record("A revoked token must fail")
         } catch JellyfinError.sessionExpired {
-        } catch is CancellationError {
-            // A concurrent profile refresh may hit the 401 first and expire
-            // the session; the assertions below still hold either way.
         }
+        // The only request that saw the 401 is the one under test.
+        let rejected = SessionExpiryProtocol.requests.dropFirst(sentBefore).compactMap(\.url?.path)
+        #expect(rejected == ["/jellyfin/\(path)"])
         #expect(store.phase == .needsSignIn)
         #expect(store.reauthenticationAccount?.id == fixture.first.id)
         #expect(store.activeAccount == nil)
