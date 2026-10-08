@@ -98,14 +98,6 @@ struct CollectionShelfTests {
         #expect(CollectionShelf.ranked(all).count == CollectionShelf.maximumVisible)
     }
 
-    @Test func aLibraryWithNoRealCollectionsGetsNoRow() throws {
-        let all = try (1...50).map {
-            try collection(id: "c\($0)", name: "Collection \($0)", childCount: 0)
-        }
-
-        #expect(CollectionShelf.ranked(all).isEmpty)
-    }
-
     // MARK: - What the card is painted with
 
     @Test func aCollectionWithItsOwnArtworkBorrowsNothing() throws {

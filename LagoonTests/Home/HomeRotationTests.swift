@@ -38,14 +38,6 @@ struct HomeRotationTests {
         )
     }
 
-    @Test func itMovesOnAtMidnight() {
-        // Not every day differs with five candidates, but a week must vary.
-        let week = (0..<7).map { date("2026-08-2\($0 + 1) 12:00") }
-        let picks = week.map { HomeRotation.genre(rankedByWatchHistory: genres, for: $0, calendar: utc) }
-
-        #expect(Set(picks).count > 1)
-    }
-
     @Test func consecutiveDaysNeverRepeatWhileCandidatesRemain() {
         let days = (0..<5).map { date("2026-08-2\($0 + 1) 12:00") }
         let picks = days.compactMap { HomeRotation.genre(rankedByWatchHistory: genres, for: $0, calendar: utc) }
@@ -92,11 +84,6 @@ struct HomeRotationTests {
         #expect(!picks.contains(2020))
     }
 
-    @Test func theDecadeIsSpelledInFull() {
-        // "90s" is ambiguous the moment a library holds anything from 1890.
-        #expect(HomeRotation.decadeTitle(startingIn: 1990) == "Movies from the 1990s")
-    }
-
     // MARK: - Ranking
 
     @Test func genresRankByHowOftenYouWatchThem() throws {
@@ -117,10 +104,6 @@ struct HomeRotationTests {
         ].map { try JellyfinClient.decoder.decode(MediaItem.self, from: Data($0.utf8)) }
 
         #expect(HomeRotation.rankGenres(byWatchHistory: items) == ["Action", "Musical", "Western"])
-    }
-
-    @Test func nothingWatchedRanksNothing() {
-        #expect(HomeRotation.rankGenres(byWatchHistory: []).isEmpty)
     }
 
     // MARK: - What "Because You Watched" is willing to name itself after

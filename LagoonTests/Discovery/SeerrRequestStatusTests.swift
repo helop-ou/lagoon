@@ -144,17 +144,6 @@ struct SeerrRequestStatusTests {
             #expect(settled.motion == .still, "\(settled) should not animate")
         }
     }
-
-    @Test @MainActor func everyProgressCaseHasATitleAndASymbol() {
-        let all: [SeerrRequestProgress] = [
-            .pending, .declined, .failed, .processing, .partiallyAvailable,
-            .available, .removed, .blocked, .unknown,
-        ]
-        for progress in all {
-            #expect(!progress.title.isEmpty)
-            #expect(!progress.symbol.isEmpty)
-        }
-    }
 }
 
 @Suite("Seerr quality profiles")

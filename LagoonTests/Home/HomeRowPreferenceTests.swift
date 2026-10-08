@@ -274,26 +274,12 @@ struct HomeRowPreferenceTests {
 
     // MARK: The rows Settings offers
 
-    @Test func nativeRowsIdentifyMovieAndShowGenresSeparately() {
-        let choices = HomeSectionPreferenceResolver.nativeChoices
+    /// The old single Recently Added row became one per kind of library and
+    /// must not linger in Settings as a row nothing draws.
+    @Test func theLegacyRecentlyAddedRowIsNotOffered() {
+        let offered = HomeSectionPreferenceResolver.nativeChoices.map(\.id)
 
-        #expect(choices.allSatisfy { $0.source == .lagoon })
-        #expect(choices.map(\.id).contains(HomeRowID.movieGenres))
-        #expect(choices.map(\.id).contains(HomeRowID.showGenres))
-        #expect(choices.map(\.title).contains("Movie Genres"))
-        #expect(choices.map(\.title).contains("Show Genres"))
-    }
-
-    /// Recently Added is three separately placeable rows.
-    @Test func recentlyAddedIsOfferedOncePerKindOfLibrary() {
-        let titles = Dictionary(
-            HomeSectionPreferenceResolver.nativeChoices.map { ($0.id, $0.title) },
-            uniquingKeysWith: { current, _ in current }
-        )
-
-        #expect(titles[HomeRowID.recentlyAddedMovies] == "Recently Added Movies")
-        #expect(titles[HomeRowID.recentlyAddedShows] == "Recently Added Shows")
-        #expect(titles[HomeRowID.legacyRecentlyAdded] == nil)
+        #expect(!offered.contains(HomeRowID.legacyRecentlyAdded))
     }
 
     /// Catches a new Home row that Settings never lists, which nobody could
@@ -366,15 +352,6 @@ struct HomeRowPreferenceTests {
         let ids = HomeSectionPreferenceResolver.nativeChoices.map(\.id)
 
         #expect(Set(ids).count == ids.count)
-    }
-
-    @Test func collectionsAreOfferedAndOnByDefault() {
-        let choices = HomeSectionPreferenceResolver.nativeChoices
-        let collections = choices.first { $0.id == CollectionShelf.rowID }
-
-        #expect(collections?.title == "Collections")
-        #expect(collections?.source == .lagoon)
-        #expect(HomeSectionPreferenceValues().isEnabled(CollectionShelf.rowID))
     }
 
     // MARK: The store

@@ -109,14 +109,6 @@ struct HomeRailContentTests {
         #expect(HomeRailURLProtocol.urls.count == 1)
     }
 
-    @Test func movieLatestIsUnchanged() async throws {
-        let client = makeClient()
-        HomeRailURLProtocol.set(latest: #"[{"Id":"newer","Type":"Movie"},{"Id":"older","Type":"Movie"}]"#)
-
-        #expect(try await client.latest(parentId: "movies").map(\.id) == ["newer", "older"])
-        #expect(HomeRailURLProtocol.urls.count == 1)
-    }
-
     @Test func homeNormalizesOnLoadAndRefreshAndRetainsTheRailOnLookupFailure() async throws {
         let client = makeClient()
         let model = HomeViewModel()

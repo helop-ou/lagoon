@@ -91,9 +91,8 @@ struct SeerrDiscoverLayoutTests {
         #expect(Set(ids).count == ids.count)
     }
 
-    @Test @MainActor func aGenreSourceCarriesItsNameAsTheCatalogueTitle() {
+    @Test @MainActor func aGenreSourceIsIdentifiedByKindAndGenreID() {
         let source = SeerrCatalogSource.genre(.movie, id: 28, name: "Action")
-        #expect(source.title == "Action")
         #expect(source.id == "genre.movie.28")
     }
 

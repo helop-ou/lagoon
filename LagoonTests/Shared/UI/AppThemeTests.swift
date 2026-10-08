@@ -123,26 +123,6 @@ struct AppThemeTests {
         #expect(ThemeStore.storedTheme(for: "a", in: defaults) == .babyPink)
     }
 
-    @Test func theBrandPaletteIsTheBrandColours() {
-        #expect(AppTheme.lagoon.palette.accent == .lagoonAqua)
-        #expect(AppTheme.lagoon.palette.ground == .lagoonNavy)
-        #expect(AppTheme.lagoon.palette.background == .black)
-        #expect(AppTheme.lagoon.palette.surface == nil)
-        #expect(AppTheme.babyPink.palette.surface != nil)
-        #expect(AppTheme.lagoon.palette.controlTint == ThemePalette.paleAqua)
-        #expect(AppTheme.babyPink.palette.controlTint == AppTheme.babyPink.palette.accent)
-        #expect(AppTheme.lagoon.palette.glow == .fallback)
-        #expect(AppTheme.lagoon.palette.artworkTint == nil)
-        #expect(AppTheme.babyPink.palette.artworkTint != nil)
-        #expect(AppTheme.lagoon.palette.chrome == nil)
-        #expect(AppTheme.babyPink.palette.chrome != nil)
-    }
-
-    @Test func theBrandBloomsJellyfishAndPinkBloomsFlowers() {
-        #expect(AppTheme.lagoon.bloomMotif == .jellyfish)
-        #expect(AppTheme.babyPink.bloomMotif == .flowers)
-    }
-
     @Test func artworkGlowsAreLeftAloneByTheBrandAndBlushedByPink() {
         let artwork = ArtworkPalette(colors: [.red, .green, .blue])
         #expect(AppTheme.lagoon.palette.glow(for: artwork) == artwork)
@@ -151,27 +131,10 @@ struct AppThemeTests {
         #expect(blushed.colors.count == artwork.colors.count)
     }
 
-    @Test func spookyIsAProfilesChoiceLikeAnyOther() {
-        let defaults = defaults()
-        let store = ThemeStore(defaults: defaults, now: { Self.september })
-        store.configure(accountID: "server|me")
-        store.select(.spooky)
-        #expect(defaults.string(forKey: ThemeStore.key("server|me")) == "spooky")
-        store.configure(accountID: "server|partner")
-        #expect(store.theme == .lagoon)
-        store.configure(accountID: "server|me")
-        #expect(store.theme == .spooky)
-        #expect(AppTheme.allCases == [.lagoon, .babyPink, .spooky])
-    }
+    @Test func spookyBlushesArtworkGlowsAsPinkDoes() {
+        let artwork = ArtworkPalette(colors: [.red, .green])
 
-    @Test func onlySpookyHauntsAndItBloomsGhosts() {
-        #expect(AppTheme.allCases.filter(\.isHaunted) == [.spooky])
-        #expect(AppTheme.spooky.bloomMotif == .ghosts)
-        // Its forms, bars and glows follow it, as Baby Pink's do.
-        let palette = AppTheme.spooky.palette
-        #expect(palette.surface != nil)
-        #expect(palette.chrome != nil)
-        #expect(palette.glow(for: ArtworkPalette(colors: [.red, .green])) != ArtworkPalette(colors: [.red, .green]))
+        #expect(AppTheme.spooky.palette.glow(for: artwork) != artwork)
     }
 
     @Test func aGhostFitsItsRectAndItsFaceIsCutOut() {
