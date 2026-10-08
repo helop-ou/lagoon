@@ -12,19 +12,21 @@ struct HomeGenreDiscoveryTests {
         #expect(Set([movies, shows]).count == 2)
     }
 
-    @Test func contentRouteArrayPreservesNestedBackOrder() throws {
-        let firstItem = try #require(candidates().first)
-        let secondItem = try #require(candidates().dropFirst().first)
-        var path: [ContentNavigationRoute] = [
-            .genre(name: "Action", includeTypes: [.movie]),
-            .item(firstItem),
-            .item(secondItem),
-        ]
+    /// A refreshed copy of an item on the stack must still be the same route,
+    /// or the path reorders; a different item must never be.
+    @Test func anItemRouteIsItsItemIDHoweverStaleTheCopy() throws {
+        let items = try candidates()
+        let stale = items[0]
+        let refreshed = try JellyfinClient.decoder.decode(
+            MediaItem.self,
+            from: Data(#"{"Id":"\#(stale.id)","Name":"Renamed","Type":"Movie","CommunityRating":1.0}"#.utf8)
+        )
+        #expect(stale != refreshed)
 
-        #expect(path.count == 3)
-        #expect(path.removeLast() == .item(secondItem))
-        #expect(path.removeLast() == .item(firstItem))
-        #expect(path == [.genre(name: "Action", includeTypes: [.movie])])
+        #expect(ContentNavigationRoute.item(stale) == .item(refreshed))
+        #expect(Set([ContentNavigationRoute.item(stale), .item(refreshed)]).count == 1)
+        #expect(ContentNavigationRoute.item(items[0]) != .item(items[1]))
+        #expect(Set([ContentNavigationRoute.item(items[0]), .item(items[1])]).count == 2)
     }
 
     private func candidates() throws -> [MediaItem] {
