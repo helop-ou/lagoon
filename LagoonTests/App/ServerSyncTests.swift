@@ -5,14 +5,21 @@ import Testing
 @Suite("Server foreground sync", .serialized)
 @MainActor
 struct ServerSyncTests {
-    @Test func refreshClockAdvancesOnlyWhenRequested() {
-        let sync = ServerSyncState()
-
-        #expect(sync.generation == 0)
-        sync.requestRefresh()
-        #expect(sync.generation == 1)
-        sync.requestRefresh()
-        #expect(sync.generation == 2)
+    /// Foreground invalidation has one owner. A screen that advanced the
+    /// clock itself would refresh every other visible screen with it.
+    @Test func onlyRootViewAdvancesTheRefreshClock() throws {
+        let repository = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let sources = try #require(FileManager.default.subpaths(atPath: repository.appending(path: "Lagoon").path))
+        let callers = try sources.filter { $0.hasSuffix(".swift") }.filter { path in
+            let source = try String(contentsOf: repository.appending(path: "Lagoon/\(path)"), encoding: .utf8)
+            return source.split(separator: "\n").contains {
+                $0.contains("requestRefresh(") && !$0.contains("func requestRefresh(")
+            }
+        }
+        #expect(callers == ["App/RootView.swift"])
     }
 
     @Test func idleRefreshPolicyUsesFiveMinutesAndAllowsADebugOverride() {
