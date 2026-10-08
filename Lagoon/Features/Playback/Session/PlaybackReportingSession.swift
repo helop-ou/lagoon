@@ -13,6 +13,10 @@ final class PlaybackReportingSession {
         let isPaused: Bool
     }
 
+    /// The wait between progress reports.
+    typealias ProgressSleep = @MainActor (Duration) async throws -> Void
+    static let progressInterval: Duration = .seconds(10)
+
     private let client: JellyfinClient
     private let itemID: String
     private let mediaSourceID: String
@@ -21,6 +25,7 @@ final class PlaybackReportingSession {
     private let signpostID: OSSignpostID
     private let ledgerSession: UUID
     private let runtimeTicks: Int64?
+    private let progressSleep: ProgressSleep
     private var progressTask: Task<Void, Never>?
     private(set) var isActive = true
 
@@ -31,7 +36,8 @@ final class PlaybackReportingSession {
         playSessionID: String?,
         method: PlayMethod,
         signpostID: OSSignpostID,
-        runtimeTicks: Int64? = nil
+        runtimeTicks: Int64? = nil,
+        progressSleep: @escaping ProgressSleep = { try await Task.sleep(for: $0) }
     ) {
         self.client = client
         self.itemID = itemID
@@ -40,6 +46,7 @@ final class PlaybackReportingSession {
         self.method = method
         self.signpostID = signpostID
         self.runtimeTicks = runtimeTicks
+        self.progressSleep = progressSleep
         ledgerSession = client.playbackReports.open()
     }
 
@@ -67,10 +74,11 @@ final class PlaybackReportingSession {
     ) {
         cancelProgress()
         guard isActive else { return }
+        let sleep = progressSleep
         progressTask = Task { [weak self] in
             while !Task.isCancelled {
                 do {
-                    try await Task.sleep(for: .seconds(10))
+                    try await sleep(Self.progressInterval)
                 } catch {
                     return
                 }
