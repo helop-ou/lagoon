@@ -20,19 +20,125 @@ struct RemoteTouchTapTests {
         #expect(!recognizer.cancelsTouchesInView)
     }
 
-    @Test func recognizedTouchTapUsesTheLatestHandler() {
+    @Test func aRefreshHandsTheTouchTapTheLatestHandler() {
+        var taps: [String] = []
         let controller = MenuGateHostingController(rootView: EmptyView())
-        var count = 0
-        controller.onRemoteTouchTap = { count += 1 }
+        MenuPressGate(onMenu: {}, onRemoteTouchTap: { taps.append("first") }) { EmptyView() }
+            .applyHandlers(to: controller)
         controller.remoteTouchTapRecognized()
-        #expect(count == 1)
 
-        // The representable refreshes this closure on state changes; the
-        // recognizer must not keep the first render's handler.
-        controller.onRemoteTouchTap = { count += 10 }
+        // A state change renders the representable again with fresh closures;
+        // the recognizer must not keep the first render's handler.
+        MenuPressGate(onMenu: {}, onRemoteTouchTap: { taps.append("second") }) { EmptyView() }
+            .applyHandlers(to: controller)
         controller.remoteTouchTapRecognized()
-        #expect(count == 11)
+        #expect(taps == ["first", "second"])
     }
+
+    /// Select is judged when the press begins, so a panel button that closes
+    /// the panel under the press does not also toggle playback, or the
+    /// other way round.
+    @Test func selectIsDecidedWhenThePressBegins() {
+        let inputs = GateInputs()
+        let controller = inputs.controller()
+        let select: Set<UIPress> = [FakePress(.select)]
+
+        controller.pressesBegan(select, with: nil)
+        inputs.canTakeSelect = false
+        controller.pressesEnded(select, with: nil)
+        #expect(inputs.log == ["select"])
+
+        controller.pressesBegan(select, with: nil)
+        inputs.canTakeSelect = true
+        controller.pressesEnded(select, with: nil)
+        #expect(inputs.log == ["select"])
+    }
+
+    @Test func aCancelledSelectDoesNothing() {
+        let inputs = GateInputs()
+        let controller = inputs.controller()
+        let select: Set<UIPress> = [FakePress(.select)]
+        controller.pressesBegan(select, with: nil)
+        controller.pressesCancelled(select, with: nil)
+        controller.pressesEnded(select, with: nil)
+        #expect(inputs.log.isEmpty)
+    }
+
+    /// Menu is the gate's own decision: open panel or exit. It never reaches
+    /// Select, and Select never reaches the touch-surface tap.
+    @Test func eachInputKeepsItsOwnPath() {
+        let inputs = GateInputs()
+        let controller = inputs.controller()
+        let menu: Set<UIPress> = [FakePress(.menu)]
+        let select: Set<UIPress> = [FakePress(.select)]
+        controller.pressesBegan(menu, with: nil)
+        controller.pressesEnded(menu, with: nil)
+        #expect(inputs.log == ["menu"])
+        controller.pressesBegan(select, with: nil)
+        controller.pressesEnded(select, with: nil)
+        #expect(inputs.log == ["menu", "select"])
+        controller.remoteTouchTapRecognized()
+        #expect(inputs.log == ["menu", "select", "tap"])
+    }
+}
+
+@Suite("Select arming")
+struct SelectArmingTests {
+    @Test func aPressArmedAtItsStartFiresOnce() {
+        var arming = SelectArming()
+        arming.began(canTake: true)
+        let first = arming.ended()
+        let second = arming.ended()
+        #expect(first)
+        #expect(!second)
+    }
+
+    @Test func aPressRefusedAtItsStartNeverFires() {
+        var arming = SelectArming()
+        arming.began(canTake: false)
+        let fired = arming.ended()
+        #expect(!fired)
+    }
+
+    @Test func aCancelledPressNeverFires() {
+        var arming = SelectArming()
+        arming.began(canTake: true)
+        arming.cancelled()
+        let fired = arming.ended()
+        #expect(!fired)
+    }
+}
+
+/// What reached each of the gate's handlers, in order.
+@MainActor
+private final class GateInputs {
+    var canTakeSelect = true
+    private(set) var log: [String] = []
+
+    func controller() -> MenuGateHostingController<EmptyView> {
+        let controller = MenuGateHostingController(rootView: EmptyView())
+        MenuPressGate(
+            onMenu: { self.log.append("menu") },
+            canTakeSelect: { self.canTakeSelect },
+            onSelect: { self.log.append("select") },
+            onRemoteTouchTap: { self.log.append("tap") }
+        ) { EmptyView() }
+            .applyHandlers(to: controller)
+        return controller
+    }
+}
+
+/// A press UIKit never sent, so the gate's overrides can be driven directly.
+private final class FakePress: UIPress {
+    private let pressType: UIPress.PressType
+
+    init(_ type: UIPress.PressType) {
+        pressType = type
+        super.init()
+    }
+
+    override var type: UIPress.PressType { pressType }
+    override var key: UIKey? { nil }
 }
 
 @Suite("Projected finish time")
