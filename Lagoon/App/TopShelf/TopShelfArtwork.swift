@@ -39,7 +39,7 @@ nonisolated enum TopShelfArtwork {
     /// extended-range format, and `jpegData` returns nil for extended-range
     /// images (the SDR simulator hides this). It also reads the main screen
     /// off the main thread.
-    private static func opaqueFormat() -> UIGraphicsImageRendererFormat {
+    static func opaqueFormat() -> UIGraphicsImageRendererFormat {
         let format = UIGraphicsImageRendererFormat()
         // Sizes are already pixels; screen scale would quadruple the bitmap.
         format.scale = 1
