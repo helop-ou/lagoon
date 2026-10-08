@@ -116,7 +116,7 @@ so you know to read that guide before touching the area.
   has regressed most often. A light Siri Remote touch-surface tap and a Select
   press are different inputs and never share a path. The delivery ladder
   descends only on the engine's verdict about the samples, and a `.delivery`
-  verdict is never a reason to re-encode.
+  verdict never skips remux to reach the re-encode.
 - **The engine package** — its own repository, and its own
   [guide](https://github.com/helop-ou/lagoon-engine/blob/main/docs/engine.md)
   and [standards](https://github.com/helop-ou/lagoon-engine/blob/main/docs/standards.md).

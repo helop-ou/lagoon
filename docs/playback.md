@@ -53,7 +53,9 @@ failure-driven delivery ladder go direct play → remux → video transcode.
   skips remux and is one-way: it costs a reload, the embedded subtitle tracks
   and server CPU per viewer, so a failure that says nothing about the
   bitstream must never reach it.
-- **A `.delivery` verdict is never a reason to re-encode.**
+- **A `.delivery` verdict never skips to the re-encode.** It goes to remux
+  first; only a remux that fails too, for either cause, falls to the
+  transcode.
 
 The engine guards its own verdicts: a reclaimed decode session is rebuilt,
 not reported undecodable, and a just-flushed renderer refuses a non-keyframe.

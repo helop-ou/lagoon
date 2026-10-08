@@ -151,7 +151,8 @@ The next rung depends on `PlaybackEngineFailure.Cause`, i.e. whether
 redelivering the same samples could help:
 
 - `.delivery` (container, transport or an AVFoundation object failed): a
-  server rewrite routinely fixes it, so go to the cheap rung.
+  server rewrite routinely fixes it, so go to the cheap rung. If remux
+  fails too, whatever the cause, the transcode is the last rung left.
 - `.undecodable` (codec outside the envelope, VideoToolbox declined, decode
   failed): a stream copy returns the same bitstream, so **skip remux** and go
   straight to the re-encode.
