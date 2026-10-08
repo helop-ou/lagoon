@@ -289,7 +289,17 @@ nonisolated enum DeviceProfile {
     /// transcode rung.
     static func lagoon(for delivery: PlaybackDelivery, maxBitrate: Int? = nil) -> Profile {
         let forRung = delivery == .transcode ? boundedForRealtimeTranscode(lagoon) : lagoon
-        return cappedForMeteredPath(cappedToBitrate(forRung, maxBitrate))
+        let capped = cappedToBitrate(forRung, maxBitrate)
+        #if os(iOS)
+        return cappedForMeteredPath(
+            capped,
+            cost: NetworkPathObserver.shared.current,
+            allowFullQuality: UserDefaults.standard.bool(forKey: meteredOverrideKey)
+        )
+        #else
+        // An Apple TV never reports an expensive path.
+        return capped
+        #endif
     }
 
     /// The connection's ceiling (`PlaybackQualityLimit`). Both figures come
@@ -321,14 +331,13 @@ nonisolated enum DeviceProfile {
         return nil
     }
 
-    /// Bounds a profile on a metered path; untouched otherwise. iOS only:
-    /// an Apple TV never reports an expensive path.
+    /// Bounds a profile on a metered path; untouched otherwise. Only iOS
+    /// applies it, in `lagoon(for:maxBitrate:)`.
     static func cappedForMeteredPath(
         _ profile: Profile,
-        cost: NetworkPathCost = NetworkPathObserver.shared.current,
-        allowFullQuality: Bool = UserDefaults.standard.bool(forKey: meteredOverrideKey)
+        cost: NetworkPathCost,
+        allowFullQuality: Bool
     ) -> Profile {
-        #if os(iOS)
         guard MeteredPathPolicy.applies(cost: cost, allowFullQuality: allowFullQuality) else {
             return profile
         }
@@ -346,9 +355,6 @@ nonisolated enum DeviceProfile {
             boundedTo($0, width: MeteredPathPolicy.maxWidth, height: MeteredPathPolicy.maxHeight)
         }
         return capped
-        #else
-        return profile
-        #endif
     }
 
     /// The defaults key behind Settings → Playback → Full Quality on Cellular.
