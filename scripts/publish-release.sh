@@ -87,7 +87,12 @@ notes="$("$root/scripts/generate-changelog.sh" --notes "$want_build")" \
     || die "could not read the notes for build ${want_build}"
 ok "release notes read for build ${want_build}"
 
-# 6. A re-tag cannot be undone: anyone who fetched keeps the old revision.
+# 6. The published codec table must state exactly the profile this build sends.
+"$root/scripts/generate-codec-support.sh" --check >/dev/null \
+    || die "docs/codec-support.md is out of date or could not be checked. Run scripts/generate-codec-support.sh"
+ok "docs/codec-support.md is current"
+
+# 7. A re-tag cannot be undone: anyone who fetched keeps the old revision.
 if git -C "$root" rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
     die "${tag} already exists locally"
 fi
@@ -96,7 +101,7 @@ if [ -n "$(git -C "$root" ls-remote --tags origin "refs/tags/${tag}" 2>/dev/null
 fi
 ok "${tag} is unused"
 
-# 7. gh creates the tag through the API, so the remote must have the revision.
+# 8. gh creates the tag through the API, so the remote must have the revision.
 sha="$(git -C "$root" rev-parse --verify "${rev}^{commit}")" \
     || die "cannot resolve revision ${rev}"
 git -C "$root" fetch --quiet origin || die "could not reach origin"
@@ -105,7 +110,7 @@ if ! git -C "$root" merge-base --is-ancestor "$sha" origin/main 2>/dev/null; the
 fi
 ok "${sha:0:9} is on origin/main"
 
-# 8. The website (a separate repository) restates the version and formats.
+# 9. The website (a separate repository) restates the version and formats.
 #    Warn, do not stop, if it is behind. Never report a check that could not
 #    run as passing.
 site_out=""
@@ -126,8 +131,8 @@ else
     echo "      Run scripts/generate-site-facts.sh --check to see why."
 fi
 
-# 9. The archived revision is not recorded, so show the commits since the
-#    build-number bump and let a human confirm.
+# 10. The archived revision is not recorded, so show the commits since the
+#     build-number bump and let a human confirm.
 bump="$(git -C "$root" log --format=%H -S"CURRENT_PROJECT_VERSION = ${want_build};" \
     --pickaxe-regex -1 -- Lagoon.xcodeproj/project.pbxproj 2>/dev/null || true)"
 if [ -n "$bump" ] && [ "$bump" != "$sha" ]; then
