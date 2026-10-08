@@ -62,9 +62,20 @@ extension DownloadStore {
         return decoder
     }()
 
+    /// Starts fresh when the file is missing or unreadable. An unreadable one
+    /// is moved aside first: the next save would otherwise overwrite every
+    /// record it holds.
     static func loadManifest(at url: URL) -> DownloadManifest {
         guard let data = try? Data(contentsOf: url) else { return DownloadManifest() }
-        return (try? manifestDecoder.decode(DownloadManifest.self, from: data)) ?? DownloadManifest()
+        do {
+            return try manifestDecoder.decode(DownloadManifest.self, from: data)
+        } catch {
+            log.error("unreadable download manifest: \(error.localizedDescription, privacy: .public)")
+            let stamp = Int(Date.now.timeIntervalSince1970)
+            let aside = url.deletingLastPathComponent().appending(path: "manifest-unreadable-\(stamp).json")
+            try? FileManager.default.moveItem(at: url, to: aside)
+            return DownloadManifest()
+        }
     }
 
     static func saveManifest(_ manifest: DownloadManifest, at url: URL) {

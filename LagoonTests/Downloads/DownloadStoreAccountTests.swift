@@ -34,6 +34,27 @@ struct DownloadStoreAccountTests {
         try? FileManager.default.removeItem(at: base)
     }
 
+    @Test func anUnreadableManifestIsSetAsideRatherThanOverwritten() throws {
+        defer { cleanUp() }
+        let unreadable = Data(#"{"entries":[{"itemID":"item1","#.utf8)
+        try FileManager.default.createDirectory(at: directory(for: "a"), withIntermediateDirectories: true)
+        try unreadable.write(to: directory(for: "a").appending(path: "manifest.json"))
+        let store = makeStore()
+        let owner = Owner()
+
+        store.activate(accountID: "a", owner: ObjectIdentifier(owner))
+        #expect(store.entries.isEmpty)
+        store.save()
+
+        // The fresh manifest is saved, and the records it could not read survive beside it.
+        let names = try FileManager.default.contentsOfDirectory(atPath: directory(for: "a").path)
+        let setAside = names.filter { $0 != "manifest.json" }
+        #expect(names.contains("manifest.json"))
+        #expect(setAside.count == 1)
+        let kept = try #require(setAside.first)
+        #expect(try Data(contentsOf: directory(for: "a").appending(path: kept)) == unreadable)
+    }
+
     @Test func aNilActivationFromAnotherOwnerIsIgnored() throws {
         defer { cleanUp() }
         try storeManifest(["item1"], for: "a")
