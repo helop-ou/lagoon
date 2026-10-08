@@ -78,6 +78,8 @@ final class JellyfinClient {
 
     private let session: URLSession
     private let downloads: BoundedDownload
+    /// The proxy headers this client sends; see `ServerHeaderStore`.
+    let headerStore: ServerHeaderStore
 
     nonisolated static let decoder: JSONDecoder = {
         let decoder = JSONDecoder()
@@ -99,14 +101,20 @@ final class JellyfinClient {
 
     init(
         deviceId: String,
-        sessionConfiguration: URLSessionConfiguration = .default
+        sessionConfiguration: URLSessionConfiguration = .default,
+        headerStore: ServerHeaderStore = .shared
     ) {
         self.deviceId = deviceId
+        self.headerStore = headerStore
         let config = sessionConfiguration
         config.timeoutIntervalForRequest = 30
         // API calls bypass the URL cache; see `request(for:)`.
         config.urlCache = nil
-        session = URLSession(configuration: config, delegate: ServerHeaderRedirectGuard.shared, delegateQueue: nil)
+        session = URLSession(
+            configuration: config,
+            delegate: ServerHeaderRedirectGuard(store: headerStore),
+            delegateQueue: nil
+        )
         downloads = BoundedDownload(configuration: config)
     }
 
@@ -137,7 +145,11 @@ final class JellyfinClient {
 
     /// An independent copy for work that may outlive an account change.
     func sessionSnapshot() -> JellyfinClient {
-        let copy = JellyfinClient(deviceId: deviceId, sessionConfiguration: session.configuration)
+        let copy = JellyfinClient(
+            deviceId: deviceId,
+            sessionConfiguration: session.configuration,
+            headerStore: headerStore
+        )
         if let serverURL { copy.configure(serverURL: serverURL) }
         if let accessToken, let userId { copy.activateSession(token: accessToken, userId: userId) }
         return copy
@@ -279,7 +291,7 @@ final class JellyfinClient {
             headerName: "Authorization",
             headerValue: authorizationHeader(token: accessToken),
             queryNames: ["apikey", "api_key"],
-            additionalHeaders: ServerHeaderStore.shared.fields(for: serverURL)
+            additionalHeaders: headerStore.fields(for: serverURL)
         )
     }
 
@@ -476,7 +488,7 @@ final class JellyfinClient {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = body
         }
-        ServerHeaderStore.shared.apply(to: &request)
+        headerStore.apply(to: &request)
         return PreparedRequest(request: request, session: authenticated ? sessionIdentity : nil, probe: probe)
     }
 
@@ -604,7 +616,7 @@ final class JellyfinClient {
         request.timeoutInterval = Self.peekTimeout
         request.setValue(authorizationHeader(token: token), forHTTPHeaderField: "Authorization")
         request.setValue("application/json", forHTTPHeaderField: "Accept")
-        ServerHeaderStore.shared.apply(to: &request)
+        headerStore.apply(to: &request)
         guard let (data, response) = try? await session.data(for: request),
               (response as? HTTPURLResponse)?.statusCode == 200,
               let page = try? Self.decoder.decode(ItemsPage.self, from: data) else { return nil }

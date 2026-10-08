@@ -99,6 +99,7 @@ final class ServerSocket {
 
     private let continuation: AsyncStream<ServerSocketMessage>.Continuation
     private let url: URL?
+    private let headerStore: ServerHeaderStore
     private let session: URLSession
     private var connectionTask: Task<Void, Never>?
     private var socketTask: URLSessionWebSocketTask?
@@ -113,9 +114,20 @@ final class ServerSocket {
         } else {
             url = nil
         }
+        headerStore = client.headerStore
         let configuration = URLSessionConfiguration.default
         configuration.urlCache = nil
-        session = URLSession(configuration: configuration, delegate: ServerHeaderRedirectGuard.shared, delegateQueue: nil)
+        session = URLSession(
+            configuration: configuration,
+            delegate: ServerHeaderRedirectGuard(store: headerStore),
+            delegateQueue: nil
+        )
+    }
+
+    /// The upgrade request, with the server's proxy headers. Nil while the
+    /// client is signed out.
+    var handshakeRequest: URLRequest? {
+        url.map { URLRequest(url: $0).withServerHeaders(headerStore) }
     }
 
     func connect() {
@@ -158,8 +170,8 @@ final class ServerSocket {
     /// Returns whether a message arrived. The handshake alone can succeed
     /// against a proxy that then answers nothing.
     private func receiveUntilFailure() async -> Bool {
-        guard let url else { return false }
-        let task = session.webSocketTask(with: URLRequest(url: url).withServerHeaders())
+        guard let request = handshakeRequest else { return false }
+        let task = session.webSocketTask(with: request)
         socketTask = task
         task.resume()
         var opened = false
