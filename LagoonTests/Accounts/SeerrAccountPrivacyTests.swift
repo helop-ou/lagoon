@@ -91,6 +91,53 @@ struct SeerrAccountPrivacyTests {
         #expect(fixture.store.errorMessage == nil)
     }
 
+    @Test func aRestoreThatTimesOutKeepsTheSavedCookie() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        SeerrPrivacyProtocol.fail("/api/v1/auth/me", with: .transport(.timedOut))
+        await fixture.store.activate(for: fixture.a)
+        #expect(fixture.store.user == nil)
+        #expect(fixture.store.errorMessage != nil)
+        #expect(fixture.credentials.string(for: fixture.cookieA) == "cookie-a")
+    }
+
+    @Test func aRestoreTheServerRejectsDeletesTheSavedCookie() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        SeerrPrivacyProtocol.fail("/api/v1/auth/me", with: .status(401))
+        await fixture.store.activate(for: fixture.a)
+        #expect(fixture.store.user == nil)
+        #expect(fixture.store.client.sessionCookie == nil)
+        #expect(fixture.credentials.string(for: fixture.cookieA) == nil)
+        #expect(fixture.credentials.string(for: fixture.cookieB) == "cookie-b")
+    }
+
+    @Test func aRefreshThatTimesOutKeepsTheSession() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        await fixture.store.activate(for: fixture.a)
+        #expect(fixture.store.user?.name == "A")
+        SeerrPrivacyProtocol.fail("/api/v1/auth/me", with: .transport(.timedOut))
+        await fixture.store.refreshUser()
+        #expect(fixture.store.user?.name == "A")
+        #expect(fixture.store.errorMessage != nil)
+        #expect(fixture.store.client.sessionCookie == "cookie-a")
+        #expect(fixture.credentials.string(for: fixture.cookieA) == "cookie-a")
+    }
+
+    @Test func aRefreshTheServerRejectsDeletesTheSavedCookie() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        await fixture.store.activate(for: fixture.a)
+        #expect(fixture.store.user?.name == "A")
+        SeerrPrivacyProtocol.fail("/api/v1/auth/me", with: .status(401))
+        await fixture.store.refreshUser()
+        #expect(fixture.store.user == nil)
+        #expect(fixture.store.client.sessionCookie == nil)
+        #expect(fixture.credentials.string(for: fixture.cookieA) == nil)
+        #expect(fixture.credentials.string(for: fixture.cookieB) == "cookie-b")
+    }
+
     private final class Fixture {
         let suite = "SeerrAccountPrivacyTests.\(UUID().uuidString)"
         let defaults: UserDefaults
@@ -127,9 +174,13 @@ private nonisolated final class SeerrPrivacyProtocol: URLProtocol, @unchecked Se
     private nonisolated(unsafe) static var heldPath: String?
     private nonisolated(unsafe) static var held: [SeerrPrivacyProtocol] = []
     private nonisolated(unsafe) static var recorded: [URLRequest] = []
+    private nonisolated(unsafe) static var failures: [String: Failure] = [:]
+    enum Failure { case status(Int), transport(URLError.Code) }
     static var requests: [URLRequest] { lock.withLock { recorded } }
-    static func reset() { lock.withLock { recorded = []; heldPath = nil } }
+    static func reset() { lock.withLock { recorded = []; heldPath = nil; failures = [:] } }
     static func hold(_ path: String) { lock.withLock { heldPath = path } }
+    /// Answers every later request for `path` with this failure.
+    static func fail(_ path: String, with failure: Failure) { lock.withLock { failures[path] = failure } }
     static func waitUntilHeld() async throws {
         for _ in 0..<200 {
             if lock.withLock({ !held.isEmpty }) { return }
@@ -154,6 +205,19 @@ private nonisolated final class SeerrPrivacyProtocol: URLProtocol, @unchecked Se
     override func stopLoading() {}
     private func respond() {
         guard let url = request.url else { return }
+        switch Self.lock.withLock({ Self.failures[url.path] }) {
+        case .status(let status):
+            let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)!
+            client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: Data("{}".utf8))
+            client?.urlProtocolDidFinishLoading(self)
+            return
+        case .transport(let code):
+            client?.urlProtocol(self, didFailWithError: URLError(code))
+            return
+        case nil:
+            break
+        }
         var headers = ["Content-Type": "application/json"]
         let body: String
         switch url.path {
