@@ -345,6 +345,7 @@ struct SubtitleWorkflowTests {
             }
         }
 
+        try await waitUntil { engine.subtitleTracks.first?.isSelected == true }
         let track = try #require(engine.subtitleTracks.first)
         #expect(track.isSelected)
         #expect(track.source == .downloaded)
