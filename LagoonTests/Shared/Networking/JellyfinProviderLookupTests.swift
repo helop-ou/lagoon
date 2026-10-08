@@ -10,7 +10,7 @@ struct JellyfinProviderLookupTests {
         let item = try await client.item(tmdbID: 123, mediaType: .movie)
 
         #expect(item?.id == "matching-item")
-        let url = try #require(StubURLProtocol.requests(host: "jellyfin.test").last?.url)
+        let url = try #require(StubURLProtocol.requests(host: "provider-lookup.test").last?.url)
         let components = try #require(URLComponents(url: url, resolvingAgainstBaseURL: false))
         #expect(components.queryItems?.first(where: { $0.name == "AnyProviderIdEquals" })?.value == "Tmdb.123")
         #expect(components.queryItems?.first(where: { $0.name == "IncludeItemTypes" })?.value == "Movie")
@@ -25,10 +25,10 @@ struct JellyfinProviderLookupTests {
     }
 
     private func makeClient(responseProviderID: String) -> JellyfinClient {
-        StubURLProtocol.register(host: "jellyfin.test") { _ in
+        StubURLProtocol.register(host: "provider-lookup.test") { _ in
             let body = #"{"Items":[{"Id":"matching-item","Name":"Match","Type":"Movie","ProviderIds":{"Tmdb":"\#(responseProviderID)"}}],"TotalRecordCount":1}"#
             return (200, ["Content-Type": "application/json"], Data(body.utf8))
         }
-        return StubURLProtocol.makeJellyfinClient(host: "jellyfin.test", deviceId: "provider-lookup-tests")
+        return StubURLProtocol.makeJellyfinClient(host: "provider-lookup.test", deviceId: "provider-lookup-tests")
     }
 }
