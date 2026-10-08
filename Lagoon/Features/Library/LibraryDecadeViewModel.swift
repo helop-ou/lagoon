@@ -34,6 +34,14 @@ final class LibraryDecadeViewModel {
         }
     }
 
+    /// This scope's decades from a load that finished and succeeded: the
+    /// only list a saved decade may be cleared against. A list kept through
+    /// a failure, or one still being replaced, proves nothing is gone.
+    func confirmedDecades(for scope: LibraryYearScope) -> [LibraryDecade]? {
+        guard self.scope == scope, !isLoading, !loadFailed else { return nil }
+        return decades
+    }
+
     func choices(for scope: LibraryYearScope, selected: LibraryDecade?) -> [LibraryDecade] {
         let available = self.scope == scope ? decades ?? [] : []
         // Keep a saved selection visible and clearable until a successful response.

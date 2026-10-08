@@ -358,8 +358,7 @@ struct LibraryView: View {
         let scope = selection.yearScope
         await decadeViewModel.load(scope: scope, fetch: session.client.libraryYears)
         guard !Task.isCancelled, scope == selection.yearScope,
-              decadeViewModel.scope == scope, !decadeViewModel.isLoading, !decadeViewModel.loadFailed,
-              let available = decadeViewModel.decades else { return }
+              let available = decadeViewModel.confirmedDecades(for: scope) else { return }
         selection.reconcileDecade(available: available)
     }
 
