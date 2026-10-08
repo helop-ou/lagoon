@@ -17,7 +17,7 @@ struct AccountDraftTests {
         try KeychainStore.set("test-token", for: account.keychainAccount)
         defaults.set(try JSONEncoder().encode([account]), forKey: "accounts")
         defaults.set(account.id, forKey: "session.activeAccountId")
-        let session = SessionStore(defaults: defaults)
+        let session = SessionStore(defaults: defaults, sessionConfiguration: OfflineProtocol.configuration())
         let before = defaults.dictionaryRepresentation() as NSDictionary
         session.addAccount()
         let draft = session.makeAccountDraft()
@@ -48,7 +48,7 @@ struct AccountDraftTests {
     }
 
     @Test func cancelledDraftCannotStartNetworkAuthentication() async {
-        let draft = SessionStore(accountDraft: true)
+        let draft = SessionStore(accountDraft: true, sessionConfiguration: OfflineProtocol.configuration())
         draft.cancelAccountDraft()
         await #expect(throws: CancellationError.self) {
             try await draft.connect(to: "https://example.invalid")
@@ -75,7 +75,7 @@ struct AccountDraftTests {
         defaults.set(try JSONEncoder().encode([account]), forKey: "accounts")
         defaults.set(account.id, forKey: "session.activeAccountId")
         defaults.set(account.serverURL.absoluteString, forKey: "server.url")
-        let session = SessionStore(defaults: defaults)
+        let session = SessionStore(defaults: defaults, sessionConfiguration: OfflineProtocol.configuration())
         let before = defaults.dictionaryRepresentation() as NSDictionary
         let draft = session.makeAccountDraft()
         #expect(draft.phase == .needsSignIn)
@@ -110,7 +110,7 @@ struct AccountDraftTests {
                                         serverName: "Remembered", userId: UUID().uuidString, userName: "Viewer")
             defaults.set(try JSONEncoder().encode([account]), forKey: "accounts")
         }
-        let session = SessionStore(defaults: defaults)
+        let session = SessionStore(defaults: defaults, sessionConfiguration: OfflineProtocol.configuration())
         let before = defaults.dictionaryRepresentation() as NSDictionary
         let draft = session.makeAccountDraft()
 
@@ -136,7 +136,7 @@ struct AccountDraftTests {
         try KeychainStore.set("test-token", for: active.keychainAccount)
         defaults.set(try JSONEncoder().encode([first, active]), forKey: "accounts")
         defaults.set(active.id, forKey: "session.activeAccountId")
-        let session = SessionStore(defaults: defaults)
+        let session = SessionStore(defaults: defaults, sessionConfiguration: OfflineProtocol.configuration())
         let draft = session.makeAccountDraft()
 
         #expect(draft.phase == .needsSignIn)
@@ -145,4 +145,21 @@ struct AccountDraftTests {
         #expect(draft.client.accessToken == nil)
         #expect(draft.client.userId == nil)
     }
+}
+
+/// Fails every request without leaving the process; activation's profile
+/// read would otherwise reach the real network.
+private nonisolated final class OfflineProtocol: URLProtocol, @unchecked Sendable {
+    static func configuration() -> URLSessionConfiguration {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [OfflineProtocol.self]
+        return configuration
+    }
+
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        client?.urlProtocol(self, didFailWithError: URLError(.notConnectedToInternet))
+    }
+    override func stopLoading() {}
 }
