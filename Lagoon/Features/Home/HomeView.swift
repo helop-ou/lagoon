@@ -124,8 +124,8 @@ struct HomeView: View {
     /// Any branch may draw nothing: an empty rail hides itself.
     @ViewBuilder
     private func row(_ id: String) -> some View {
-        switch id {
-        case HomeRowID.continueWatching:
+        switch HomeRowKind(id: id) {
+        case .continueWatching:
             MediaRail(
                 title: "Continue Watching",
                 items: viewModel.resume,
@@ -134,7 +134,7 @@ struct HomeView: View {
                 playAction: { playerItem = PlayerItem(media: $0) },
                 onUserDataChange: refreshUserData
             )
-        case HomeRowID.nextUp:
+        case .nextUp:
             MediaRail(
                 title: "Next Up",
                 items: viewModel.nextUp,
@@ -143,41 +143,41 @@ struct HomeView: View {
                 playAction: { playerItem = PlayerItem(media: $0) },
                 onUserDataChange: refreshUserData
             )
-        case HomeRowID.favorites:
+        case .favorites:
             MediaRail(
                 title: "Favorites",
                 items: viewModel.favorites,
                 style: .landscape,
                 onUserDataChange: refreshUserData
             )
-        case HomeRowID.recentlyAddedMovies:
+        case .recentlyAddedMovies:
             recentlyAddedRails(collectionType: "movies")
-        case HomeRowID.recentlyAddedShows:
+        case .recentlyAddedShows:
             recentlyAddedRails(collectionType: "tvshows")
-        case HomeRowID.movieGenres:
+        case .movieGenres:
             GenreRail(
                 title: "Movie Genres",
                 genres: viewModel.movieGenreShelf,
                 includeTypes: [.movie],
                 identifier: "movies"
             )
-        case HomeRowID.showGenres:
+        case .showGenres:
             GenreRail(
                 title: "Show Genres",
                 genres: viewModel.showGenreShelf,
                 includeTypes: [.series],
                 identifier: "shows"
             )
-        case CollectionShelf.rowID:
+        case .collections:
             CollectionRail(title: "Collections", collections: viewModel.collections)
-        case HomeCuratedRows.ID.topMovies, HomeCuratedRows.ID.topShows:
+        case .topTen:
             topTenRail(id)
-        default:
-            if HomeRowID.isNative(id) {
-                curatedRail(id)
-            } else {
-                pluginRail(id)
-            }
+        case .curated:
+            curatedRail(id)
+        case .plugin(let section):
+            pluginRail(section)
+        case nil:
+            EmptyView()
         }
     }
 
