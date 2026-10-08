@@ -41,14 +41,20 @@ struct SentryTransportTests {
         deviceModel: "AppleTV14,1", isSimulator: true, environment: "debug", engineVersion: "lavf62.3.100"
     )
 
-    static func incident(_ code: DiagnosticIncidentCode = .playbackStall) -> DiagnosticIncident {
+    static func incident(
+        _ code: DiagnosticIncidentCode = .playbackStall,
+        timestamp: Date = Date()
+    ) -> DiagnosticIncident {
         DiagnosticIncident(
             code: code, level: .warning, variant: ["test"], fields: ["stalls": .int(1)],
-            history: [], occurrences: 1, timestamp: Date(), uptime: 10
+            history: [], occurrences: 1, timestamp: timestamp, uptime: 10
         )
     }
 
-    static func makeTransport(enabled: @escaping @Sendable () -> Bool = { true }) throws -> (SentryTransport, URL) {
+    static func makeTransport(
+        policy: SentryTransportPolicy = .standard,
+        enabled: @escaping @Sendable () -> Bool = { true }
+    ) throws -> (SentryTransport, URL) {
         SentryFixture.reset()
         StubURLProtocol.register(host: "o1.ingest.de.sentry.io", handler: SentryFixture.respond)
         let directory = FileManager.default.temporaryDirectory
@@ -57,10 +63,19 @@ struct SentryTransportTests {
             dsn: try #require(SentryDSN(string: "https://key@o1.ingest.de.sentry.io/1")),
             context: context,
             directory: directory,
+            policy: policy,
             session: URLSession(configuration: StubURLProtocol.configuration()),
             isEnabled: enabled
         )
         return (transport, directory)
+    }
+
+    /// Pending file names, oldest first, without their event ids.
+    static func pendingStamps(_ directory: URL) -> [String] {
+        ((try? FileManager.default.contentsOfDirectory(atPath: directory.path)) ?? [])
+            .filter { $0.hasSuffix(".envelope") }
+            .map { String($0.prefix { $0 != "-" }) }
+            .sorted()
     }
 
     static func pendingCount(_ directory: URL) -> Int {
@@ -128,5 +143,21 @@ struct SentryTransportTests {
         await Self.wait { SentryFixture.requests.count == 2 && Self.pendingCount(directory) == 0 }
         #expect(SentryFixture.requests.count == 2)
         #expect(Self.pendingCount(directory) == 0)
+    }
+
+    /// Offline for a long time, the queue keeps the newest reports and
+    /// drops the oldest, so it never grows without bound.
+    @Test func aFullQueueDropsTheOldestEnvelope() async throws {
+        var policy = SentryTransportPolicy.standard
+        policy.maximumPending = 2
+        let (transport, directory) = try Self.makeTransport(policy: policy)
+        // A server error parks each envelope on disk.
+        SentryFixture.responder = { _ in (503, [:]) }
+        for seconds in [1_000.0, 2_000, 3_000] {
+            transport.submit(Self.incident(timestamp: Date(timeIntervalSince1970: seconds)))
+        }
+        let newest = ["0000002000000", "0000003000000"]
+        await Self.wait { Self.pendingStamps(directory) == newest }
+        #expect(Self.pendingStamps(directory) == newest)
     }
 }
