@@ -58,4 +58,16 @@ struct StubURLProtocolTests {
         #expect(error?.code == .unsupportedURL)
         #expect(StubURLProtocol.requests(host: "unregistered.stub.test").isEmpty)
     }
+
+    @Test func aRecordedRequestKeepsItsBody() async throws {
+        let host = "body.stub.test"
+        StubURLProtocol.register(host: host) { _ in (204, [:], Data()) }
+        defer { StubURLProtocol.unregister(host: host) }
+        var request = URLRequest(url: URL(string: "https://\(host)/Sessions/Playing")!)
+        request.httpMethod = "POST"
+        request.httpBody = Data(#"{"ItemId":"film"}"#.utf8)
+        _ = try await URLSession(configuration: StubURLProtocol.configuration()).data(for: request)
+        let recorded = try #require(StubURLProtocol.requests(host: host).first)
+        #expect(recorded.httpBody == Data(#"{"ItemId":"film"}"#.utf8))
+    }
 }

@@ -7,7 +7,9 @@ import Foundation
 /// keep their own `URLProtocol` subclass; this only covers the simple case.
 ///
 /// A session built on `configuration()` never reaches the network: a request
-/// to a host nobody registered fails with `unregisteredHostError`.
+/// to a host nobody registered fails with `unregisteredHostError`. Recorded
+/// requests carry their body in `httpBody`, read off the stream URLSession
+/// hands a protocol, so tests can assert what was sent.
 nonisolated final class StubURLProtocol: URLProtocol, @unchecked Sendable {
     typealias Handler = @Sendable (URLRequest) throws -> (Int, [String: String], Data)
 
@@ -39,6 +41,23 @@ nonisolated final class StubURLProtocol: URLProtocol, @unchecked Sendable {
         lock.withLock { state.requests[host] ?? [] }
     }
 
+    /// The body of a request sent through this stub. URLSession moves
+    /// `httpBody` to `httpBodyStream` before a protocol sees it.
+    static func body(of request: URLRequest) -> Data? {
+        if let body = request.httpBody { return body }
+        guard let stream = request.httpBodyStream else { return nil }
+        stream.open()
+        defer { stream.close() }
+        var data = Data()
+        var buffer = [UInt8](repeating: 0, count: 4_096)
+        while stream.hasBytesAvailable {
+            let read = stream.read(&buffer, maxLength: buffer.count)
+            guard read > 0 else { break }
+            data.append(buffer, count: read)
+        }
+        return data
+    }
+
     /// What a request to an unregistered host fails with, rather than
     /// reaching a real server.
     static func unregisteredHostError(_ host: String?) -> URLError {
@@ -58,6 +77,10 @@ nonisolated final class StubURLProtocol: URLProtocol, @unchecked Sendable {
               let handler = Self.lock.withLock({ Self.state.handlers[host] }) else {
             client?.urlProtocol(self, didFailWithError: Self.unregisteredHostError(request.url?.host))
             return
+        }
+        var request = request
+        if request.httpBody == nil, let body = Self.body(of: request) {
+            request.httpBody = body
         }
         Self.lock.withLock { Self.state.requests[host, default: []].append(request) }
         do {
