@@ -41,10 +41,7 @@ struct MenuPressGate<Content: View>: UIViewControllerRepresentable {
 
     func makeUIViewController(context: Context) -> MenuGateHostingController<Content> {
         let controller = MenuGateHostingController(rootView: content())
-        controller.onMenu = onMenu
-        controller.canTakeSelect = canTakeSelect
-        controller.onSelect = onSelect
-        controller.onRemoteTouchTap = onRemoteTouchTap
+        applyHandlers(to: controller)
         controller.view.backgroundColor = .clear
         return controller
     }
@@ -54,10 +51,37 @@ struct MenuPressGate<Content: View>: UIViewControllerRepresentable {
         // `context.transaction` forwarded. Animate a value instead, as
         // CustomPlayerView's panel does.
         controller.rootView = content()
+        applyHandlers(to: controller)
+    }
+
+    /// Every render hands over fresh closures. The controller outlives the
+    /// render, so keeping the first ones would act on stale state.
+    func applyHandlers(to controller: MenuGateHostingController<Content>) {
         controller.onMenu = onMenu
         controller.canTakeSelect = canTakeSelect
         controller.onSelect = onSelect
         controller.onRemoteTouchTap = onRemoteTouchTap
+    }
+}
+
+/// Whether a Select press is the gate's to act on. Decided when the press
+/// begins: by the time it ends, a panel button's action may already have
+/// changed the state the check reads.
+struct SelectArming {
+    private(set) var isArmed = false
+
+    mutating func began(canTake: Bool) {
+        isArmed = canTake
+    }
+
+    /// True once for a press armed at its start.
+    mutating func ended() -> Bool {
+        defer { isArmed = false }
+        return isArmed
+    }
+
+    mutating func cancelled() {
+        isArmed = false
     }
 }
 
@@ -66,9 +90,7 @@ final class MenuGateHostingController<Content: View>: UIHostingController<Conten
     var canTakeSelect: (() -> Bool)?
     var onSelect: (() -> Void)?
     var onRemoteTouchTap: (() -> Void)?
-    /// Decided when the press begins. By the time it ends, a panel button's
-    /// action may already have changed the state the check reads.
-    private var selectArmed = false
+    private var selectArming = SelectArming()
     private(set) var remoteTouchTapRecognizer: UITapGestureRecognizer?
 
     // On hardware, UIKit's dismissal gesture recognizer takes Menu before
@@ -118,7 +140,7 @@ final class MenuGateHostingController<Content: View>: UIHostingController<Conten
         PlayerInputTrace.log("began \(Self.describe(presses)) via=pressesBegan")
         guard !isMenuPress(presses) else { return }
         if isSelectPress(presses) {
-            selectArmed = canTakeSelect?() ?? false
+            selectArming.began(canTake: canTakeSelect?() ?? false)
         }
         super.pressesBegan(presses, with: event)
     }
@@ -129,8 +151,7 @@ final class MenuGateHostingController<Content: View>: UIHostingController<Conten
             onMenu?()
             return
         }
-        if isSelectPress(presses), selectArmed {
-            selectArmed = false
+        if isSelectPress(presses), selectArming.ended() {
             onSelect?()
         }
         super.pressesEnded(presses, with: event)
@@ -140,7 +161,7 @@ final class MenuGateHostingController<Content: View>: UIHostingController<Conten
         PlayerInputTrace.log("cancelled \(Self.describe(presses)) via=pressesCancelled")
         guard !isMenuPress(presses) else { return }
         if isSelectPress(presses) {
-            selectArmed = false
+            selectArming.cancelled()
         }
         super.pressesCancelled(presses, with: event)
     }
