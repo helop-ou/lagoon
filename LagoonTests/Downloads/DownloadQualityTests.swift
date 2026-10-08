@@ -10,10 +10,10 @@ struct DownloadQualityTests {
         #expect(DownloadQuality.original.estimatedBytes(sourceSize: 12_345, runTimeTicks: Ticks.ticks(3_600)) == 12_345)
     }
 
-    @Test func highEstimateForATwoHourFilmIsAboutSevenPointFourGB() {
+    @Test func highEstimateForATwoHourFilmCountsBothVideoAndAudio() {
+        // (8 Mbps video + 256 kbps audio) / 8 bits × 7,200 s.
         let bytes = DownloadQuality.high.estimatedBytes(sourceSize: nil, runTimeTicks: Ticks.ticks(7_200))
-        let gigabytes = Double(bytes ?? 0) / 1_000_000_000
-        #expect(gigabytes > 7.0 && gigabytes < 7.8)
+        #expect(bytes == 7_430_400_000)
     }
 
     @Test func estimateIsNilWithoutARuntime() {
