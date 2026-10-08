@@ -12,15 +12,18 @@ struct SessionExpiryTests {
         let store = try await fixture.settledStore()
         #expect(store.phase == .signedIn)
         let sentBefore = SessionExpiryProtocol.requests.count
-        SessionExpiryProtocol.setReply(.http(401, ""))
+        // Only the request under test is rejected. A background request the
+        // store sends meanwhile succeeds, so it cannot be what expired the
+        // session.
+        SessionExpiryProtocol.setReply(.http(401, ""), forPathSuffix: path)
         do {
             _ = try await store.client.getData(path)
             Issue.record("A revoked token must fail")
         } catch JellyfinError.sessionExpired {
         }
-        // The only request that saw the 401 is the one under test.
-        let rejected = SessionExpiryProtocol.requests.dropFirst(sentBefore).compactMap(\.url?.path)
-        #expect(rejected == ["/jellyfin/\(path)"])
+        let underTest = SessionExpiryProtocol.requests.dropFirst(sentBefore).compactMap(\.url?.path)
+            .filter { $0 == "/jellyfin/\(path)" }
+        #expect(underTest.count == 1)
         #expect(store.phase == .needsSignIn)
         #expect(store.reauthenticationAccount?.id == fixture.first.id)
         #expect(store.activeAccount == nil)
@@ -321,13 +324,21 @@ private nonisolated final class SessionExpiryProtocol: URLProtocol, @unchecked S
     nonisolated(unsafe) private static var recorded: [URLRequest] = []
     nonisolated(unsafe) private static var held: [SessionExpiryProtocol] = []
     nonisolated(unsafe) private static var heldPathSuffix: String?
+    nonisolated(unsafe) private static var scopedReply: (pathSuffix: String, reply: Reply)?
     static var requests: [URLRequest] { lock.withLock { recorded } }
     static var hasHeldRequest: Bool { lock.withLock { !held.isEmpty } }
     static func setReply(_ value: Reply) { lock.withLock { reply = value } }
+    /// Answers only requests whose path ends this way with `value`; every
+    /// other request gets an empty success.
+    static func setReply(_ value: Reply, forPathSuffix suffix: String) {
+        lock.withLock { scopedReply = (suffix, value); reply = .http(200, "{}") }
+    }
     /// Holds only requests whose path ends this way, whatever the reply, so
     /// background requests a store sends on activation are never the one held.
     static func hold(pathSuffix: String) { lock.withLock { heldPathSuffix = pathSuffix } }
-    static func reset() { lock.withLock { recorded = []; held = []; heldPathSuffix = nil; reply = .http(200, "{}") } }
+    static func reset() {
+        lock.withLock { recorded = []; held = []; heldPathSuffix = nil; scopedReply = nil; reply = .http(200, "{}") }
+    }
 
     static func releaseHeld(status: Int) {
         let pending = lock.withLock { let result = held; held = []; return result }
@@ -342,6 +353,10 @@ private nonisolated final class SessionExpiryProtocol: URLProtocol, @unchecked S
             if let suffix = Self.heldPathSuffix, request.url?.path.hasSuffix(suffix) == true {
                 Self.held.append(self)
                 return Reply.hold
+            }
+            if let scoped = Self.scopedReply, request.url?.path.hasSuffix(scoped.pathSuffix) == true {
+                if case .hold = scoped.reply { Self.held.append(self) }
+                return scoped.reply
             }
             if case .hold = Self.reply { Self.held.append(self) }
             return Self.reply
