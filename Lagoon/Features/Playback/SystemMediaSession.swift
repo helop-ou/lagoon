@@ -108,7 +108,7 @@ final class PlaybackAudioSession {
         case .ended:
             let rawOptions = notification.userInfo?[AVAudioSessionInterruptionOptionKey] as? UInt ?? 0
             let options = AVAudioSession.InterruptionOptions(rawValue: rawOptions)
-            let shouldResume = wasPlayingBeforeInterruption && options.contains(.shouldResume)
+            let shouldResume = Self.shouldResume(wasPlaying: wasPlayingBeforeInterruption, options: options)
             Diagnostics.record(.audioInterruption, ["interruption": .string(shouldResume ? "endedResume" : "ended")])
             wasPlayingBeforeInterruption = false
             if shouldResume {
@@ -117,6 +117,15 @@ final class PlaybackAudioSession {
         @unknown default:
             break
         }
+    }
+
+    /// Resumes only what the interruption paused, and only when the system
+    /// says the other audio is done with the session.
+    nonisolated static func shouldResume(
+        wasPlaying: Bool,
+        options: AVAudioSession.InterruptionOptions
+    ) -> Bool {
+        wasPlaying && options.contains(.shouldResume)
     }
 
     private func handleRouteChange(_ notification: Notification) {
