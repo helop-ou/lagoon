@@ -22,6 +22,13 @@ struct TopShelfArtworkTests {
     }
 
     @Test func aComposedCarouselImageEncodesAsJPEG() {
+        // `jpegData` returns nil for an extended-range bitmap, which only an
+        // HDR television hands out; the SDR simulator encodes either way, so
+        // pin the 8-bit standard range the renderer is given.
+        let format = TopShelfArtwork.opaqueFormat()
+        #expect(format.preferredRange == .standard)
+        #expect(format.opaque)
+
         for size in [TopShelfArtwork.scale2x, TopShelfArtwork.scale1x] {
             let composed = TopShelfArtwork.compose(
                 backdrop: backdrop(),
