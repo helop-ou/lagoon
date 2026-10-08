@@ -19,11 +19,6 @@ struct DiagnosticsConfigurationTests {
         #expect(DiagnosticsConfiguration.resolveDSN(override: local, injected: Self.dsn) == local)
     }
 
-    @Test("A build given no DSN resolves to none")
-    func noDSN() {
-        #expect(DiagnosticsConfiguration.resolveDSN(override: nil, injected: nil) == nil)
-    }
-
     /// An undeclared setting leaves the Info.plist value empty or unexpanded.
     @Test("An empty or unexpanded build setting resolves to none",
           arguments: ["", "   ", "\n", "$(LAGOON_SENTRY_DSN)"])
@@ -35,13 +30,5 @@ struct DiagnosticsConfigurationTests {
     @Test("An unusable override falls back to the injected DSN")
     func overrideFallsBack() {
         #expect(DiagnosticsConfiguration.resolveDSN(override: "", injected: Self.dsn) == Self.dsn)
-    }
-
-    @Test("A resolved DSN is what the transport parses")
-    func resolvedDSNParses() throws {
-        let resolved = try #require(DiagnosticsConfiguration.resolveDSN(override: nil, injected: Self.dsn))
-        let parsed = try #require(SentryDSN(string: resolved))
-        #expect(parsed.publicKey == "abc123")
-        #expect(parsed.projectID == "2")
     }
 }

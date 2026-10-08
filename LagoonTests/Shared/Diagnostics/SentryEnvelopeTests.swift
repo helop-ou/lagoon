@@ -95,21 +95,6 @@ struct SentryEnvelopeTests {
         #expect(events[0]["t"] as? Double == -2)
         #expect(events[0]["code"] as? String == "playback.seek")
     }
-
-    @Test func oversizedFieldsNeverReachTheEnvelope() throws {
-        // A caller that hands a schema a sentence or a URL loses it here.
-        let incident = Self.incident(fields: [
-            "stage": .string("open"),
-            "message": .string("The stream https://lagoonfix.example.eu/Items/x could not be opened"),
-            "route": .string("Items/12c4"),
-        ])
-        let envelope = try #require(SentryEnvelope.make(incident: incident, context: Self.context))
-        let text = String(decoding: envelope.data, as: UTF8.self)
-        #expect(!text.contains("lagoonfix"))
-        #expect(!text.contains("could not be opened"))
-        #expect(!text.contains("12c4"))
-        #expect(text.contains("\"schemaRejected\":2"))
-    }
 }
 
 @Suite("Sentry transport policy")

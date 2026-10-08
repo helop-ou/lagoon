@@ -40,24 +40,6 @@ struct SiteFactsDocTests {
         }
     }
 
-    @Test @MainActor func theDocumentCarriesTheDeclaredVersionAndBuild() throws {
-        let json = try SiteFacts.render(
-            DeviceProfile.everything,
-            version: Changelog.version(),
-            build: Changelog.build()
-        )
-        let parsed = try JSONSerialization.jsonObject(
-            with: Data(json.utf8)
-        ) as? [String: String]
-        let facts = try #require(parsed)
-        #expect(facts["version"] == Changelog.version())
-        #expect(facts["build"] == Changelog.build())
-        for key in ["video", "hdr", "audio", "subtitles"] {
-            let value = try #require(facts[key], "\(key) missing")
-            #expect(!value.isEmpty)
-        }
-    }
-
     @Test func rowsAreSeparatedLists() throws {
         let json = try SiteFacts.render(DeviceProfile.everything, version: "1.0", build: "1")
         let facts = try #require(

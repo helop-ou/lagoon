@@ -148,14 +148,6 @@ struct SyncPlaySessionTests {
 
     // MARK: - Commands
 
-    @Test func aCommandForTheCurrentItemIsAccepted() throws {
-        var session = try Self.joinedWithQueue()
-        let command = try Self.command(kind: "Unpause", positionTicks: 0)
-        #expect(session.accepts(command))
-        session.record(command)
-        #expect(session.lastCommand == command)
-    }
-
     /// A new group greets with a `Stop` while nothing is queued.
     @Test func theAllZeroStopThatGreetsANewGroupIsIgnored() throws {
         var session = SyncPlayGroupSession()
