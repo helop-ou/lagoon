@@ -84,6 +84,29 @@ struct ChangelogTests {
         }
     }
 
+    @Test(arguments: [
+        ("1.2", "40", "1.2 (40)"),
+        ("1.2", "", "1.2"),
+        ("1.2", "1.2", "1.2"),
+    ])
+    func theRunningVersionShowsTheBuildOnlyWhenItAddsSomething(version: String, build: String, shown: String) throws {
+        // A throwaway bundle, so the Info.plist says what the case needs.
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "ChangelogVersion-\(UUID().uuidString).bundle", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let info: [String: Any] = [
+            "CFBundleIdentifier": "ee.helop.lagoon.tests.version",
+            "CFBundleShortVersionString": version,
+            "CFBundleVersion": build,
+        ]
+        try PropertyListSerialization.data(fromPropertyList: info, format: .xml, options: 0)
+            .write(to: directory.appending(path: "Info.plist"))
+        let bundle = try #require(Bundle(url: directory))
+
+        #expect(Changelog.runningDisplayVersion(from: bundle) == shown)
+    }
+
     @Test func aBuildWithNoEntryIsReportedRatherThanHidden() throws {
         // The panel and the About row both admit an unlisted build.
         let firstEntry: ChangelogEntry? = Changelog.entries.first
