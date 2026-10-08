@@ -314,6 +314,71 @@ struct HomeRailContentTests {
         #expect(model.pluginRails.map { HomeRowID.section(forPluginRailID: $0.id) } == ["MyList"])
     }
 
+    @Test func theTopTenScanAdvancesByWhatTheServerReturnsAndStopsAtItsTotal() async throws {
+        let client = makeClient()
+        let model = HomeViewModel()
+        // A server that caps every page at three, whatever Limit asked for.
+        HomeRailURLProtocol.setTopTenLibrary(Self.topTenLibrary(7), pageCap: 3, reportsTotal: true)
+
+        await model.load(client: client, accountID: "account", seerr: try makeSeerr())
+        for task in model.discoveryTasks { await task.value }
+
+        #expect(topTenStartIndexes() == [0, 3, 6])
+        #expect(model.curatedRails[HomeCuratedRows.ID.topMovies]?.items.map(\.id) == ["4", "3", "2", "1"])
+    }
+
+    @Test func theTopTenScanStopsAtAShortPageWhenTheServerGivesNoTotal() async throws {
+        let client = makeClient()
+        let model = HomeViewModel()
+        HomeRailURLProtocol.setTopTenLibrary(Self.topTenLibrary(7), pageCap: 3, reportsTotal: false)
+
+        await model.load(client: client, accountID: "account", seerr: try makeSeerr())
+        for task in model.discoveryTasks { await task.value }
+
+        #expect(topTenStartIndexes() == [0])
+    }
+
+    @Test(arguments: [(2, [1, 2]), (5, [1, 2, 3])])
+    func seerrDiscoveryFollowsItsPagesButNoFurtherThanThree(totalPages: Int, expected: [Int]) async throws {
+        let client = makeClient()
+        let model = HomeViewModel()
+        HomeRailURLProtocol.setSeerrTotalPages(totalPages)
+
+        await model.load(client: client, accountID: "account", seerr: try makeSeerr())
+        for task in model.discoveryTasks { await task.value }
+
+        let pages = HomeRailURLProtocol.urls
+            .filter { $0.path == "/api/v1/discover/movies" }
+            .compactMap { HomeRailURLProtocol.query($0, "page").flatMap(Int.init) }
+        #expect(pages == expected)
+    }
+
+    @Test func becauseYouWatchedPassesOverASeedWithTooFewSimilarTitles() async throws {
+        let client = makeClient()
+        let model = HomeViewModel()
+        HomeRailURLProtocol.setWatchHistory(
+            played: #"[{"Id":"thin","Type":"Movie","Name":"Thin"},{"Id":"rich","Type":"Movie","Name":"Rich"}]"#,
+            similarCounts: ["thin": HomeCuratedRows.minimumItems - 1, "rich": HomeCuratedRows.minimumItems]
+        )
+
+        await model.load(client: client, accountID: "account")
+        for task in model.discoveryTasks { await task.value }
+
+        let rail = try #require(model.curatedRails[HomeCuratedRows.ID.becauseYouWatched])
+        #expect(rail.title == "Because You Watched Rich")
+        #expect(rail.items.count == HomeCuratedRows.minimumItems)
+    }
+
+    private static func topTenLibrary(_ count: Int) -> [String] {
+        (1...count).map { #"{"Id":"\#($0)","Type":"Movie","ProviderIds":{"Tmdb":"\#($0)"}}"# }
+    }
+
+    private func topTenStartIndexes() -> [Int] {
+        HomeRailURLProtocol.urls
+            .filter { HomeRailURLProtocol.query($0, "Fields")?.hasPrefix("ProviderIds,") == true }
+            .compactMap { HomeRailURLProtocol.query($0, "StartIndex").flatMap(Int.init) }
+    }
+
     /// Four movies the Top 10 stub's TMDB ids match, eligible for the hero,
     /// with a genre for the genre shelf.
     private static let matchableMovies = #"""
@@ -363,6 +428,14 @@ private nonisolated final class HomeRailURLProtocol: URLProtocol, @unchecked Sen
         var genres = "[]"
         var homeSections = "[]"
         var homeSectionItems = "[]"
+        /// When set, the Top 10 scan pages through these, at most
+        /// `topTenPageCap` at a time, as a server capping `Limit` would.
+        var topTenLibrary: [String]?
+        var topTenPageCap = 500
+        var topTenReportsTotal = true
+        var played = "[]"
+        var similarCounts: [String: Int] = [:]
+        var seerrTotalPages = 1
         var heldStage: String?
         var pending: [HomeRailURLProtocol] = []
     }
@@ -392,6 +465,25 @@ private nonisolated final class HomeRailURLProtocol: URLProtocol, @unchecked Sen
             if let parentStatus { state.parentStatus = parentStatus }
             if let discoveryItems { state.discoveryItems = discoveryItems }
         }
+    }
+
+    static func setTopTenLibrary(_ items: [String], pageCap: Int, reportsTotal: Bool) {
+        lock.withLock {
+            state.topTenLibrary = items
+            state.topTenPageCap = pageCap
+            state.topTenReportsTotal = reportsTotal
+        }
+    }
+
+    static func setWatchHistory(played: String, similarCounts: [String: Int]) {
+        lock.withLock {
+            state.played = played
+            state.similarCounts = similarCounts
+        }
+    }
+
+    static func setSeerrTotalPages(_ pages: Int) {
+        lock.withLock { state.seerrTotalPages = pages }
     }
 
     static func hold(_ stage: String) { lock.withLock { state.heldStage = stage } }
@@ -434,6 +526,19 @@ private nonisolated final class HomeRailURLProtocol: URLProtocol, @unchecked Sen
         return url.path.hasSuffix("/Latest") ? "latest" : "parents"
     }
 
+    static func query(_ url: URL, _ name: String) -> String? {
+        URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first { $0.name == name }?.value
+    }
+
+    /// Called with the lock held.
+    private static func topTenPage(of library: [String], at url: URL) -> String {
+        let start = min(Int(query(url, "StartIndex") ?? "0") ?? 0, library.count)
+        let limit = min(Int(query(url, "Limit") ?? "") ?? library.count, state.topTenPageCap)
+        let page = library[start..<min(start + limit, library.count)]
+        let total = state.topTenReportsTotal ? #","TotalRecordCount":\#(library.count)"# : ""
+        return #"{"Items":[\#(page.joined(separator: ","))]\#(total)}"#
+    }
+
     private func respond() {
         guard let url = request.url else { return }
         let (body, status) = Self.lock.withLock { () -> (String, Int) in
@@ -454,9 +559,20 @@ private nonisolated final class HomeRailURLProtocol: URLProtocol, @unchecked Sen
                 if Self.stage(of: url) == "collections" {
                     return (#"{"Items":\#(Self.state.collections)}"#, 200)
                 }
+                if Self.stage(of: url) == "topTen", let library = Self.state.topTenLibrary {
+                    return (Self.topTenPage(of: library, at: url), 200)
+                }
+                if Self.query(url, "SortBy") == "DatePlayed" {
+                    return (#"{"Items":\#(Self.state.played)}"#, 200)
+                }
                 return (#"{"Items":\#(Self.state.discoveryItems)}"#, 200)
+            case let path where path.hasPrefix("/Items/") && path.hasSuffix("/Similar"):
+                let seed = path.split(separator: "/")[1]
+                let count = Self.state.similarCounts[String(seed)] ?? 0
+                let items = (0..<count).map { #"{"Id":"\#(seed)-similar-\#($0)","Type":"Movie"}"# }
+                return (#"{"Items":[\#(items.joined(separator: ","))]}"#, 200)
             case "/api/v1/discover/trending", "/api/v1/discover/movies", "/api/v1/discover/tv":
-                return (#"{"page":1,"totalPages":1,"totalResults":4,"results":[{"id":4,"mediaType":"movie"},{"id":3,"mediaType":"movie"},{"id":2,"mediaType":"movie"},{"id":1,"mediaType":"movie"}]}"#, 200)
+                return (#"{"page":1,"totalPages":\#(Self.state.seerrTotalPages),"totalResults":4,"results":[{"id":4,"mediaType":"movie"},{"id":3,"mediaType":"movie"},{"id":2,"mediaType":"movie"},{"id":1,"mediaType":"movie"}]}"#, 200)
             default: return (#"{"Items":[]}"#, 200)
             }
         }
