@@ -483,6 +483,50 @@ struct PlaybackAutomationTests {
         #expect(automation.autoplaysOnFinish)
     }
 
+    @Test func offModeNeverOffersTheNextEpisode() {
+        let automation = automation(autoplay: .off, segments: [Self.intro, Self.outro])
+        automation.tick(position: 1_201, duration: 1_320)
+        automation.tick(position: 1_316, duration: 1_320)
+        #expect(automation.nextUpCardStart == nil)
+        #expect(!automation.showsNextUp)
+        #expect(!automation.isCountingDown)
+        #expect(!automation.autoplaysOnFinish)
+    }
+
+    /// The panel owns Select while it is open, so the card steps aside and
+    /// comes back when the panel closes.
+    @Test func thePanelSuppressesTheCard() {
+        let automation = automation(autoplay: .card, segments: [Self.intro, Self.outro])
+        automation.tick(position: 1_201, duration: 1_320)
+        #expect(automation.showsNextUp)
+        automation.isSuppressed = true
+        #expect(!automation.showsNextUp)
+        automation.tick(position: 1_202, duration: 1_320)
+        #expect(!automation.showsNextUp)
+        automation.isSuppressed = false
+        #expect(automation.showsNextUp)
+    }
+
+    /// Closing or handing off detaches the callbacks, so nothing still on
+    /// screen can act on the engine that is going away.
+    @Test func anInvalidatedAutomationActsOnNothing() {
+        let automation = automation(segments: [Self.intro, Self.outro])
+        var skipped = 0
+        var playedNext = 0
+        automation.onSkip = { _ in skipped += 1 }
+        automation.onPlayNext = { playedNext += 1 }
+        automation.tick(position: 12, duration: 1_320)
+        #expect(automation.skipTiming != nil)
+
+        automation.invalidate()
+        #expect(automation.skipTiming == nil)
+        // A late Select on the pill or the card.
+        automation.skip(Self.intro)
+        automation.playNext()
+        #expect(skipped == 0)
+        #expect(playedNext == 0)
+    }
+
     @Test func theNextEpisodeStartsClean() async throws {
         let automation = automation(segments: [Self.intro, Self.outro])
         automation.tick(position: 12, duration: 1_320)
