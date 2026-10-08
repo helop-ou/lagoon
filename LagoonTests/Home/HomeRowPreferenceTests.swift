@@ -283,68 +283,34 @@ struct HomeRowPreferenceTests {
     }
 
     /// Catches a new Home row that Settings never lists, which nobody could
-    /// hide or move. Uses the identifier constants, not a copied list, so it
-    /// fails as soon as the row has an id.
-    @Test func everyRowWithAnIdentifierIsOfferedInSettings() {
-        let offered = Set(HomeSectionPreferenceResolver.nativeChoices.map(\.id))
-        let owned = [
-            HomeRowID.continueWatching,
-            HomeRowID.nextUp,
-            HomeRowID.favorites,
-            HomeRowID.recentlyAddedMovies,
-            HomeRowID.recentlyAddedShows,
-            HomeRowID.movieGenres,
-            HomeRowID.showGenres,
-            HomeCuratedRows.ID.becauseYouWatched,
-            HomeCuratedRows.ID.highlyRated,
-            HomeCuratedRows.ID.topMovies,
-            HomeCuratedRows.ID.inFourK,
-            HomeCuratedRows.ID.genreSpotlight,
-            HomeCuratedRows.ID.decadeSpotlight,
-            HomeCuratedRows.ID.unstartedSeries,
-            HomeCuratedRows.ID.topShows,
-            HomeCuratedRows.ID.readyToBinge,
-            HomeCuratedRows.ID.surpriseMe,
-            CollectionShelf.rowID,
-        ]
+    /// hide or move. Uses the table `HomeView` draws from, not a copied list.
+    @Test func everyRowHomeDrawsIsOfferedInSettings() {
+        let drawn = Set(HomeRowKind.native.keys)
 
-        for id in owned {
-            #expect(offered.contains(id), "\(id) draws a row but Settings never lists it")
+        for id in drawn {
+            #expect(HomeSectionPreferenceResolver.nativeIDs.contains(id), "\(id) draws a row but Settings never lists it")
         }
-        #expect(offered.count == owned.count)
+        #expect(drawn == HomeSectionPreferenceResolver.nativeIDs)
     }
 
-    /// The mirror: every id Settings offers must be drawn by Home.
+    /// The mirror: an offered id without a kind falls through to nothing.
     @Test func everyRowSettingsOffersIsOneHomeCanDraw() {
-        let drawnByName: Set<String> = [
-            HomeRowID.continueWatching,
-            HomeRowID.nextUp,
-            HomeRowID.favorites,
-            HomeRowID.recentlyAddedMovies,
-            HomeRowID.recentlyAddedShows,
-            HomeRowID.movieGenres,
-            HomeRowID.showGenres,
-            CollectionShelf.rowID,
-        ]
-        let drawnFromCuratedRails: Set<String> = [
-            HomeCuratedRows.ID.becauseYouWatched,
-            HomeCuratedRows.ID.highlyRated,
-            HomeCuratedRows.ID.topMovies,
-            HomeCuratedRows.ID.inFourK,
-            HomeCuratedRows.ID.genreSpotlight,
-            HomeCuratedRows.ID.decadeSpotlight,
-            HomeCuratedRows.ID.unstartedSeries,
-            HomeCuratedRows.ID.topShows,
-            HomeCuratedRows.ID.readyToBinge,
-            HomeCuratedRows.ID.surpriseMe,
-        ]
-
         for choice in HomeSectionPreferenceResolver.nativeChoices {
-            #expect(
-                drawnByName.contains(choice.id) || drawnFromCuratedRails.contains(choice.id),
-                "\(choice.id) is offered in Settings but Home draws nothing for it"
-            )
+            #expect(HomeRowKind(id: choice.id) != nil, "\(choice.id) is offered in Settings but Home draws nothing for it")
         }
+    }
+
+    /// Rows with a view of their own must not fall back to a curated rail,
+    /// which reads `curatedRails` and finds nothing under their id.
+    @Test func rowsWithTheirOwnViewAreNotDrawnAsCuratedRails() {
+        #expect(HomeRowKind(id: CollectionShelf.rowID) == .collections)
+        #expect(HomeRowKind(id: HomeCuratedRows.ID.topMovies) == .topTen)
+        #expect(HomeRowKind(id: HomeCuratedRows.ID.topShows) == .topTen)
+    }
+
+    @Test func aRetiredNativeRowDrawsNothingAndAPluginSectionDrawsItsRail() {
+        #expect(HomeRowKind(id: "lagoon.recentlyAddedOther") == nil)
+        #expect(HomeRowKind(id: "MyList") == .plugin(section: "MyList"))
     }
 
     @Test func noTwoRowsShareAnIdentifier() {
