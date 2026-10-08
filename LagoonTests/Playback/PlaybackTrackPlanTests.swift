@@ -304,4 +304,68 @@ struct PlaybackTrackPlanTests {
         ))
         #expect(plan.carry(selectedAudio: 1, selectedSubtitle: nil).subtitlesOff)
     }
+
+    // MARK: - Stream indexes against engine ordinals
+
+    @Test func theServerDefaultAudioIsAStreamIndexNotAnOrdinal() throws {
+        // A video stream at index 0 and a few other streams push the audio
+        // indexes past their ordinals.
+        let audio = [
+            try stream("Audio", index: 3, language: "eng"),
+            try stream("Audio", index: 4, language: "jpn"),
+            try stream("Audio", index: 5, language: "deu"),
+        ]
+        let plan = plan(audio: audio, defaultAudio: 4)
+        #expect(plan.automaticAudioOrdinal == 2)
+        #expect(plan.initialAudioOrdinal == 2)
+    }
+
+    // MARK: - Audio memory across plans
+
+    private func bareAudio(count: Int) throws -> [MediaStream] {
+        try (0..<count).map { try stream("Audio", index: $0 + 1) }
+    }
+
+    @Test func anAudioPickAmongBareTracksCarriesToAPlanWithTheSameLayout() throws {
+        let first = plan(audio: try bareAudio(count: 5))
+        guard case .remember(let choice) = first.audioMemoryUpdate(selected: 4, engineTrackCount: 5) else {
+            Issue.record("expected a remembered choice")
+            return
+        }
+        #expect(choice.layout == AudioTrackMemoryPolicy.fingerprint(of: first.audioLayout))
+
+        let sameLayout = plan(audio: try bareAudio(count: 5), rememberedAudio: choice)
+        #expect(sameLayout.initialAudioOrdinal == 4)
+        #expect(sameLayout.automaticAudioOrdinal != 4)
+
+        // An extra track keeps ordinal 4 in range but changes the layout.
+        let differentLayout = plan(audio: try bareAudio(count: 6), rememberedAudio: choice)
+        #expect(differentLayout.initialAudioOrdinal == differentLayout.automaticAudioOrdinal)
+        #expect(differentLayout.initialAudioOrdinal != 4)
+    }
+
+    // MARK: - Subtitle memory after a search
+
+    @Test func aPickAmongTheOriginalSubtitlesIsStillRememberedAfterASearchAddedOne() throws {
+        var plan = plan(subtitles: [
+            try stream("Subtitle", index: 4, language: "eng"),
+            try stream("Subtitle", index: 5, language: "fra"),
+        ])
+        plan.appendSearchedSubtitle(try stream("Subtitle", index: 99, language: "deu", external: true))
+        guard case .remember(let choice) = plan.subtitleMemoryUpdate(selected: 2, engineTrackCount: 3) else {
+            Issue.record("expected a remembered choice")
+            return
+        }
+        #expect(choice.ordinal == 2)
+        #expect(choice.language == "fra")
+        #expect(choice.layout == SubtitleTrackMemoryPolicy.fingerprint(of: plan.subtitleLayout))
+    }
+
+    @Test func aSubtitleListShorterThanTheLayoutIsNotRecorded() throws {
+        let plan = plan(subtitles: [
+            try stream("Subtitle", index: 4, language: "eng"),
+            try stream("Subtitle", index: 5, language: "fra"),
+        ])
+        #expect(plan.subtitleMemoryUpdate(selected: 1, engineTrackCount: 1) == nil)
+    }
 }

@@ -134,6 +134,20 @@ struct PlaybackLanguagePreferenceTests {
         ) == 2)
     }
 
+    @Test func alwaysWithNoPreferredLanguageTrackFallsBackToTheServerDefaultThenTheBestTrack() {
+        let streams = [
+            candidate("fra", hearingImpaired: true),
+            candidate("deu"),
+            candidate("spa"),
+        ]
+        // Nothing in the preferred language: the server's pick, wherever it sits.
+        #expect(subtitle(.always, streams, audio: "eng", serverDefault: 3) == 3)
+        // No server pick either: full dialogue over hearing-impaired.
+        #expect(subtitle(.always, streams, audio: "eng") == 2)
+        // Nothing to pick from.
+        #expect(subtitle(.always, [], audio: "eng") == 0)
+    }
+
     @Test func signsAndSongsTitlesAreRecognisedAsWholeWords() {
         for title in ["Signs & Songs", "signs/songs", "English [S&S]", "Songs", "English (Forced)", "SIGNS"] {
             #expect(TrackSelectionPolicy.titleNamesForcedTrack(title), "\(title)")
