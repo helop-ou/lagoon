@@ -14,7 +14,7 @@ import os
 @Observable
 final class DownloadStore {
     static let shared = DownloadStore()
-    static let sessionIdentifier = "ee.helop.lagoon.downloads"
+    nonisolated static let sessionIdentifier = "ee.helop.lagoon.downloads"
     nonisolated static let log = Logger(subsystem: "ee.helop.lagoon", category: "downloads")
 
     /// A finished download: the file, the item as saved at download time and
