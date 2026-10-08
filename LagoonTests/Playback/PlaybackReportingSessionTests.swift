@@ -70,17 +70,53 @@ struct PlaybackReportingSessionTests {
 
     @Test func stoppingCancelsProgressAndReleasesItsCallbacks() async throws {
         let client = makeClient()
-        let reporter = makeReporter(client: client)
+        let clock = ProgressClock()
+        let reporter = makeReporter(client: client, clock: clock)
         let calls = ProgressCalls()
         let lifetime = installProgress(on: reporter, calls: calls)
-        // Let the loop start its sleep. Callback release proves it exited.
-        await Task.yield()
+        try await waitUntil { clock.isSleeping }
         let stop = try #require(reporter.stop(at: 18))
+        // Cancellation reaches the wait before stop returns.
+        #expect(clock.cancellations == 1)
         await stop.value
+        // Callback release proves the loop exited.
         try await waitUntil { lifetime.value == nil }
         #expect(calls.snapshots == 0)
         #expect(calls.reports == 0)
         #expect(ReportingURLProtocol.requests.map(\.path) == ["/Sessions/Playing/Stopped"])
+    }
+
+    @Test func eachIntervalReportsTheSnapshotOnce() async throws {
+        let client = makeClient()
+        let clock = ProgressClock()
+        let reporter = makeReporter(client: client, clock: clock)
+        let calls = ProgressCalls()
+        reporter.startProgress(snapshot: {
+            calls.snapshots += 1
+            return .init(seconds: 64.5, isPaused: true)
+        }, didReport: {
+            calls.reports += 1
+        })
+        try await waitUntil { clock.isSleeping }
+        #expect(clock.requested == [PlaybackReportingSession.progressInterval])
+        #expect(ReportingURLProtocol.requests.isEmpty)
+
+        clock.advance()
+        try await waitUntil { calls.reports == 1 && clock.isSleeping }
+        #expect(calls.snapshots == 1)
+        #expect(clock.requested.count == 2)
+        let requests = ReportingURLProtocol.requests
+        #expect(requests.map(\.path) == ["/Sessions/Playing/Progress"])
+        let progress = try payload(try #require(requests.first))
+        #expect(progress["ItemId"] as? String == "item")
+        #expect(progress["MediaSourceId"] as? String == "source")
+        #expect(progress["PlaySessionId"] as? String == "session")
+        #expect(progress["PositionTicks"] as? Int64 == Ticks.ticks(64.5))
+        #expect(progress["IsPaused"] as? Bool == true)
+        #expect(progress["PlayMethod"] as? String == "DirectPlay")
+
+        let stop = try #require(reporter.stop(at: 65))
+        await stop.value
     }
 
     @Test func stoppedSessionRejectsAnotherStartAndProgressLoop() async throws {
@@ -102,19 +138,23 @@ struct PlaybackReportingSessionTests {
     @Test func cancellingASuspendedStartCannotReviveProgress() async throws {
         let client = makeClient(holding: ["/Sessions/Playing"])
         defer { ReportingURLProtocol.release("/Sessions/Playing") }
-        let reporter = makeReporter(client: client)
+        let clock = ProgressClock()
+        let reporter = makeReporter(client: client, clock: clock)
         let calls = ProgressCalls()
+        // Asks for progress whatever the start report said: the session
+        // itself has to refuse once it is stopped.
         let startup = Task {
-            try await reporter.reportStart(at: 12)
-            try Task.checkCancellation()
+            try? await reporter.reportStart(at: 12)
             return installProgress(on: reporter, calls: calls)
         }
         try await waitUntil { ReportingURLProtocol.isHolding("/Sessions/Playing") }
         startup.cancel()
         let stop = try #require(reporter.stop(at: 13))
-        await #expect(throws: (any Error).self) { try await startup.value }
+        let lifetime = await startup.value
         await stop.value
         try await waitUntil { !ReportingURLProtocol.isHolding("/Sessions/Playing") }
+        #expect(lifetime.value == nil)
+        #expect(clock.requested.isEmpty)
         #expect(calls.snapshots == 0)
         #expect(calls.reports == 0)
         #expect(!client.playbackReports.hasOpenSessions)
@@ -145,14 +185,18 @@ struct PlaybackReportingSessionTests {
         return client
     }
 
-    private func makeReporter(client: JellyfinClient) -> PlaybackReportingSession {
+    private func makeReporter(
+        client: JellyfinClient,
+        clock: ProgressClock = ProgressClock()
+    ) -> PlaybackReportingSession {
         PlaybackReportingSession(
             client: client,
             itemID: "item",
             mediaSourceID: "source",
             playSessionID: "session",
             method: .directPlay,
-            signpostID: .exclusive
+            signpostID: .exclusive,
+            progressSleep: { try await clock.sleep(for: $0) }
         )
     }
 
@@ -193,6 +237,56 @@ private final class ProgressLifetime {
 private final class WeakProgressLifetime {
     weak var value: ProgressLifetime?
     init(_ value: ProgressLifetime) { self.value = value }
+}
+
+/// Stands in for the wait between progress reports. A sleep ends only when
+/// the test advances it, or by throwing when its task is cancelled.
+private nonisolated final class ProgressClock: Sendable {
+    private struct State {
+        var requested: [Duration] = []
+        var cancellations = 0
+        var pending: [Int: CheckedContinuation<Void, any Error>] = [:]
+        var cancelled: Set<Int> = []
+    }
+
+    private let state = Mutex(State())
+    var requested: [Duration] { state.withLock { $0.requested } }
+    var cancellations: Int { state.withLock { $0.cancellations } }
+    var isSleeping: Bool { state.withLock { !$0.pending.isEmpty } }
+
+    func sleep(for duration: Duration) async throws {
+        let id = state.withLock { state in
+            state.requested.append(duration)
+            return state.requested.count
+        }
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let cancelled = state.withLock { state in
+                    guard !state.cancelled.contains(id) else { return true }
+                    state.pending[id] = continuation
+                    return false
+                }
+                if cancelled { continuation.resume(throwing: CancellationError()) }
+            }
+        } onCancel: {
+            let continuation = state.withLock { state in
+                state.cancellations += 1
+                state.cancelled.insert(id)
+                return state.pending.removeValue(forKey: id)
+            }
+            continuation?.resume(throwing: CancellationError())
+        }
+    }
+
+    /// Ends every pending sleep, as the interval running out would.
+    func advance() {
+        let pending = state.withLock { state in
+            let pending = state.pending
+            state.pending.removeAll()
+            return pending
+        }
+        for continuation in pending.values { continuation.resume() }
+    }
 }
 
 /// URLProtocol callbacks may run off the main actor. All fixture state is
