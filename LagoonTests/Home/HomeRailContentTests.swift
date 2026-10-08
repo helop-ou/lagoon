@@ -234,6 +234,92 @@ struct HomeRailContentTests {
         #expect(model.curatedRails[HomeCuratedRows.ID.topShows] == nil)
     }
 
+    @Test func aTopTenScanForASeerrSessionThatEndedPublishesNothing() async throws {
+        let client = makeClient()
+        let model = HomeViewModel()
+        HomeRailURLProtocol.set(discoveryItems: Self.matchableMovies)
+        HomeRailURLProtocol.hold("topTen")
+        defer { HomeRailURLProtocol.release() }
+        let seerr = try makeSeerr()
+
+        await model.load(client: client, accountID: "account", seerr: seerr)
+        let discovery = model.discoveryTasks
+        while !HomeRailURLProtocol.hasPending { await Task.yield() }
+        // Signed out of Seerr while the library scan was still running.
+        seerr.clear()
+        HomeRailURLProtocol.release()
+        for task in discovery { await task.value }
+
+        #expect(model.curatedRails[HomeCuratedRows.ID.highlyRated]?.items.count == 4)
+        #expect(model.curatedRails[HomeCuratedRows.ID.topMovies] == nil)
+    }
+
+    @Test func switchingAccountsClearsEveryShelfEvenWhenTheNewLoadFails() async throws {
+        let client = makeClient()
+        let model = HomeViewModel()
+        HomeRailURLProtocol.set(
+            discoveryItems: Self.matchableMovies,
+            collections: #"[{"Id":"box","Type":"BoxSet","Name":"Box","ChildCount":2,"BackdropImageTags":["b"]}]"#,
+            genres: #"[{"Id":"drama","Name":"Drama"}]"#
+        )
+        await model.load(client: client, accountID: "first")
+        for task in model.discoveryTasks { await task.value }
+        #expect(!model.curatedRails.isEmpty)
+        #expect(model.collections.map(\.id) == ["box"])
+        #expect(!model.movieGenreShelf.isEmpty)
+        #expect(!model.heroItems.isEmpty)
+
+        HomeRailURLProtocol.set(viewsStatus: 500)
+        await model.load(client: client, accountID: "second")
+
+        #expect(model.errorMessage != nil)
+        #expect(model.curatedRails.isEmpty)
+        #expect(model.collections.isEmpty)
+        #expect(model.movieGenreShelf.isEmpty)
+        #expect(model.showGenreShelf.isEmpty)
+        #expect(model.heroItems.isEmpty)
+    }
+
+    @Test func collectionsStillLoadingForTheLastAccountNeverReachTheNextOne() async throws {
+        let client = makeClient()
+        let model = HomeViewModel()
+        HomeRailURLProtocol.set(
+            collections: #"[{"Id":"box","Type":"BoxSet","Name":"Box","ChildCount":2,"BackdropImageTags":["b"]}]"#
+        )
+        HomeRailURLProtocol.hold("collections")
+        defer { HomeRailURLProtocol.release() }
+
+        await model.load(client: client, accountID: "first")
+        let stale = model.discoveryTasks
+        while !HomeRailURLProtocol.hasPending { await Task.yield() }
+        HomeRailURLProtocol.set(viewsStatus: 500)
+        await model.load(client: client, accountID: "second")
+        HomeRailURLProtocol.release()
+        for task in stale { await task.value }
+
+        #expect(model.collections.isEmpty)
+    }
+
+    /// Four movies the Top 10 stub's TMDB ids match, eligible for the hero,
+    /// with a genre for the genre shelf.
+    private static let matchableMovies = #"""
+    [
+        {"Id":"a","Type":"Movie","Overview":"A","Genres":["Drama"],"BackdropImageTags":["a"],"ProviderIds":{"Tmdb":"1"}},
+        {"Id":"b","Type":"Movie","Overview":"B","Genres":["Drama"],"BackdropImageTags":["b"],"ProviderIds":{"Tmdb":"2"}},
+        {"Id":"c","Type":"Movie","Overview":"C","Genres":["Drama"],"BackdropImageTags":["c"],"ProviderIds":{"Tmdb":"3"}},
+        {"Id":"d","Type":"Movie","Overview":"D","Genres":["Drama"],"BackdropImageTags":["d"],"ProviderIds":{"Tmdb":"4"}}
+    ]
+    """#
+
+    private func makeSeerr() throws -> SeerrClient {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [HomeRailURLProtocol.self]
+        let seerr = SeerrClient(session: URLSession(configuration: configuration))
+        seerr.configure(serverURL: try #require(URL(string: "https://home-rails.test")))
+        seerr.setSessionCookie("fixture")
+        return seerr
+    }
+
     private func makeClient() -> JellyfinClient {
         HomeRailURLProtocol.reset()
         let configuration = URLSessionConfiguration.ephemeral
@@ -258,6 +344,11 @@ private nonisolated final class HomeRailURLProtocol: URLProtocol, @unchecked Sen
         var resume = #"{"Items":[]}"#
         var parentStatus = 200
         var discoveryItems = "[]"
+        var viewsStatus = 200
+        var collections = "[]"
+        var genres = "[]"
+        var homeSections = "[]"
+        var homeSectionItems = "[]"
         var heldStage: String?
         var pending: [HomeRailURLProtocol] = []
     }
@@ -271,8 +362,15 @@ private nonisolated final class HomeRailURLProtocol: URLProtocol, @unchecked Sen
     static func reset() { lock.withLock { state = State() } }
 
     static func set(latest: String? = nil, parents: String? = nil, nextUp: String? = nil,
-                    resume: String? = nil, parentStatus: Int? = nil, discoveryItems: String? = nil) {
+                    resume: String? = nil, parentStatus: Int? = nil, discoveryItems: String? = nil,
+                    viewsStatus: Int? = nil, collections: String? = nil, genres: String? = nil,
+                    homeSections: String? = nil, homeSectionItems: String? = nil) {
         lock.withLock {
+            if let viewsStatus { state.viewsStatus = viewsStatus }
+            if let collections { state.collections = collections }
+            if let genres { state.genres = genres }
+            if let homeSections { state.homeSections = homeSections }
+            if let homeSectionItems { state.homeSectionItems = homeSectionItems }
             if let latest { state.latest = latest }
             if let parents { state.parents = parents }
             if let nextUp { state.nextUp = nextUp }
@@ -301,9 +399,7 @@ private nonisolated final class HomeRailURLProtocol: URLProtocol, @unchecked Sen
         guard let url = request.url else { return }
         let held = Self.lock.withLock {
             Self.state.urls.append(url)
-            let isTopTen = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?
-                .contains { $0.name == "Fields" && $0.value?.hasPrefix("ProviderIds,") == true } == true
-            let stage = isTopTen ? "topTen" : (url.path.hasSuffix("/Latest") ? "latest" : "parents")
+            let stage = Self.stage(of: url)
             if stage == Self.state.heldStage {
                 Self.state.pending.append(self)
                 return true
@@ -313,18 +409,36 @@ private nonisolated final class HomeRailURLProtocol: URLProtocol, @unchecked Sen
         if !held { respond() }
     }
 
+    private static func stage(of url: URL) -> String {
+        let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+        if query.contains(where: { $0.name == "Fields" && $0.value?.hasPrefix("ProviderIds,") == true }) {
+            return "topTen"
+        }
+        if query.contains(where: { $0.name == "IncludeItemTypes" && $0.value == "BoxSet" }) {
+            return "collections"
+        }
+        return url.path.hasSuffix("/Latest") ? "latest" : "parents"
+    }
+
     private func respond() {
         guard let url = request.url else { return }
         let (body, status) = Self.lock.withLock { () -> (String, Int) in
             switch url.path {
             case "/Users/user/Views":
-                return (#"{"Items":[{"Id":"shows","Type":"CollectionFolder","CollectionType":"tvshows"},{"Id":"movies","Type":"CollectionFolder","CollectionType":"movies"}]}"#, 200)
+                return (#"{"Items":[{"Id":"shows","Type":"CollectionFolder","CollectionType":"tvshows"},{"Id":"movies","Type":"CollectionFolder","CollectionType":"movies"}]}"#, Self.state.viewsStatus)
+            case "/Genres": return (#"{"Items":\#(Self.state.genres)}"#, 200)
+            case "/HomeScreen/Sections": return (#"{"Items":\#(Self.state.homeSections)}"#, 200)
+            case let path where path.hasPrefix("/HomeScreen/Section/"):
+                return (#"{"Items":\#(Self.state.homeSectionItems)}"#, 200)
             case "/Users/user/Items/Latest": return (Self.state.latest, 200)
             case "/Shows/NextUp": return (Self.state.nextUp, 200)
             case "/Users/user/Items/Resume": return (Self.state.resume, 200)
             case "/Users/user/Items":
                 if URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.contains(where: { $0.name == "Ids" }) == true {
                     return (Self.state.parents, Self.state.parentStatus)
+                }
+                if Self.stage(of: url) == "collections" {
+                    return (#"{"Items":\#(Self.state.collections)}"#, 200)
                 }
                 return (#"{"Items":\#(Self.state.discoveryItems)}"#, 200)
             case "/api/v1/discover/trending", "/api/v1/discover/movies", "/api/v1/discover/tv":
