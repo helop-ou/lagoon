@@ -229,6 +229,37 @@ struct PlaybackIncidentMonitorTests {
         }
     }
 
+    /// The source names the title and its path, and the engine's message
+    /// carries a stream URL with the access token. None of it may leave the
+    /// device, in an incident's own fields or in the history riding along.
+    @Test func noIncidentCarriesTheTitleThePathOrTheToken() throws {
+        let sink = CapturingSink()
+        let hub = DiagnosticsHub(sink: sink, reportingEnabled: { true })
+        let monitor = PlaybackIncidentMonitor(hub: hub)
+        monitor.beginAttempt(delivery: .negotiated, method: .directPlay, source: try Self.source(), cached: true, disc: false, resumeSeconds: 0)
+        monitor.engineFailed(Self.failure(), delivery: .negotiated, next: .remux, engine: nil)
+        monitor.endAttempt(engine: nil, outcome: "fallback")
+        monitor.beginAttempt(delivery: .remux, method: .transcode, source: try Self.source(), cached: false, disc: false, resumeSeconds: 42)
+        monitor.engineFailed(Self.failure(.read), delivery: .remux, next: nil, engine: nil)
+        monitor.startFailed(
+            JellyfinError.server(status: 500, message: "No stream for The Film Nobody Should See at /media/secret/The Film.mkv"),
+            delivery: .transcode,
+            stage: .negotiate
+        )
+        #expect(sink.incidents.map(\.code) == [.playbackFallback, .playbackFailed, .playbackStartFailed])
+
+        let values = sink.incidents.flatMap { incident in
+            Array(incident.fields.values) + incident.history.flatMap { Array($0.fields.values) }
+        }
+        #expect(!values.isEmpty)
+        for value in values {
+            let text = "\(value.jsonObject)"
+            for secret in ["Nobody", "The Film", "/media", "api_key", "secret-token", "lagoonfix"] {
+                #expect(!text.contains(secret), "\(secret) in \(text)")
+            }
+        }
+    }
+
     @Test func aDismissalDuringNegotiationIsNotAStartFailure() {
         let cancelled = URLError(.cancelled)
         #expect(PlaybackController.isStartCancellation(cancelled, taskCancelled: true, closed: false))
