@@ -34,5 +34,11 @@ struct PictureInPictureLifecycleTests {
         adapter.pictureInPictureController(system,
             restoreUserInterfaceForPictureInPictureStopWithCompletionHandler: { restored = $0 })
         #expect(restored == false)
+
+        // With no player view to restore into, the system's own restore stands.
+        adapter.onRestore = nil
+        adapter.pictureInPictureController(system,
+            restoreUserInterfaceForPictureInPictureStopWithCompletionHandler: { restored = $0 })
+        #expect(restored == true)
     }
 }
