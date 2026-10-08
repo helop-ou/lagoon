@@ -7,8 +7,15 @@ final class SearchViewModel {
     var isSearching = false
     var errorMessage: String?
 
-    @ObservationIgnored private var searchTask: Task<Void, Never>?
+    /// Exposed so tests can wait for a query to settle.
+    @ObservationIgnored private(set) var searchTask: Task<Void, Never>?
     @ObservationIgnored private var currentQuery = ""
+    /// Typing pauses this long before a query runs; tests step it by hand.
+    @ObservationIgnored private let debounce: @Sendable () async throws -> Void
+
+    init(debounce: @escaping @Sendable () async throws -> Void = { try await Task.sleep(for: .milliseconds(400)) }) {
+        self.debounce = debounce
+    }
 
     func search(_ query: String, client: JellyfinClient) {
         let identity = client.sessionIdentity
@@ -25,7 +32,7 @@ final class SearchViewModel {
         isSearching = true
         searchTask = Task {
             do {
-                try await Task.sleep(for: .milliseconds(400))
+                try await debounce()
                 try Task.checkCancellation()
                 guard identity == client.sessionIdentity else { throw CancellationError() }
                 let page = try await client.items(
