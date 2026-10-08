@@ -1,3 +1,4 @@
+import CoreMedia
 import Foundation
 import Testing
 @testable import Lagoon
@@ -68,6 +69,25 @@ struct ServerClockTests {
         }
         #expect(estimate.samples.count == ServerClockEstimate.capacity)
         #expect(abs((estimate.offset ?? 0) - 2) < 1e-9)
+    }
+
+    /// A server five seconds ahead: its instants map back to local time and
+    /// onto the host clock the renderers schedule against.
+    @Test @MainActor func aServerInstantMapsToLocalAndHostTime() {
+        let clock = ServerClock(client: JellyfinClient(deviceId: "server-clock-tests"))
+        var pings: [Int] = []
+        clock.onSample = { pings.append($0) }
+        clock.record(
+            ServerClockSample(requestSent: 1_000, requestReceived: 1_005, responseSent: 1_005, responseReceived: 1_000),
+            receivedAt: Date(timeIntervalSince1970: 1_000),
+            hostTime: CMTime(value: 50, timescale: 1)
+        )
+        #expect(clock.offset == 5)
+        #expect(clock.serverSeconds(now: Date(timeIntervalSince1970: 1_000)) == 1_005)
+        #expect(clock.localDate(forServer: 1_005) == Date(timeIntervalSince1970: 1_000))
+        // Two seconds after the anchor, on the server's clock.
+        #expect(CMTimeGetSeconds(clock.hostTime(forServer: 1_007)) == 52)
+        #expect(pings == [0])
     }
 
     /// A symmetric sample with exactly this offset and round trip.
