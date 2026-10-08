@@ -7,7 +7,8 @@ import Testing
 /// overstating formats).
 ///
 /// `scripts/generate-codec-support.sh` runs this and copies the result into
-/// `docs/codec-support.md`; `--check` fails on drift instead.
+/// `docs/codec-support.md`; `--check` fails on drift instead, and so does
+/// `theCommittedDocumentMatchesTheProfile`.
 @Suite("Codec support document")
 struct CodecSupportDocTests {
     @Test func writesTheCodecSupportDocument() throws {
@@ -17,6 +18,21 @@ struct CodecSupportDocTests {
         try markdown.write(to: url, atomically: true, encoding: .utf8)
         // The script reads this line rather than guessing the sandbox path.
         print("CODEC_SUPPORT_DOC \(url.path)")
+    }
+
+    /// The committed table is what readers see, so a profile change that
+    /// skipped the generator fails here, not only in the release script.
+    @Test func theCommittedDocumentMatchesTheProfile() throws {
+        let document = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appending(path: "docs/codec-support.md")
+        let committed = try String(contentsOf: document, encoding: .utf8)
+        #expect(
+            committed == CodecSupportDocument.render(DeviceProfile.everything),
+            "docs/codec-support.md is out of date. Run scripts/generate-codec-support.sh"
+        )
     }
 
     /// Guards the renderer against silently dropping a codec.
