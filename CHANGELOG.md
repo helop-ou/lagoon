@@ -17,6 +17,17 @@ what identifies a binary: it is what About shows, what a release tag
 carries, and what to quote in a bug report. One marketing version spans
 many builds.
 
+## 0.5.2 (115)
+
+October 2026
+
+**Downloaded episodes are labelled like the rest of the app, and profiles keep their place in Who's Watching.**
+
+### Bug fixes
+
+- On iPhone and iPad, a downloaded episode without a season or episode number shows the same label as in the library, such as E4 or Special, instead of none.
+- Renaming a profile or changing its picture on the server no longer moves it down Who's Watching.
+
 ## 0.5.1 (114)
 
 October 2026

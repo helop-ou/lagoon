@@ -47,6 +47,18 @@ nonisolated enum Changelog {
     /// screen highlights whichever one matches the running bundle.
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
+            version: "0.5.2",
+            build: "115",
+            released: "October 2026",
+            headline: "Downloaded episodes are labelled like the rest of the app, and profiles keep their place in Who's Watching.",
+            sections: [
+                ChangelogSection(category: .bugFixes, changes: [
+                    "On iPhone and iPad, a downloaded episode without a season or episode number shows the same label as in the library, such as E4 or Special, instead of none.",
+                    "Renaming a profile or changing its picture on the server no longer moves it down Who's Watching.",
+                ]),
+            ]
+        ),
+        ChangelogEntry(
             version: "0.5.1",
             build: "114",
             released: "October 2026",
