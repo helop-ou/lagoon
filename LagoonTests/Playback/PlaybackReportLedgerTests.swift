@@ -48,15 +48,21 @@ struct PlaybackReportLedgerTests {
         let ledger = PlaybackReportLedger()
         let first = ledger.open()
         let second = ledger.open()
-        let waiter = Task { await ledger.settle(timeout: .seconds(5)) }
-        // Give the waiter a chance to register before the first close.
+        var settled = false
+        let waiter = Task {
+            await ledger.settle(timeout: .seconds(30))
+            settled = true
+        }
+        // The waiter registers on its first turn of the main actor.
         await Task.yield()
         ledger.close(first)
         #expect(ledger.hasOpenSessions)
-        // Only the second close or the timeout can finish the waiter.
-        await Task.yield()
+        // A wrongly woken waiter would finish within these turns.
+        for _ in 0..<10 { await Task.yield() }
+        #expect(!settled)
         ledger.close(second)
         await waiter.value
+        #expect(settled)
         #expect(!ledger.hasOpenSessions)
     }
 
