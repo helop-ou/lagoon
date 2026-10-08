@@ -17,8 +17,11 @@ nonisolated enum MaximumQuality: String, CaseIterable, Identifiable, Sendable {
 
     var id: String { rawValue }
 
-    static var current: MaximumQuality {
-        UserDefaults.standard.string(forKey: defaultsKey).flatMap(MaximumQuality.init(rawValue:)) ?? .auto
+    static var current: MaximumQuality { stored(in: .standard) }
+
+    /// Auto when nothing is saved or the saved value is not a known step.
+    static func stored(in defaults: UserDefaults) -> MaximumQuality {
+        defaults.string(forKey: defaultsKey).flatMap(MaximumQuality.init(rawValue:)) ?? .auto
     }
 
     /// A fixed ceiling in bit/s; nil for Auto and No Limit.
