@@ -165,6 +165,33 @@ struct LibraryBrowseTests {
         #expect(!model.isLoading)
     }
 
+    /// A saved decade is cleared only against a list that finished loading,
+    /// for this scope, without failing.
+    @Test func onlyASettledSuccessfulListCanClearASavedDecade() async {
+        let model = LibraryDecadeViewModel()
+        let movies = LibraryYearScope(kind: .movies, libraryID: nil)
+        let shows = LibraryYearScope(kind: .shows, libraryID: nil)
+
+        await model.load(scope: movies) { _ in [2005] }
+        #expect(model.confirmedDecades(for: movies)?.map(\.rawValue) == [2000])
+        #expect(model.confirmedDecades(for: shows) == nil)
+
+        var pending: CheckedContinuation<[Int], Never>?
+        let reload = Task {
+            await model.load(scope: movies) { _ in
+                await withCheckedContinuation { pending = $0 }
+            }
+        }
+        while pending == nil { await Task.yield() }
+        #expect(model.confirmedDecades(for: movies) == nil)
+        pending?.resume(returning: [2005])
+        await reload.value
+
+        await model.load(scope: movies) { _ in throw URLError(.notConnectedToInternet) }
+        #expect(model.decades?.map(\.rawValue) == [2000])
+        #expect(model.confirmedDecades(for: movies) == nil)
+    }
+
     @Test func genreRefreshAddsNewChoicesAndKeepsTheLastGoodCatalogueOnFailure() async {
         let model = LibraryGenreViewModel()
         #expect(model.genres == nil)
@@ -291,6 +318,25 @@ struct LibraryBrowseTests {
         #expect(requests.map { $0.0 } == [selection, selection, selection])
         #expect(requests.map { $0.1 } == [0, 60, 0])
         #expect(requests.map { $0.2 } == [60, 60, 120])
+    }
+
+    /// The grid's task reruns on every appearance; the same selection must
+    /// not throw away the pages already scrolled through.
+    @Test func reloadingTheSameSelectionKeepsTheLoadedDepth() async throws {
+        let model = LibraryViewModel()
+        let selection = LibrarySelection(kind: .movies, sort: .rating)
+        var requests = 0
+        let fetch: LibraryViewModel.FetchPage = { _, start, limit in
+            requests += 1
+            return try page(ids: (start..<(start + limit)).map(String.init), total: 180)
+        }
+        await model.load(selection: selection, fetch: fetch)
+        await model.loadMore(fetch: fetch)
+
+        await model.load(selection: selection, fetch: fetch)
+
+        #expect(requests == 2)
+        #expect(model.items.count == 120)
     }
 
     @Test func changingOnlyTheDecadeResetsPaginationAndRetainsOtherFilters() async throws {
