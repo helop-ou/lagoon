@@ -62,8 +62,17 @@ struct PlaybackQualityLimitTests {
         #expect(DeviceProfile.lagoon(for: .negotiated, maxBitrate: 10_000_000).maxStreamingBitrate == 10_000_000)
     }
 
-    @Test func theSettingRoundTripsAndDefaultsToAuto() {
-        #expect(MaximumQuality(rawValue: "nonsense") == nil)
+    @Test func theSettingRoundTripsAndDefaultsToAuto() throws {
+        let suite = "PlaybackQualityLimitTests.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        #expect(MaximumQuality.stored(in: defaults) == .auto)
+        defaults.set("nonsense", forKey: MaximumQuality.defaultsKey)
+        #expect(MaximumQuality.stored(in: defaults) == .auto)
+        defaults.set(MaximumQuality.mbps8.rawValue, forKey: MaximumQuality.defaultsKey)
+        #expect(MaximumQuality.stored(in: defaults) == .mbps8)
+        defaults.set(MaximumQuality.unlimited.rawValue, forKey: MaximumQuality.defaultsKey)
+        #expect(MaximumQuality.stored(in: defaults) == .unlimited)
         #expect(MaximumQuality.allCases.first == .auto)
         #expect(MaximumQuality.mbps20.fixedBitrate == 20_000_000)
         #expect(MaximumQuality.auto.fixedBitrate == nil)
