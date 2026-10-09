@@ -47,41 +47,50 @@ struct AcknowledgementsTests {
         }
     }
 
-    @Test func binaryTargetsCoverExactlyWhatPackageSwiftDeclares() throws {
-        let thisFile = URL(fileURLWithPath: #filePath)
-        // LagoonTests/Settings/AcknowledgementsTests.swift -> repo root
-        let repoRoot = thisFile
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-            .deletingLastPathComponent()
-        // The engine package's manifest declares the native libraries.
-        let packageSwiftURL = repoRoot
-            .deletingLastPathComponent()
-            .appendingPathComponent("lagoon-engine/Package.swift")
-
-        guard let contents = try? String(contentsOf: packageSwiftURL, encoding: .utf8) else {
-            Issue.record("Could not read \(packageSwiftURL.path); skipping binary target coverage check")
-            return
-        }
-
-        let pattern = #"\.binaryTarget\(\s*name:\s*"([^"]+)""#
-        let regex = try NSRegularExpression(pattern: pattern)
-        let range = NSRange(contents.startIndex..., in: contents)
-        let declaredTargets = Set(
-            regex.matches(in: contents, range: range).compactMap { match -> String? in
-                guard let r = Range(match.range(at: 1), in: contents) else { return nil }
-                return String(contents[r])
+    /// Reads the native inventory, not a sibling engine checkout: the
+    /// inventory is generated from the engine `Package.resolved` pins, so a
+    /// newer engine on disk cannot pass or fail this build.
+    @Test func binaryTargetsCoverExactlyWhatThePinnedEngineDeclares() throws {
+        struct Resolved: Decodable {
+            struct Pin: Decodable {
+                struct State: Decodable { let revision: String }
+                let identity: String
+                let state: State
             }
+            let pins: [Pin]
+        }
+        struct Inventory: Decodable {
+            struct Engine: Decodable { let revision: String }
+            struct Dependency: Decodable { let name: String }
+            let engine: Engine
+            let dependencies: [Dependency]
+        }
+        // LagoonTests/Settings/AcknowledgementsTests.swift -> repo root
+        let repoRoot = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let resolved = try JSONDecoder().decode(Resolved.self, from: Data(contentsOf: repoRoot.appending(
+            path: "Lagoon.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"
+        )))
+        let inventory = try JSONDecoder().decode(Inventory.self, from: Data(contentsOf: repoRoot.appending(
+            path: "docs/reference/native-dependency-inventory.json"
+        )))
+        let pinned = try #require(resolved.pins.first { $0.identity == "lagoon-engine" })
+        try #require(
+            inventory.engine.revision == pinned.state.revision,
+            "The native inventory records engine \(inventory.engine.revision), but the pin is \(pinned.state.revision). Regenerate it with scripts/inventory-native-dependencies.py."
         )
 
-        #expect(!declaredTargets.isEmpty, "Regex found no .binaryTarget declarations in Package.swift")
+        let declaredTargets = Set(inventory.dependencies.map(\.name))
+        #expect(!declaredTargets.isEmpty, "The native inventory lists no binary targets")
 
         let coveredTargets = Set(Acknowledgements.components.flatMap(\.binaryTargets))
 
         #expect(
             coveredTargets == declaredTargets,
             """
-            Acknowledgements.components binaryTargets do not match Package.swift.
+            Acknowledgements.components binaryTargets do not match the pinned engine's.
             Declared: \(declaredTargets.sorted())
             Covered: \(coveredTargets.sorted())
             Missing: \(declaredTargets.subtracting(coveredTargets).sorted())

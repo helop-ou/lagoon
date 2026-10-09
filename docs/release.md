@@ -286,7 +286,9 @@ release](#public-release).
   *Prevent Storing of IP Addresses* setting.
 - A new native dependency needs an acknowledgement entry, bundled licence
   text and matching provenance. `AcknowledgementsTests` checks the notice
-  resources.
+  resources, and checks the entries against the binary targets the native
+  inventory records. It fails until the inventory matches the pin, so
+  regenerate the inventory in the same change that moves the pin.
 - Some pinned prebuilt native frameworks lack usable dSYMs. The resulting
   upload warning limits native symbolication; tell it apart from missing app
   or extension symbols by reading the actual archive warnings.
