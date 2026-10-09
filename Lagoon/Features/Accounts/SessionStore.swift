@@ -38,6 +38,7 @@ final class SessionStore {
     private let credentials: any AccountCredentialStorage
     private let publicInfo: @Sendable (URL) async throws -> ServerProbe
     private let serverHeaders: ServerHeaderStore
+    private let stores: AccountScopedStores
     private var draftCancelled = false
     private var pendingAuthentication: AuthenticationResult?
     private var connectionGeneration = 0
@@ -72,9 +73,11 @@ final class SessionStore {
          credentials: any AccountCredentialStorage = SystemAccountCredentials(),
          seerrClient: SeerrClient? = nil,
          serverHeaders: ServerHeaderStore = .shared,
+         stores: AccountScopedStores = .shared,
          publicInfo: @escaping @Sendable (URL) async throws -> ServerProbe = JellyfinClient.fetchPublicInfo) {
         self.defaults = defaults
         self.serverHeaders = serverHeaders
+        self.stores = stores
         self.sessionConfiguration = sessionConfiguration
         self.credentials = credentials
         self.publicInfo = publicInfo
@@ -102,7 +105,7 @@ final class SessionStore {
             if RegressionStateReset.isRequested(), !Self.didResetStateForRegression {
                 Self.didResetStateForRegression = true
                 let removed = RegressionStateReset.run(defaults: defaults, credentials: credentials)
-                TopShelfStore.clear()
+                stores.topShelf?.clear()
                 print("RegressionStateReset: removed \(removed.defaultsKeys.count) defaults keys and \(removed.credentialNames.count) credentials")
             }
             #endif
@@ -122,15 +125,15 @@ final class SessionStore {
         guard !isAccountDraft else { return }
         recentSearches.configure(accountID: activeAccount?.id)
         // Include the re-authenticating account so its sign-in screen keeps its theme.
-        ThemeStore.shared.configure(accountID: (activeAccount ?? reauthenticationAccount)?.id, owner: ObjectIdentifier(self))
-        TopShelfStore.activate(accountID: activeAccount?.id)
+        stores.themes.configure(accountID: (activeAccount ?? reauthenticationAccount)?.id, owner: ObjectIdentifier(self))
+        stores.topShelf?.activate(accountID: activeAccount?.id)
         seerr.select(activeAccount)
         // Leaves the previous account's group, socket and clock.
         syncPlay.configure(client: client, accountID: activeAccount?.id)
         #if os(iOS)
-        DownloadStore.shared.activate(accountID: activeAccount?.id, owner: ObjectIdentifier(self))
+        stores.downloads.activate(accountID: activeAccount?.id, owner: ObjectIdentifier(self))
         if activeAccount != nil {
-            Task { await DownloadStore.shared.refreshPermission(client: client) }
+            Task { await stores.downloads.refreshPermission(client: client) }
         }
         #endif
     }
@@ -242,7 +245,7 @@ final class SessionStore {
     func switchTo(_ account: StoredAccount) {
         connectionGeneration += 1
         // Otherwise the shelf shows the outgoing user's viewing until Home refreshes.
-        TopShelfStore.clear()
+        stores.topShelf?.clear()
         client.clearSession()
         guard !activate(account) else { return }
         // Token gone: sign in again to that server.
@@ -270,7 +273,7 @@ final class SessionStore {
         // cannot reactivate this token next launch.
         expiredAccountIDs.insert(account.id)
         try? credentials.delete(account.keychainAccount)
-        TopShelfStore.clear()
+        stores.topShelf?.clear()
         isAddingAccount = false
         beginReauthentication(account)
     }
@@ -297,7 +300,7 @@ final class SessionStore {
     func makeAccountDraft() -> SessionStore {
         let draft = SessionStore(
             accountDraft: true, defaults: defaults, sessionConfiguration: sessionConfiguration,
-            credentials: credentials, serverHeaders: serverHeaders, publicInfo: publicInfo
+            credentials: credentials, serverHeaders: serverHeaders, stores: stores, publicInfo: publicInfo
         )
         if let account = activeAccount {
             draft.client.configure(serverURL: account.serverURL)
@@ -337,7 +340,7 @@ final class SessionStore {
         localData.beginRemoval(accountID: account.id)
         // Downloads are iOS only.
         #if os(iOS)
-        DownloadStore.shared.removeAll(forAccountKey: DownloadStore.accountKey(for: account.id))
+        stores.downloads.removeAll(forAccountKey: DownloadStore.accountKey(for: account.id))
         #endif
         expiredAccountIDs.remove(account.id)
         let removedActiveAccount = activeAccount?.id == account.id || reauthenticationAccount?.id == account.id
@@ -349,7 +352,7 @@ final class SessionStore {
         releaseServerHeaders(forServers: [account.serverURL, seerrServer])
         if removedActiveAccount {
             connectionGeneration += 1
-            TopShelfStore.clear()
+            stores.topShelf?.clear()
             client.clearSession()
             activeAccount = nil
             reauthenticationAccount = nil
@@ -360,7 +363,7 @@ final class SessionStore {
             defaults.removeObject(forKey: DefaultsKey.serverName)
         }
         if accounts.isEmpty {
-            TopShelfStore.clear()
+            stores.topShelf?.clear()
             client.clearSession()
             phase = .needsServer
         } else if removedActiveAccount {

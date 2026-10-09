@@ -38,7 +38,7 @@ enum TopShelfStore {
     }
 
     static let appGroupID = "group.ee.helop.lagoon"
-    private static let publisher: TopShelfPublisher? = {
+    static let publisher: TopShelfPublisher? = {
         guard let directory = TopShelfArtwork.directoryURL(appGroupID: appGroupID) else { return nil }
         // The old payload has no owner and must never be read after upgrade.
         let defaults = UserDefaults(suiteName: appGroupID)
