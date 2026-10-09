@@ -288,13 +288,17 @@ struct SessionExpiryTests {
 
         /// A store whose activation reads have all been answered, so the
         /// next reply reaches only the request under test. Activation reads
-        /// the profile, and on iOS the download permission, on its own.
+        /// the profile, and on iOS the download permission, on its own. The
+        /// profile comes back unchanged: a renamed one re-applies the
+        /// account, and on iOS that sends one more permission read, which a
+        /// slow run delivers after the test's own reply is set.
         @MainActor
         func settledStore() async throws -> SessionStore {
             SessionExpiryProtocol.setReply(.http(200, """
-            {"Id":"\(first.userId)","Name":"First renamed","Policy":{"EnableContentDownloading":false}}
+            {"Id":"\(first.userId)","Name":"First","Policy":{"EnableContentDownloading":false}}
             """))
             let store = store()
+            await store.profileRefresh?.value
             try await Polling.untilMainActor(timeout: .seconds(2), pollInterval: .milliseconds(5)) {
                 Self.activationReadsAnswered(store)
             }
@@ -305,9 +309,10 @@ struct SessionExpiryTests {
         @MainActor
         private static func activationReadsAnswered(_ store: SessionStore) -> Bool {
             #if os(iOS)
-            guard store.client.cachedContentDownloadingAllowed == false else { return false }
+            return store.client.cachedContentDownloadingAllowed == false
+            #else
+            return true
             #endif
-            return store.userName == "First renamed"
         }
 
         func cleanUp() {
