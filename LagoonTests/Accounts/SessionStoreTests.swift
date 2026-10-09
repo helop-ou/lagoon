@@ -159,7 +159,8 @@ struct SessionStoreTests {
             let configuration = URLSessionConfiguration.ephemeral
             configuration.protocolClasses = [ProfileProtocol.self]
             return SessionStore(defaults: defaults, sessionConfiguration: configuration, credentials: credentials,
-                                seerrClient: SeerrClient(session: URLSession(configuration: configuration)))
+                                seerrClient: SeerrClient(session: URLSession(configuration: configuration)),
+                                stores: .isolated(defaults: defaults))
         }
 
         func cleanUp() {

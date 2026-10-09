@@ -283,7 +283,7 @@ struct SessionExpiryTests {
         func store() -> SessionStore {
             let config = URLSessionConfiguration.ephemeral
             config.protocolClasses = [SessionExpiryProtocol.self]
-            return SessionStore(defaults: defaults, sessionConfiguration: config)
+            return SessionStore(defaults: defaults, sessionConfiguration: config, stores: .isolated(defaults: defaults))
         }
 
         /// A store whose activation reads have all been answered, so the

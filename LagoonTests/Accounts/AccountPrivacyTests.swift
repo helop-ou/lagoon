@@ -246,7 +246,8 @@ struct AccountPrivacyTests {
             let configuration = URLSessionConfiguration.ephemeral
             configuration.protocolClasses = [PrivacyProtocol.self]
             return SessionStore(defaults: defaults, sessionConfiguration: configuration, credentials: credentials,
-                                seerrClient: SeerrClient(session: URLSession(configuration: configuration)))
+                                seerrClient: SeerrClient(session: URLSession(configuration: configuration)),
+                                stores: .isolated(defaults: defaults))
         }
         func cleanUp() { defaults.removePersistentDomain(forName: suite); PrivacyProtocol.releaseHeld() }
     }

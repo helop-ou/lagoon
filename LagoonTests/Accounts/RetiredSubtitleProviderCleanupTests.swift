@@ -52,7 +52,7 @@ struct RetiredSubtitleProviderCleanupTests {
         }
 
         func store() -> SessionStore {
-            SessionStore(defaults: defaults, credentials: credentials)
+            SessionStore(defaults: defaults, credentials: credentials, stores: .isolated(defaults: defaults))
         }
 
         func cleanUp() { defaults.removePersistentDomain(forName: suite) }

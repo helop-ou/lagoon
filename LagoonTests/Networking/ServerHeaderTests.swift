@@ -234,6 +234,7 @@ struct ServerHeaderLifecycleTests {
                 credentials: MemoryAccountCredentials(),
                 seerrClient: SeerrClient(session: URLSession(configuration: configuration)),
                 serverHeaders: headers,
+                stores: .isolated(defaults: defaults),
                 publicInfo: { ServerProbe(info: PublicSystemInfo(serverName: "Fixture", version: "10.11.0", id: "fixture"), baseURL: $0) }
             )
         }

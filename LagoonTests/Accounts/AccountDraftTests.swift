@@ -17,7 +17,9 @@ struct AccountDraftTests {
         try KeychainStore.set("test-token", for: account.keychainAccount)
         defaults.set(try JSONEncoder().encode([account]), forKey: "accounts")
         defaults.set(account.id, forKey: "session.activeAccountId")
-        let session = SessionStore(defaults: defaults, sessionConfiguration: OfflineProtocol.configuration())
+        let session = SessionStore(
+            defaults: defaults, sessionConfiguration: OfflineProtocol.configuration(), stores: .isolated(defaults: defaults)
+        )
         let before = defaults.dictionaryRepresentation() as NSDictionary
         session.addAccount()
         let draft = session.makeAccountDraft()
@@ -75,7 +77,9 @@ struct AccountDraftTests {
         defaults.set(try JSONEncoder().encode([account]), forKey: "accounts")
         defaults.set(account.id, forKey: "session.activeAccountId")
         defaults.set(account.serverURL.absoluteString, forKey: "server.url")
-        let session = SessionStore(defaults: defaults, sessionConfiguration: OfflineProtocol.configuration())
+        let session = SessionStore(
+            defaults: defaults, sessionConfiguration: OfflineProtocol.configuration(), stores: .isolated(defaults: defaults)
+        )
         let before = defaults.dictionaryRepresentation() as NSDictionary
         let draft = session.makeAccountDraft()
         #expect(draft.phase == .needsSignIn)
@@ -110,7 +114,9 @@ struct AccountDraftTests {
                                         serverName: "Remembered", userId: UUID().uuidString, userName: "Viewer")
             defaults.set(try JSONEncoder().encode([account]), forKey: "accounts")
         }
-        let session = SessionStore(defaults: defaults, sessionConfiguration: OfflineProtocol.configuration())
+        let session = SessionStore(
+            defaults: defaults, sessionConfiguration: OfflineProtocol.configuration(), stores: .isolated(defaults: defaults)
+        )
         let before = defaults.dictionaryRepresentation() as NSDictionary
         let draft = session.makeAccountDraft()
 
@@ -136,7 +142,9 @@ struct AccountDraftTests {
         try KeychainStore.set("test-token", for: active.keychainAccount)
         defaults.set(try JSONEncoder().encode([first, active]), forKey: "accounts")
         defaults.set(active.id, forKey: "session.activeAccountId")
-        let session = SessionStore(defaults: defaults, sessionConfiguration: OfflineProtocol.configuration())
+        let session = SessionStore(
+            defaults: defaults, sessionConfiguration: OfflineProtocol.configuration(), stores: .isolated(defaults: defaults)
+        )
         let draft = session.makeAccountDraft()
 
         #expect(draft.phase == .needsSignIn)
