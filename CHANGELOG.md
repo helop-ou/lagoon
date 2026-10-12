@@ -17,6 +17,20 @@ what identifies a binary: it is what About shows, what a release tag
 carries, and what to quote in a bug report. One marketing version spans
 many builds.
 
+## 0.6.0 (116)
+
+October 2026
+
+**Cast and crew open a page about them, with what else of theirs is in your library.**
+
+### New features
+
+- Choose anyone in a title's Cast and Crew to see their photo, birth date and biography, and every movie and show in your library they worked on.
+
+### Improvements
+
+- Cast and Crew lists everyone credited, including people without a photo, and scrolls on Apple TV.
+
 ## 0.5.2 (115)
 
 October 2026

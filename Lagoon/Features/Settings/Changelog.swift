@@ -47,6 +47,20 @@ nonisolated enum Changelog {
     /// screen highlights whichever one matches the running bundle.
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
+            version: "0.6.0",
+            build: "116",
+            released: "October 2026",
+            headline: "Cast and crew open a page about them, with what else of theirs is in your library.",
+            sections: [
+                ChangelogSection(category: .newFeatures, changes: [
+                    "Choose anyone in a title's Cast and Crew to see their photo, birth date and biography, and every movie and show in your library they worked on.",
+                ]),
+                ChangelogSection(category: .improvements, changes: [
+                    "Cast and Crew lists everyone credited, including people without a photo, and scrolls on Apple TV.",
+                ]),
+            ]
+        ),
+        ChangelogEntry(
             version: "0.5.2",
             build: "115",
             released: "October 2026",
