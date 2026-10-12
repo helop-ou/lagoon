@@ -344,6 +344,80 @@ extension PlayerRegressionUITests {
         }
     }
 
+    /// Title → person → title, and Back down the same chain, with focus
+    /// going into the cast rail and coming back to it.
+    func testCastMemberOpensTheirPageAndItsTitlesOpenDetail() throws {
+        let app = launchSeededSearchApp(query: "Night of the Living Dead")
+        let homeTab = app.tabBars.buttons["Home"]
+        let searchTab = app.tabBars.buttons["Search"]
+        XCTAssertTrue(searchTab.waitForExistence(timeout: 20))
+        moveFocus(to: homeTab, maxPresses: 8) { remote.press(.up) }
+        moveFocus(to: searchTab, maxPresses: 10) { remote.press(.right) }
+        remote.press(.select)
+
+        let posters = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "media.poster."))
+        guard posters.firstMatch.waitForExistence(timeout: 25) else {
+            throw XCTSkip("Requires a library title with cast and crew")
+        }
+        var focusedPoster: XCUIElement?
+        for _ in 0..<8 {
+            focusedPoster = posters.allElementsBoundByIndex.first(where: \.hasFocus)
+            if focusedPoster != nil { break }
+            remote.press(.down)
+            Thread.sleep(forTimeInterval: 0.2)
+        }
+        let itemID = try XCTUnwrap(focusedPoster, "No Search result received focus")
+            .identifier.replacingOccurrences(of: "media.poster.", with: "")
+        remote.press(.select)
+
+        let detail = app.descendants(matching: .any)["detail.item.\(itemID)"]
+        XCTAssertTrue(detail.waitForExistence(timeout: 10))
+        let castMembers = app.buttons.matching(NSPredicate(format: "identifier BEGINSWITH %@", "cast.member."))
+        guard castMembers.firstMatch.waitForExistence(timeout: 15) else {
+            throw XCTSkip("Requires a library title with cast and crew")
+        }
+        var focusedMember: XCUIElement?
+        for _ in 0..<10 {
+            focusedMember = castMembers.allElementsBoundByIndex.first(where: \.hasFocus)
+            if focusedMember != nil { break }
+            remote.press(.down)
+            Thread.sleep(forTimeInterval: 0.3)
+        }
+        let member = try XCTUnwrap(focusedMember, "Down never reached the cast rail")
+        // Sideways stays in the rail.
+        let memberID = member.identifier
+        remote.press(.right)
+        var movedMember: XCUIElement?
+        let deadline = Date().addingTimeInterval(5)
+        while movedMember == nil, Date() < deadline {
+            movedMember = castMembers.allElementsBoundByIndex.first { $0.hasFocus && $0.identifier != memberID }
+            if movedMember == nil { Thread.sleep(forTimeInterval: 0.2) }
+        }
+        let nextMember = try XCTUnwrap(movedMember, "Right did not move along the cast rail")
+        attachScreenshot(of: app, named: "Detail cast rail focused")
+        remote.press(.select)
+
+        let personPage = app.descendants(matching: .any)["person.page"]
+        XCTAssertTrue(personPage.waitForExistence(timeout: 10))
+        let libraryPoster = app.buttons["media.poster.\(itemID)"]
+        XCTAssertTrue(libraryPoster.waitForExistence(timeout: 15), "The person page did not list the title they came from")
+        moveFocus(to: libraryPoster, maxPresses: 6) { remote.press(.down) }
+        attachScreenshot(of: app, named: "Person page")
+        // A deep scroll walks into the biography and back without losing focus.
+        for _ in 0..<6 { remote.press(.down); Thread.sleep(forTimeInterval: 0.2) }
+        attachScreenshot(of: app, named: "Person page scrolled")
+        moveFocus(to: libraryPoster, maxPresses: 8) { remote.press(.up) }
+        remote.press(.select)
+
+        XCTAssertTrue(app.descendants(matching: .any)["detail.item.\(itemID)"].firstMatch.waitForExistence(timeout: 10))
+        remote.press(.menu)
+        XCTAssertTrue(libraryPoster.waitForExistence(timeout: 5))
+        remote.press(.menu)
+        XCTAssertTrue(nextMember.waitForExistence(timeout: 5))
+        Thread.sleep(forTimeInterval: 0.5)
+        XCTAssertTrue(nextMember.hasFocus, "Focus did not come back to the cast member on Back")
+    }
+
     /// Seeds the search query, since typing on the tvOS keyboard is one
     /// glyph at a time.
     private func launchSeededSearchApp(query: String) -> XCUIApplication {
