@@ -34,6 +34,8 @@ enum Metrics {
     static let castPortraitSize: CGFloat = 130
     static let castCaptionWidth: CGFloat = 180
     static let castCount = 8
+    /// The headshot at the top of a person page.
+    static let personPortraitSize: CGFloat = 260
     /// Box the title's logo fits inside. The height cap keeps wide and
     /// stacked logos looking the same size.
     static let logoMaxWidth: CGFloat = 620
@@ -122,6 +124,7 @@ enum Metrics {
     static let castPortraitSize: CGFloat = 72
     static let castCaptionWidth: CGFloat = 104
     // No castCount on iOS: the strip scrolls there, so it shows everyone.
+    static let personPortraitSize: CGFloat = 120
     static let logoMaxWidth: CGFloat = 240
     static let logoMaxHeight: CGFloat = 70
     static let heroLogoHeight: CGFloat = 54

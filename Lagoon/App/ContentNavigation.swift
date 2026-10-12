@@ -7,13 +7,15 @@ nonisolated enum ContentNavigationRoute: Hashable {
     case item(MediaItem)
     case genre(name: String, includeTypes: [MediaItemType])
     case search(String)
+    /// A cast or crew member's page.
+    case person(Person)
     #if os(iOS)
     /// The offline downloads list (tvOS has no downloads).
     case downloads
     #endif
 
-    // Route identity is the item id, however stale the carried copy is; the
-    // detail page re-fetches. `MediaItem` itself still compares by value.
+    // Route identity is the item or person id, however stale the carried
+    // copy is; the page re-fetches. `MediaItem` itself still compares by value.
     static func == (lhs: Self, rhs: Self) -> Bool {
         switch (lhs, rhs) {
         case let (.item(a), .item(b)):
@@ -22,6 +24,8 @@ nonisolated enum ContentNavigationRoute: Hashable {
             name == otherName && includeTypes == otherIncludeTypes
         case let (.search(query), .search(other)):
             query == other
+        case let (.person(a), .person(b)):
+            a.id == b.id
         #if os(iOS)
         case (.downloads, .downloads):
             true
@@ -43,6 +47,9 @@ nonisolated enum ContentNavigationRoute: Hashable {
         case .search(let query):
             hasher.combine(2)
             hasher.combine(query)
+        case .person(let person):
+            hasher.combine(4)
+            hasher.combine(person.id)
         #if os(iOS)
         case .downloads:
             hasher.combine(3)
@@ -63,6 +70,8 @@ private struct ContentNavigationDestination: View {
             GenreLibraryView(genre: name, includeTypes: includeTypes)
         case .search(let query):
             SearchResultsView(query: query, source: .library)
+        case .person(let person):
+            PersonDetailView(person: person)
         #if os(iOS)
         case .downloads:
             DownloadsView()
