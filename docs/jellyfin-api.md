@@ -140,6 +140,8 @@ Settings → Playback → Maximum Quality on Auto asks before negotiating
 | The episode after this one | `Shows/{seriesId}/Episodes?startItemId=&Limit=2` | index 1 is the next one |
 | Collections | `Users/{uid}/Items?IncludeItemTypes=BoxSet` | **`EnableUserData=false` or it takes 40 s**, see below |
 | What is in a collection | `Users/{uid}/Items?ParentId={boxSetId}&Recursive=false` | `SortBy=PremiereDate,SortName` for release order |
+| A person | `Users/{uid}/Items/{personId}` | birth date in `PremiereDate`, death in `EndDate`, birthplace in `ProductionLocations`; dates stay strings |
+| What credits a person | `Users/{uid}/Items?PersonIds={personId}&IncludeItemTypes=Movie,Series` | every role, not just acting; `SortBy=PremiereDate,ProductionYear,SortName` descending |
 
 List calls pass `Fields=Overview,Genres,…,OriginalLanguage` through
 `JellyfinClient.defaultFields`, because lists omit those fields by default.
@@ -236,6 +238,9 @@ official clients:
 - own backdrop → `ParentBackdropItemId`'s backdrop
 - `kind: .thumb`: episode still (Primary), then `Thumb`, backdrops, poster, so
   a title with only a Primary image still fills a landscape card
+- a cast entry's `PrimaryImageTag` is often missing even when the person
+  has a headshot, so the person page builds it from the person item's own
+  `ImageTags.Primary`
 
 A landscape card with no artwork shows its title.
 

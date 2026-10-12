@@ -316,9 +316,20 @@ checkmark.
 - **Title art** (`TitleArtView`): Jellyfin's `Logo` wordmark, with type as
   fallback. Logos are transparent PNGs of any aspect ratio, so they fit a box
   (`logoMaxWidth` × `logoMaxHeight`) rather than a fixed frame.
-- **Cast** (`CastStrip`): circular portraits, name over role. A fixed,
-  non-focusable row on tvOS (there is no person screen, and a focusable row
-  that does nothing is worse); a scrolling row on iOS.
+- **Cast** (`CastStrip`): circular portraits, name over role, in server
+  order. Library people are a `RailShelf` of `.card` buttons with
+  `.buttonBorderShape(.circle)`, so the system lift follows the circle; on
+  tvOS only the portrait is the button and the name stays beneath, as in the
+  profile picker. Everyone is listed, a missing headshot shows `person.fill`,
+  and one person can appear once per credit (director and writer). Seerr's
+  credits open nothing yet, so on tvOS they stay a fixed, non-focusable row of
+  `castCount`: a focusable row that does nothing is worse.
+- **Person page** (`PersonDetailView`): headshot, name and the birth and death
+  lines, then "In Your Library" as a poster rail, then the biography. The
+  rail comes before the biography so focus lands on a title, not on a wall of
+  text; on tvOS the biography's paragraphs are focusable so Down scrolls
+  through them, and an empty library says so in a focusable line, so the page
+  always has a focus target.
 - **Overlays over credits** (the Up Next card): system translucent material,
   never a black wash. White credits on black show through any flat scrim as
   readable letters; only blur hides them. On tvOS the track panel is
