@@ -33,6 +33,8 @@ enum Metrics {
     static let detailActionSpacing: CGFloat = 16
     static let castPortraitSize: CGFloat = 130
     static let castCaptionWidth: CGFloat = 180
+    /// Seerr's credits open nothing, so their strip is a fixed row that
+    /// focus passes over: eight fit across the screen.
     static let castCount = 8
     /// The headshot at the top of a person page.
     static let personPortraitSize: CGFloat = 260
