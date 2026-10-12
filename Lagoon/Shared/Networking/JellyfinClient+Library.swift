@@ -61,6 +61,8 @@ extension JellyfinClient {
         minCommunityRating: Double? = nil,
         /// `Continuing`, `Ended`, or `Unreleased`.
         seriesStatus: String? = nil,
+        /// Items crediting any of these people, in any role.
+        personIds: [String] = [],
         /// Watched flags and resume positions. Turn off for lists of
         /// folders, where they are very expensive (see `collections()`).
         enableUserData: Bool = true
@@ -105,6 +107,9 @@ extension JellyfinClient {
         if let searchTerm {
             query.append(URLQueryItem(name: "SearchTerm", value: searchTerm))
         }
+        if !personIds.isEmpty {
+            query.append(URLQueryItem(name: "PersonIds", value: personIds.joined(separator: ",")))
+        }
         return try await get("Users/\(userId)/Items", query: query)
     }
 
@@ -133,6 +138,24 @@ extension JellyfinClient {
     func itemData(id: String) async throws -> Data {
         let userId = try requireUserId()
         return try await getData("Users/\(userId)/Items/\(id)")
+    }
+
+    /// A person's biography, dates, birthplace and provider ids.
+    func person(id: String) async throws -> PersonDetails {
+        let userId = try requireUserId()
+        return try await get("Users/\(userId)/Items/\(id)")
+    }
+
+    /// The movies and series in the library that credit a person, in any
+    /// role, newest first.
+    func itemsCrediting(personId: String, limit: Int = 200) async throws -> [MediaItem] {
+        try await items(
+            includeTypes: [.movie, .series],
+            sortBy: "PremiereDate,ProductionYear,SortName",
+            sortOrder: "Descending",
+            limit: limit,
+            personIds: [personId]
+        ).items
     }
 
     /// Finds a TMDB entry in the user's library by provider id, never by
@@ -486,8 +509,12 @@ extension JellyfinClient {
 
     /// Cast headshot. People are items, so it is the item image route.
     func personImageURL(for person: Person, maxWidth: Int) -> URL? {
-        guard serverURL != nil, let tag = person.primaryImageTag else { return nil }
-        return try? url(path: "Items/\(person.id)/Images/Primary", query: [
+        personImageURL(id: person.id, tag: person.primaryImageTag, maxWidth: maxWidth)
+    }
+
+    func personImageURL(id: String, tag: String?, maxWidth: Int) -> URL? {
+        guard serverURL != nil, let tag else { return nil }
+        return try? url(path: "Items/\(id)/Images/Primary", query: [
             URLQueryItem(name: "maxWidth", value: String(maxWidth)),
             URLQueryItem(name: "quality", value: "90"),
             URLQueryItem(name: "tag", value: tag),

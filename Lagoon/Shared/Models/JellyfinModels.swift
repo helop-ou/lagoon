@@ -272,6 +272,35 @@ nonisolated struct Person: Decodable, Identifiable, Hashable {
     }
 }
 
+/// A person's own item, `Users/{uid}/Items/{personId}`: what the cast entry
+/// leaves out. Jellyfin keeps the birth date in `PremiereDate`, the death
+/// date in `EndDate` and the birthplace in `ProductionLocations`. The dates
+/// stay strings (see the wire format rules).
+nonisolated struct PersonDetails: Decodable, Hashable {
+    let id: String
+    let name: String?
+    /// The biography.
+    let overview: String?
+    let premiereDate: String?
+    let endDate: String?
+    let productionLocations: [String]?
+    let providerIds: [String: String]?
+    /// A cast entry often omits its headshot tag; the person's own item has it.
+    let imageTags: [String: String]?
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: AnyCodingKey.self)
+        id = try c.decode(String.self, forKey: "id")
+        name = try? c.decodeIfPresent(String.self, forKey: "name")
+        overview = try? c.decodeIfPresent(String.self, forKey: "overview")
+        premiereDate = try? c.decodeIfPresent(String.self, forKey: "premiereDate")
+        endDate = try? c.decodeIfPresent(String.self, forKey: "endDate")
+        productionLocations = try? c.decodeIfPresent([String].self, forKey: "productionLocations")
+        providerIds = try? c.decodeIfPresent([String: String].self, forKey: "providerIds")
+        imageTags = try? c.decodeIfPresent([String: String].self, forKey: "imageTags")
+    }
+}
+
 nonisolated struct MediaStream: Decodable, Hashable {
     let type: String?
     let codec: String?
