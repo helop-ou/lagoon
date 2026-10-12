@@ -27,6 +27,7 @@ October 2026
 
 - On iPhone and iPad, a downloaded episode without a season or episode number shows the same label as in the library, such as E4 or Special, instead of none.
 - Renaming a profile or changing its picture on the server no longer moves it down Who's Watching.
+- Cancelling a Seerr request or unblocking a title no longer shows a web page error after the server has done it.
 
 ## 0.5.1 (114)
 
