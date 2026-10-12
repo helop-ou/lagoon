@@ -240,6 +240,20 @@ struct SeerrClientTests {
         #expect(SeerrMockURLProtocol.requests.first?.proxyClientID == nil)
     }
 
+    /// Seerr answers a delete with a bodiless 204, which URLSession reports
+    /// as text/plain. That is a success, not an auth proxy's login page.
+    @Test func aBodilessDeleteSucceeds() async throws {
+        let client = makeClient()
+        client.configure(serverURL: URL(string: "https://seerr.test")!)
+        client.setSessionCookie("session")
+
+        try await client.deleteRequest(id: 41)
+        try await client.removeFromBlocklist(tmdbID: 60625, mediaType: .tv)
+
+        let requests = SeerrMockURLProtocol.requests
+        #expect(requests.map(\.path) == ["/api/v1/request/41", "/api/v1/blocklist/60625"])
+    }
+
     @Test func anAuthProxyAnsweringWithAWebPageIsNotBlamedOnSeerr() async throws {
         let client = makeClient()
         client.configure(serverURL: URL(string: "https://seerr.test/access")!)
@@ -430,6 +444,10 @@ private nonisolated final class SeerrMockURLProtocol: URLProtocol, @unchecked Se
             return (200, ["Content-Type": "application/json"], #"{"pageInfo":{"page":1,"pages":1,"pageSize":20,"results":1},"results":[{"id":41,"status":1,"type":"tv","media":{"id":8,"tmdbId":60625,"tvdbId":275274,"mediaType":"tv","status":2},"requestedBy":{"id":7,"username":"alex","permissions":32},"seasons":[{"id":1,"seasonNumber":1}]}]}"#)
         case ("POST", "/api/v1/request"):
             return (201, ["Content-Type": "application/json"], #"{"id":41,"status":1,"type":"tv","media":{"id":8,"tmdbId":60625,"tvdbId":275274,"mediaType":"tv","status":2},"seasons":[{"id":1,"seasonNumber":1}]}"#)
+        // What URLSession reports for Seerr's bodiless 204: no Content-Type
+        // on the wire, text/plain in `mimeType`.
+        case ("DELETE", "/api/v1/request/41"), ("DELETE", "/api/v1/blocklist/60625"):
+            return (204, ["Content-Type": "text/plain"], "")
         case ("POST", "/api/v1/request/41/approve"):
             return (200, ["Content-Type": "application/json"], #"{"id":41,"status":2,"type":"tv","media":{"id":8,"tmdbId":60625,"tvdbId":275274,"mediaType":"tv","status":3}}"#)
         default:

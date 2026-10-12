@@ -411,8 +411,11 @@ final class SeerrClient {
         captureSessionCookie(from: http, url: url)
         // A forward-auth proxy (Cloudflare Access, Authelia) redirects to
         // its login page, so the call returns a 200 with HTML. Only 2xx is
-        // checked; HTML on 4xx/5xx is a normal gateway error page.
-        if (200..<300).contains(http.statusCode), let mime = http.mimeType, !mime.hasSuffix("json") {
+        // checked; HTML on 4xx/5xx is a normal gateway error page. An empty
+        // body is no login page: Seerr's deletes answer a bare 204, which
+        // URLSession reports as text/plain.
+        if (200..<300).contains(http.statusCode), !data.isEmpty,
+           let mime = http.mimeType, !mime.hasSuffix("json") {
             let context = DecodingError.Context(codingPath: [], debugDescription: "Response was \(mime), not JSON")
             APIDiagnostics.decodeFailed(
                 DecodingError.dataCorrupted(context),
