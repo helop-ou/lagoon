@@ -8,6 +8,10 @@ import SwiftUI
 /// because a generic view cannot hold a static stored property.
 private let benchBareSurface = UserDefaults.standard.bool(forKey: "debug.benchBareSurface")
 
+/// Bench hook (`debug.benchPinnedTransport`): keep the transport up, to
+/// measure what the chrome costs over video.
+private let benchPinnedTransport = UserDefaults.standard.bool(forKey: "debug.benchPinnedTransport")
+
 /// Full-screen player: transport, overlays and the options panel. Talks only
 /// to `PlayerEngine`.
 ///
@@ -329,7 +333,7 @@ struct CustomPlayerView<Surface: View>: View {
         }
         .task(id: interactionToken) {
             try? await Task.sleep(for: .seconds(4))
-            guard !Task.isCancelled, !panelOpen, !engine.isPaused, !isScrubbing else { return }
+            guard !Task.isCancelled, !panelOpen, !engine.isPaused, !isScrubbing, !benchPinnedTransport else { return }
             controlsVisible = false
         }
         // Only show the spinner when buffering persists.
