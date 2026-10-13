@@ -27,10 +27,11 @@ struct MainTabView: View {
     @State private var deepLinkRetry = 0
     @State private var lifecycleBenchmarkMedia: MediaItem?
     @State private var lifecycleReplaysScheduled = 0
-    @State private var homeNavigationPath: [ContentNavigationRoute] = []
-    @State private var libraryNavigationPath: [ContentNavigationRoute] = []
-    // Discover and Search push both Jellyfin and Seerr routes, so their
-    // stacks are heterogeneous `NavigationPath`s.
+    // Every browse stack pushes both Jellyfin and Seerr routes (a person
+    // page's TMDB titles open Seerr pages), so each is a heterogeneous
+    // `NavigationPath`. A typed path silently drops the other enum's pushes.
+    @State private var homeNavigationPath = NavigationPath()
+    @State private var libraryNavigationPath = NavigationPath()
     @State private var discoverNavigationPath = NavigationPath()
     @State private var searchNavigationPath = NavigationPath()
     @State private var regressionResolution = "idle"
@@ -225,8 +226,8 @@ struct MainTabView: View {
     private func resetForAccountChange() {
         // Content belongs to the account that fetched it; drop the old
         // user's stacks even if MainTabView is not rebuilt.
-        homeNavigationPath.removeAll()
-        libraryNavigationPath.removeAll()
+        homeNavigationPath = NavigationPath()
+        libraryNavigationPath = NavigationPath()
         libraries = session.cachedLibraries()
         librariesLoaded = false
         discoverNavigationPath = NavigationPath()
@@ -338,7 +339,6 @@ struct MainTabView: View {
                         heroFocus: $homeHeroFocused
                     )
                         .tabRoot(.home, in: $visibleTabRoots)
-                        // A person page's TMDB titles open Seerr pages.
                         .seerrNavigationDestinations()
                         .contentNavigationDestinations()
                         .themedChrome()
@@ -429,8 +429,9 @@ struct MainTabView: View {
     /// its stack with the downloads list.
     private func showDownloadsList() {
         selectedTab = .library
-        if libraryNavigationPath != [.downloads] {
-            libraryNavigationPath = [.downloads]
+        let downloads = NavigationPath([ContentNavigationRoute.downloads])
+        if libraryNavigationPath != downloads {
+            libraryNavigationPath = downloads
         }
     }
     #endif
