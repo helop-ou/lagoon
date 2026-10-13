@@ -319,6 +319,12 @@ details](reference/playback/controls-and-reporting.md#progress-reporting).
 
 ## Controls and presentation
 
+**The rail:** a `.glassEffect(.clear)` capsule behind the played and buffered
+fills, on both platforms. The glass is a static full-width shape, so the
+playhead's 0.1 s updates move only the fills. It keeps one height,
+`Metrics.scrubberHeight`, so it is easy to see and to drag. Glass over live
+video costs the compositor, so bench any change to it.
+
 **iPhone and iPad controls:**
 
 - A surface tap toggles the transport. Centre play/pause and ±10 s buttons use

@@ -32,6 +32,7 @@ October 2026
 ### Improvements
 
 - Cast and Crew lists everyone credited, including people without a photo, and scrolls on Apple TV.
+- The player's timeline is a thicker glass bar that is easier to see and to scrub.
 
 ## 0.5.2 (115)
 
