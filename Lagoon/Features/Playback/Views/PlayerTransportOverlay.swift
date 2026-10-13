@@ -125,7 +125,7 @@ struct PlayerTransportOverlay: View {
     }
 }
 
-/// Flat rail with played and buffered ranges; a marker shows while
+/// Clear glass rail with played and buffered ranges; a marker shows while
 /// scrubbing. One of the two tick-rate leaves, so keep it a separate view.
 struct PlayerScrubber: View {
     @PlayerEngineRef var engine: any PlayerEngine
@@ -157,8 +157,6 @@ struct PlayerScrubber: View {
         GeometryReader { proxy in
             let width = proxy.size.width
             ZStack(alignment: .leading) {
-                Capsule()
-                    .fill(.white.opacity(0.2))
                 if !bufferedRanges.isEmpty {
                     ForEach(bufferedRanges, id: \.self) { range in
                         let lower = CGFloat(min(max(range.lowerFraction, 0), 1))
@@ -185,9 +183,14 @@ struct PlayerScrubber: View {
                     .animation(playheadMotion, value: playheadFraction)
                 chapterTicks(in: width)
             }
-            // The marker is an overlay: as a ZStack child its height grew
-            // the rail into the timestamp row.
-            .frame(width: width, height: Metrics.scrubberHeight)
+            // Leading: the fills alone are narrower than the rail. The marker
+            // is an overlay: as a ZStack child its height grew the rail into
+            // the timestamp row.
+            .frame(width: width, height: Metrics.scrubberHeight, alignment: .leading)
+            // A static shape behind the fills, so the playhead's ticks
+            // never reshape the glass.
+            .background { Color.clear.glassEffect(.clear, in: .capsule) }
+            .clipShape(.capsule)
             .overlay(alignment: .leading) { playheadMarker(in: width) }
             .overlay(alignment: .bottomLeading) { scrubPreview(in: width) }
             #if os(iOS)

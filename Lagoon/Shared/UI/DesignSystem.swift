@@ -23,7 +23,7 @@ enum Metrics {
     static let topTenRankOverlap: CGFloat = 28
     static let railTopPadding: CGFloat = 48    // headroom for the system focus lift and the focus halo
     static let railBottomPadding: CGFloat = 96
-    static let scrubberHeight: CGFloat = 6     // flat native transport rail
+    static let scrubberHeight: CGFloat = 14    // glass transport rail, thick enough for its glass to read
     /// Backdrop left uncovered above the info block. A scroll inset, not a
     /// spacer (see DetailPageScaffold).
     static let detailHeroSpace: CGFloat = 210
@@ -93,7 +93,7 @@ enum Metrics {
     /// The active profile's portrait as the Settings tab icon.
     static let chromeProfilePortraitSize: CGFloat = 26
     static let touchAvatarSize: CGFloat = 64
-    static let scrubberHeight: CGFloat = 6     // flat native transport rail
+    static let scrubberHeight: CGFloat = 12    // glass transport rail, thick enough for its glass to read
     static let detailHeroSpace: CGFloat = 100
     static let expandedDetailHeroSpace: CGFloat = 240
     /// Cap on the poster hero as a share of the safe-area height, so the
