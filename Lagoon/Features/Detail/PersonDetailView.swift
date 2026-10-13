@@ -1,20 +1,24 @@
 import SwiftUI
 
-/// A cast or crew member's page: who they are, and what in the library
-/// credits them. Opened from a detail page's cast strip.
+/// A cast or crew member's page: who they are, what in the library credits
+/// them and, with Seerr connected, the rest of their TMDB career. Opened
+/// from a detail page's cast strip or a Seerr person result.
 struct PersonDetailView: View {
-    let person: Person
+    let subject: PersonPageSubject
 
     @Environment(SessionStore.self) private var session
+    @Environment(SeerrSessionStore.self) private var seerr
     @Environment(ServerSyncState.self) private var serverSync
     @Environment(\.displayScale) private var displayScale
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
-    @State private var details: PersonDetails?
-    /// Nil until the first answer, so loading and an empty library differ.
-    @State private var titles: [MediaItem]?
-    @State private var titlesFailed = false
+    @State private var model: PersonPageModel
 
-    private var name: String { details?.name ?? person.name ?? "" }
+    init(subject: PersonPageSubject) {
+        self.subject = subject
+        _model = State(initialValue: PersonPageModel(subject: subject))
+    }
+
+    private var name: String { model.name }
 
     var body: some View {
         ZStack {
@@ -24,6 +28,7 @@ struct PersonDetailView: View {
                 VStack(alignment: .leading, spacing: Metrics.detailSectionSpacing) {
                     header
                     library
+                    tmdbTitles
                     biography
                 }
                 .padding(.vertical, Metrics.Space.xxl)
@@ -31,7 +36,8 @@ struct PersonDetailView: View {
             }
             .scrollClipDisabled()
         }
-        .task(id: person.id) {
+        // Seerr can finish connecting after the page opens.
+        .task(id: seerr.isConnected) {
             await load()
         }
         .onChange(of: serverSync.generation) { _, _ in
@@ -61,11 +67,17 @@ struct PersonDetailView: View {
     }
 
     private var portraitURL: URL? {
-        session.client.personImageURL(
-            id: person.id,
-            tag: details?.imageTags?["Primary"] ?? person.primaryImageTag,
-            maxWidth: ArtworkSizing.pixels(for: Metrics.personPortraitSize, displayScale: displayScale)
-        )
+        let width = ArtworkSizing.pixels(for: Metrics.personPortraitSize, displayScale: displayScale)
+        switch subject {
+        case .library(let person):
+            return session.client.personImageURL(
+                id: person.id,
+                tag: model.libraryDetails?.imageTags?["Primary"] ?? person.primaryImageTag,
+                maxWidth: width
+            )
+        case .tmdb(let person):
+            return SeerrClient.imageURL(path: model.tmdbDetails?.profilePath ?? person.profilePath, width: width)
+        }
     }
 
     private var portrait: some View {
@@ -98,7 +110,7 @@ struct PersonDetailView: View {
                 .fixedSize(horizontal: false, vertical: true)
                 .accessibilityAddTraits(.isHeader)
                 .accessibilityIdentifier("person.name")
-            ForEach(details?.lifeFacts(locale: .current) ?? [], id: \.self) { fact in
+            ForEach(model.lifeFacts(locale: .current), id: \.self) { fact in
                 Text(fact)
                     .font(.callout)
                     .foregroundStyle(.secondary)
@@ -109,41 +121,82 @@ struct PersonDetailView: View {
 
     // MARK: Library
 
+    /// Absent for a TMDB person the library does not know.
     @ViewBuilder
     private var library: some View {
         let title = String(localized: "In Your Library")
-        if let titles, !titles.isEmpty {
+        if let titles = model.titles, !titles.isEmpty {
             MediaRail(title: title, items: titles)
                 .accessibilityIdentifier("person.library")
-        } else if let titles, titles.isEmpty {
+        } else if model.isOutsideLibrary {
+            EmptyView()
+        } else if let titles = model.titles, titles.isEmpty {
             RailPlaceholder(title: title, minHeight: 0) {
                 // Focusable on tvOS: with no titles and no biography this
                 // may be the page's only focus target, and without one Menu
                 // quits the app.
-                Text("Nothing in your library credits \(name).")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                    #if os(tvOS)
-                    .focusable()
-                    #endif
+                placeholderText("Nothing in your library credits \(name).")
                     .accessibilityIdentifier("person.library.empty")
             }
-        } else if titlesFailed {
+        } else if model.titlesFailed {
             RailPlaceholder(title: title, minHeight: 0) {
                 InlineRetryView(message: String(localized: "Couldn't load the titles.")) {
-                    titlesFailed = false
+                    model.prepareRetry()
                     Task { await load() }
                 }
             }
         } else {
-            RailPlaceholder(title: title) {
-                ProgressView()
-                    #if os(tvOS)
-                    // Holds focus until the rail replaces it.
-                    .focusable()
-                    #endif
+            loadingPlaceholder(title: title)
+        }
+    }
+
+    // MARK: TMDB
+
+    /// A library person's page shows the rail only when it has titles, so
+    /// without Seerr it reads as before. A TMDB person's page always has the
+    /// section: it may be all there is to focus.
+    @ViewBuilder
+    private var tmdbTitles: some View {
+        let title = String(localized: "More from TMDB")
+        if let titles = model.tmdbTitles, !titles.isEmpty {
+            SeerrMediaRail(title: title, items: titles)
+                .accessibilityIdentifier("person.tmdb")
+        } else if case .tmdb = subject {
+            if model.tmdbTitles != nil {
+                RailPlaceholder(title: title, minHeight: 0) {
+                    placeholderText("TMDB lists nothing else for \(name).")
+                        .accessibilityIdentifier("person.tmdb.empty")
+                }
+            } else if model.tmdbTitlesFailed {
+                RailPlaceholder(title: title, minHeight: 0) {
+                    InlineRetryView(message: String(localized: "Couldn't load the titles.")) {
+                        model.prepareRetry()
+                        Task { await load() }
+                    }
+                }
+            } else {
+                loadingPlaceholder(title: title)
             }
+        }
+    }
+
+    private func placeholderText(_ text: LocalizedStringKey) -> some View {
+        Text(text)
+            .font(.callout)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+            #if os(tvOS)
+            .focusable()
+            #endif
+    }
+
+    private func loadingPlaceholder(title: String) -> some View {
+        RailPlaceholder(title: title) {
+            ProgressView()
+                #if os(tvOS)
+                // Holds focus until the rail replaces it.
+                .focusable()
+                #endif
         }
     }
 
@@ -151,7 +204,7 @@ struct PersonDetailView: View {
 
     @ViewBuilder
     private var biography: some View {
-        let paragraphs = PersonDetails.paragraphs(of: details?.overview)
+        let paragraphs = PersonDetails.paragraphs(of: model.biography)
         if !paragraphs.isEmpty {
             VStack(alignment: .leading, spacing: Metrics.Space.m) {
                 Text("Biography")
@@ -175,20 +228,8 @@ struct PersonDetailView: View {
 
     // MARK: Loading
 
-    /// A failed refresh keeps what is on screen.
     private func load() async {
-        let generation = serverSync.generation
-        async let fetchedDetails = try? session.client.person(id: person.id)
-        async let fetchedTitles = try? session.client.itemsCrediting(personId: person.id)
-        let (newDetails, newTitles) = await (fetchedDetails, fetchedTitles)
-        guard generation == serverSync.generation, !Task.isCancelled else { return }
-        if let newDetails { details = newDetails }
-        if let newTitles {
-            titles = newTitles
-            titlesFailed = false
-        } else if titles == nil {
-            titlesFailed = true
-        }
+        await model.load(jellyfin: session.client, seerr: seerr.isConnected ? seerr.client : nil)
     }
 }
 
@@ -196,10 +237,16 @@ extension PersonDetails {
     /// "Born April 20, 1945 in Pittsburgh, Pennsylvania, USA", then "Died …",
     /// each only as far as it is known.
     func lifeFacts(locale: Locale) -> [String] {
+        let place = productionLocations?.first { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        return Self.lifeFacts(born: premiereDate, place: place, died: endDate, locale: locale)
+    }
+
+    /// The same from any source's wire dates: TMDB's `yyyy-MM-dd` reads like
+    /// the start of Jellyfin's timestamp.
+    static func lifeFacts(born bornWire: String?, place placeWire: String?, died diedWire: String?, locale: Locale) -> [String] {
         var facts: [String] = []
-        let born = Self.displayDate(premiereDate, locale: locale)
-        let place = productionLocations?
-            .first { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        let born = displayDate(bornWire, locale: locale)
+        let place = placeWire.flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
         switch (born, place) {
         case let (born?, place?):
             facts.append(String(localized: "Born \(born) in \(place)", locale: locale))
@@ -210,7 +257,7 @@ extension PersonDetails {
         case (nil, nil):
             break
         }
-        if let died = Self.displayDate(endDate, locale: locale) {
+        if let died = displayDate(diedWire, locale: locale) {
             facts.append(String(localized: "Died \(died)", locale: locale))
         }
         return facts

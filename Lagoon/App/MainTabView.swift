@@ -338,6 +338,8 @@ struct MainTabView: View {
                         heroFocus: $homeHeroFocused
                     )
                         .tabRoot(.home, in: $visibleTabRoots)
+                        // A person page's TMDB titles open Seerr pages.
+                        .seerrNavigationDestinations()
                         .contentNavigationDestinations()
                         .themedChrome()
                 }
@@ -365,6 +367,7 @@ struct MainTabView: View {
                     )
                         .id(session.activeAccount?.id)
                         .tabRoot(.library, in: $visibleTabRoots)
+                        .seerrNavigationDestinations()
                         .contentNavigationDestinations()
                         .themedChrome()
                 }

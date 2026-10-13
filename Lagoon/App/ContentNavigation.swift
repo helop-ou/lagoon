@@ -71,7 +71,7 @@ private struct ContentNavigationDestination: View {
         case .search(let query):
             SearchResultsView(query: query, source: .library)
         case .person(let person):
-            PersonDetailView(person: person)
+            PersonDetailView(subject: .library(person))
         #if os(iOS)
         case .downloads:
             DownloadsView()

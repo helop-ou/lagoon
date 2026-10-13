@@ -8,6 +8,8 @@ nonisolated enum SeerrNavigationRoute: Hashable {
     case request(SeerrMediaRequest)
     case jellyfinItem(MediaItem)
     case search(String)
+    /// A TMDB person's page, from Seerr's cast or search.
+    case person(SeerrPerson)
 }
 
 private struct SeerrNavigationDestination: View {
@@ -32,6 +34,8 @@ private struct SeerrNavigationDestination: View {
                 .detailPageChrome()
         case .search(let query):
             SearchResultsView(query: query, source: .seerr)
+        case .person(let person):
+            PersonDetailView(subject: .tmdb(person))
         }
     }
 }
