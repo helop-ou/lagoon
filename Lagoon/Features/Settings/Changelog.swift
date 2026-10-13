@@ -54,6 +54,8 @@ nonisolated enum Changelog {
             sections: [
                 ChangelogSection(category: .newFeatures, changes: [
                     "Choose anyone in a title's Cast and Crew to see their photo, birth date and biography, and every movie and show in your library they worked on.",
+                    "With Seerr connected, a person's page also lists their other movies and shows from TMDB, ready to request.",
+                    "Cast and crew on Seerr title pages, and people in Seerr search results, open their page too.",
                 ]),
                 ChangelogSection(category: .improvements, changes: [
                     "Cast and Crew lists everyone credited, including people without a photo, and scrolls on Apple TV.",
