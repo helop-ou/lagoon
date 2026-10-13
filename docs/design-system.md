@@ -207,8 +207,8 @@ notes](reference/design-system.md#themes).
   `DetailActionLayout`, `MetadataFlowLayout`, title art and cast components
   serve both Jellyfin and Seerr pages; request state stands in for Play.
   `CastStrip` takes Jellyfin people or `CastCredit`s (Seerr's TMDB credits).
-  Library people are round native `.card` buttons on a `RailShelf` that open
-  the person page; Seerr's credits are not selectable yet. See the [design
+  People are round native `.card` buttons on a `RailShelf` that open the
+  person page, library people and Seerr's alike. See the [design
   notes](reference/design-system.md#components) for the cast and person
   page.
   - `DetailActionLayout` owns all four action compositions (primary pill,

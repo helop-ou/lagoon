@@ -131,6 +131,11 @@ the per-account manifest, the background `URLSession` and each file's artwork.
 - Home, Discover, Library, Search and Settings are stable tabs. Route identity
   belongs to `ContentNavigationRoute`. `MediaItem` keeps value equality so
   updated progress and metadata reach SwiftUI.
+- Every browse stack registers both route enums: a person page's TMDB titles
+  open Seerr pages from Home and Library too. The person page is reachable
+  from both, `.person(Person)` for a library person and
+  `SeerrNavigationRoute.person` for a TMDB one. `PersonPageModel` links the
+  two through the TMDB id.
 - After playback dismissal, the underlying screen refreshes only once
   `client.playbackReports.settle()` returns, but the dismissal itself never
   waits for that report.
@@ -142,7 +147,7 @@ Use these before writing a screen-specific copy:
 | Need | Existing implementation |
 | --- | --- |
 | Poster and landscape cards, horizontal browsing | `MediaCards.swift`, `MediaRail.swift` |
-| Item, series, collection, and Seerr detail composition | `DetailPageScaffold`, `DetailHeader` and `DetailMetadataHeader`, `DetailActionLayout` with `DetailLayout`, `DetailCircleButton`, `TitleArtView`, `CastStrip` (Jellyfin people, which open their person page, or `CastCredit`s), each in its own file in `Shared/UI/` |
+| Item, series, collection, and Seerr detail composition | `DetailPageScaffold`, `DetailHeader` and `DetailMetadataHeader`, `DetailActionLayout` with `DetailLayout`, `DetailCircleButton`, `TitleArtView`, `CastStrip` (Jellyfin people or Seerr `CastCredit`s, each opening their person page), each in its own file in `Shared/UI/` |
 | Adaptive actions, metadata wrapping, poster sizing | `AdaptiveActionStack`, `MetadataFlowLayout`, `PosterLayout` |
 | Loading, retry, and failure presentation | `LoadingView`, `InlineRetryView`, `ErrorStateView` |
 | Artwork and palette loading | `CachedAsyncImage`, `ImageCache`, `ArtworkPalette` |

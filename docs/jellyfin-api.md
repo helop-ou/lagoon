@@ -142,6 +142,7 @@ Settings → Playback → Maximum Quality on Auto asks before negotiating
 | What is in a collection | `Users/{uid}/Items?ParentId={boxSetId}&Recursive=false` | `SortBy=PremiereDate,SortName` for release order |
 | A person | `Users/{uid}/Items/{personId}` | birth date in `PremiereDate`, death in `EndDate`, birthplace in `ProductionLocations`; dates stay strings |
 | What credits a person | `Users/{uid}/Items?PersonIds={personId}&IncludeItemTypes=Movie,Series` | every role, not just acting; `SortBy=PremiereDate,ProductionYear,SortName` descending |
+| A person by TMDB id | `Persons?userId=&searchTerm={name}&Fields=ProviderIds` | **`AnyProviderIdEquals` is ignored for people** (12.2 answers with arbitrary ones), so search by name and keep only an exact `ProviderIds.Tmdb` match |
 
 List calls pass `Fields=Overview,Genres,…,OriginalLanguage` through
 `JellyfinClient.defaultFields`, because lists omit those fields by default.
@@ -406,6 +407,31 @@ A Seerr title page reads `movie/{id}` or `tv/{id}`:
   only the details.
 - Discovery titles use their name in type unless a matching Jellyfin item has
   a Logo image.
+
+## Seerr people
+
+A person page reads `person/{tmdbId}` for a TMDB person's biography and
+`person/{tmdbId}/combined_credits` for their career. Both are camelCase.
+`birthday` and `deathday` are `yyyy-MM-dd` and stay strings. A library
+person links to TMDB through `ProviderIds.Tmdb`. Without one, the page shows
+only the library rail.
+
+Combined credits list one entry per role, cast and crew together, each a
+discover result plus `character` or `job`, `genreIds` and `voteCount`.
+`mediaInfo` is present only for titles Seerr tracks. The "More from TMDB"
+rail:
+
+- keeps movies and shows with a poster, most voted first;
+- collapses repeat entries for one title (TMDB ids repeat between movies and
+  shows, so the key is type and id);
+- drops self-appearances: TMDB's News, Reality and Talk genres (10763, 10764,
+  10767), and characters that start with "Self", "Himself", "Herself" or
+  "Themselves", which catches award shows and documentaries;
+- drops what the library has: Available or Partially Available in
+  `mediaInfo`, or a TMDB id among the library rail's titles.
+
+Seerr's search returns people as `mediaType: person` with `profilePath`.
+Search shows them in a "People" strip that opens the same page.
 
 ## App Transport Security
 

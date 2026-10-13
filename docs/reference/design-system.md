@@ -322,14 +322,21 @@ checkmark.
   tvOS only the portrait is the button and the name stays beneath, as in the
   profile picker. Everyone is listed, a missing headshot shows `person.fill`,
   and one person can appear once per credit (director and writer). Seerr's
-  credits open nothing yet, so on tvOS they stay a fixed, non-focusable row of
-  `castCount`: a focusable row that does nothing is worse.
+  credits open the TMDB person's page; one without a TMDB id would open
+  nothing, so a strip holding one stays a fixed, non-focusable row of
+  `castCount` on tvOS: a focusable row that does nothing is worse. Search
+  reuses the strip, titled "People", for Seerr's person results.
 - **Person page** (`PersonDetailView`): headshot, name and the birth and death
-  lines, then "In Your Library" as a poster rail, then the biography. The
-  rail comes before the biography so focus lands on a title, not on a wall of
-  text; on tvOS the biography's paragraphs are focusable so Down scrolls
-  through them, and an empty library says so in a focusable line, so the page
-  always has a focus target.
+  lines, then "In Your Library" as a poster rail, then, with Seerr connected,
+  "More from TMDB" in Seerr's cards, then the biography. The rails come
+  before the biography so focus lands on a title, not on a wall of text; on
+  tvOS the biography's paragraphs are focusable so Down scrolls through them,
+  and an empty library says so in a focusable line, so the page always has a
+  focus target. A library person's page shows the TMDB rail only when it has
+  titles, so without Seerr it is unchanged. A TMDB person's page takes its
+  headshot and biography from Seerr, drops the library rail when the library
+  does not know them, and always keeps the TMDB section, with a focusable
+  line when it is empty.
 - **Overlays over credits** (the Up Next card): system translucent material,
   never a black wash. White credits on black show through any flat scrim as
   readable letters; only blur hides them. On tvOS the track panel is
