@@ -336,6 +336,8 @@ nonisolated struct SeerrDiscoverResult: Decodable, Hashable, Identifiable {
     let overview: String?
     let posterPath: String?
     let backdropPath: String?
+    /// A person result's headshot.
+    let profilePath: String?
     let releaseDate: String?
     let firstAirDate: String?
     let voteAverage: Double?
@@ -354,6 +356,7 @@ nonisolated struct SeerrDiscoverResult: Decodable, Hashable, Identifiable {
         overview = try container.decodeIfPresent(String.self, forKey: .overview)
         posterPath = try container.decodeIfPresent(String.self, forKey: .posterPath)
         backdropPath = try container.decodeIfPresent(String.self, forKey: .backdropPath)
+        profilePath = try? container.decodeIfPresent(String.self, forKey: .profilePath)
         releaseDate = try container.decodeIfPresent(String.self, forKey: .releaseDate)
         firstAirDate = try container.decodeIfPresent(String.self, forKey: .firstAirDate)
         voteAverage = try container.decodeIfPresent(Double.self, forKey: .voteAverage)
@@ -362,7 +365,13 @@ nonisolated struct SeerrDiscoverResult: Decodable, Hashable, Identifiable {
 
     private enum CodingKeys: String, CodingKey {
         case id, mediaType, title, name, originalTitle, originalName, overview
-        case posterPath, backdropPath, releaseDate, firstAirDate, voteAverage, mediaInfo
+        case posterPath, backdropPath, profilePath, releaseDate, firstAirDate, voteAverage, mediaInfo
+    }
+
+    /// A person result, as the person page takes it.
+    var person: SeerrPerson? {
+        guard mediaType == .person else { return nil }
+        return SeerrPerson(id: id, name: displayTitle, profilePath: profilePath)
     }
 
     var displayTitle: String { title ?? name ?? originalTitle ?? originalName ?? "Untitled" }

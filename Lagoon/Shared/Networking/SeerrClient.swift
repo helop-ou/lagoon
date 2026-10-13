@@ -210,6 +210,19 @@ final class SeerrClient {
         return try await get("\(path)/\(id)/recommendations", query: pageQuery(page))
     }
 
+    // MARK: - People
+
+    /// A TMDB person's biography and headshot.
+    func person(id: Int) async throws -> SeerrPersonDetails {
+        try await get("person/\(id)")
+    }
+
+    /// Every movie and show TMDB credits a person with, each carrying its
+    /// Seerr `mediaInfo` when Seerr knows the title.
+    func personCredits(id: Int) async throws -> SeerrPersonCredits {
+        try await get("person/\(id)/combined_credits")
+    }
+
     // MARK: - Requests
 
     func requests(

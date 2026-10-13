@@ -146,6 +146,20 @@ extension JellyfinClient {
         return try await get("Users/\(userId)/Items/\(id)")
     }
 
+    /// The library's person for a TMDB id, if there is one. Jellyfin ignores
+    /// `AnyProviderIdEquals` for people, so this searches by name and keeps
+    /// only an exact TMDB id match.
+    func person(tmdbID: Int, name: String) async throws -> PersonDetails? {
+        let userId = try requireUserId()
+        let page: PersonsPage = try await get("Persons", query: [
+            URLQueryItem(name: "userId", value: userId),
+            URLQueryItem(name: "searchTerm", value: name),
+            URLQueryItem(name: "Fields", value: "ProviderIds"),
+            URLQueryItem(name: "Limit", value: "20"),
+        ])
+        return page.items.first { $0.tmdbID == tmdbID }
+    }
+
     /// The movies and series in the library that credit a person, in any
     /// role, newest first.
     func itemsCrediting(personId: String, limit: Int = 200) async throws -> [MediaItem] {

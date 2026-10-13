@@ -299,6 +299,23 @@ nonisolated struct PersonDetails: Decodable, Hashable {
         providerIds = try? c.decodeIfPresent([String: String].self, forKey: "providerIds")
         imageTags = try? c.decodeIfPresent([String: String].self, forKey: "imageTags")
     }
+
+    /// The TMDB person id, which links the library person to Seerr.
+    var tmdbID: Int? {
+        providerIds?
+            .first { $0.key.caseInsensitiveCompare("Tmdb") == .orderedSame }
+            .flatMap { Int($0.value) }
+    }
+}
+
+/// `Persons`: people found by name.
+nonisolated struct PersonsPage: Decodable {
+    let items: [PersonDetails]
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: AnyCodingKey.self)
+        items = try c.decodeIfPresent([PersonDetails].self, forKey: "items") ?? []
+    }
 }
 
 nonisolated struct MediaStream: Decodable, Hashable {
