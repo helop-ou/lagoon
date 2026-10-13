@@ -131,8 +131,10 @@ the per-account manifest, the background `URLSession` and each file's artwork.
 - Home, Discover, Library, Search and Settings are stable tabs. Route identity
   belongs to `ContentNavigationRoute`. `MediaItem` keeps value equality so
   updated progress and metadata reach SwiftUI.
-- Every browse stack registers both route enums: a person page's TMDB titles
-  open Seerr pages from Home and Library too. The person page is reachable
+- Every browse stack registers both route enums and keeps a heterogeneous
+  `NavigationPath`: a person page's TMDB titles open Seerr pages from Home
+  and Library too, and a typed `[ContentNavigationRoute]` path silently drops
+  a Seerr push. The person page is reachable
   from both, `.person(Person)` for a library person and
   `SeerrNavigationRoute.person` for a TMDB one. `PersonPageModel` links the
   two through the TMDB id.
