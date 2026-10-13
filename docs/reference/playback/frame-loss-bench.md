@@ -59,7 +59,7 @@ ID. Pinning the start matters: otherwise the previous run's progress report
 moves the next run into a different scene. These overrides only apply with the
 bench enabled and have no Settings UI. On hardware, read the HUD's Bench line.
 
-Two view-cost switches exist for A/B runs, through `--set` or as launch
+Three view-cost switches exist for A/B runs, through `--set` or as launch
 arguments. They work in Release, like the rest of the bench, because the
 numbers that matter come from Apple TV hardware:
 
@@ -68,6 +68,12 @@ numbers that matter come from Apple TV hardware:
 - `debug.benchFlatCues` skips rasterizing subtitle cues. The cue shadow and
   background filtered every frame dropped frames on Apple TV HDR, and
   `drawingGroup()` fixed it; this switch undoes the fix for comparison.
+- `debug.benchPinnedTransport` keeps the transport up for the whole run.
+  The bench re-arms on any input, so this is the only way to measure the
+  chrome while it shows. Pair each pinned run with an unpinned one: the
+  transport stays mounted at zero opacity while hidden, so it can cost
+  something there too. Frame loss rarely moves; with `-debug.decodeTrace YES`
+  the median `main=` of the `CPUTrace` lines is the finer signal.
 
 The bench, the passthrough timeline and the EL NAL filter are covered by
 `LagoonTests`, because timestamp jitter, bitstream mangling and measurement
