@@ -133,7 +133,8 @@ struct SeerrMediaDetailView: View {
                     id: member.creditId,
                     name: member.name ?? "",
                     credit: member.character.flatMap { $0.isEmpty ? nil : $0 },
-                    imageURL: SeerrClient.imageURL(path: member.profilePath, width: portraitWidth)
+                    imageURL: SeerrClient.imageURL(path: member.profilePath, width: portraitWidth),
+                    tmdbPerson: Self.person(id: member.id, name: member.name, profilePath: member.profilePath)
                 )
             }
         let crew = credits.crew.map { member in
@@ -141,10 +142,18 @@ struct SeerrMediaDetailView: View {
                 id: member.creditId,
                 name: member.name ?? "",
                 credit: member.job.flatMap { $0.isEmpty ? nil : $0 } ?? member.department,
-                imageURL: SeerrClient.imageURL(path: member.profilePath, width: portraitWidth)
+                imageURL: SeerrClient.imageURL(path: member.profilePath, width: portraitWidth),
+                tmdbPerson: Self.person(id: member.id, name: member.name, profilePath: member.profilePath)
             )
         }
         return cast + crew
+    }
+
+    /// The person a credit opens. A missing TMDB id decodes as 0, which
+    /// opens nothing.
+    nonisolated static func person(id: Int, name: String?, profilePath: String?) -> SeerrPerson? {
+        guard id > 0, let name, !name.isEmpty else { return nil }
+        return SeerrPerson(id: id, name: name, profilePath: profilePath)
     }
 
     /// Open in Lagoon, Request, or the request's status, styled like Play.

@@ -161,6 +161,7 @@ struct SearchView: View {
     @Environment(SessionStore.self) private var session
     @Environment(SeerrSessionStore.self) private var seerr
     @Environment(ServerSyncState.self) private var serverSync
+    @Environment(\.displayScale) private var displayScale
     @State private var librarySearch = SearchViewModel()
     private var recents: RecentSearchStore { session.recentSearches }
     @State private var searchText = ""
@@ -180,6 +181,7 @@ struct SearchView: View {
                 } else {
                     librarySearchSection
                     seerrSearchSection
+                    seerrPeopleSection
                 }
             }
             .padding(.bottom, Metrics.Space.section)
@@ -294,6 +296,27 @@ struct SearchView: View {
                 searchRetryID += 1
             }
             // No "See All" when empty, as in the library section.
+        }
+    }
+
+    /// Seerr's person results, which open their person page.
+    @ViewBuilder
+    private var seerrPeopleSection: some View {
+        if seerr.isConnected {
+            let portraitWidth = ArtworkSizing.pixels(for: Metrics.castPortraitSize, displayScale: displayScale)
+            CastStrip(
+                credits: searchResults.compactMap(\.person).map { person in
+                    CastCredit(
+                        id: "person-\(person.id)",
+                        name: person.name,
+                        credit: nil,
+                        imageURL: SeerrClient.imageURL(path: person.profilePath, width: portraitWidth),
+                        tmdbPerson: person
+                    )
+                },
+                title: String(localized: "People"),
+                identifier: "search.seerr.people"
+            )
         }
     }
 

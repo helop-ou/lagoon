@@ -10,27 +10,42 @@ struct CastCredit: Identifiable, Hashable {
     /// The library person the card opens. Nil for Seerr's TMDB credits,
     /// which have no Jellyfin person behind them.
     var person: Person? = nil
+    /// The TMDB person a Seerr credit opens.
+    var tmdbPerson: SeerrPerson? = nil
+
+    var opensPage: Bool { person != nil || tmdbPerson != nil }
 }
 
-/// Cast and crew. Library people are a rail of round cards that open the
-/// person's page. Seerr's credits open nothing, so on tvOS they stay a
-/// fixed, unfocusable row that focus moving past scrolls into view.
+/// Cast and crew: a rail of round cards that open the person's page. On
+/// tvOS, credits that open nothing stay a fixed, unfocusable row that focus
+/// moving past scrolls into view.
 struct CastStrip: View {
     @Environment(\.displayScale) private var displayScale
     private let people: [Person]
     private let credits: [CastCredit]?
+    private let title: String
+    private let identifier: String
 
     @Environment(\.jellyfinClient) private var client
 
     init(people: [Person]) {
         self.people = people
         self.credits = nil
+        self.title = String(localized: "Cast and Crew")
+        self.identifier = "detail.cast"
     }
 
-    /// A cast already resolved, for titles not in the library.
-    init(credits: [CastCredit]) {
+    /// A cast already resolved, for titles not in the library, or people
+    /// from Seerr's search.
+    init(
+        credits: [CastCredit],
+        title: String = String(localized: "Cast and Crew"),
+        identifier: String = "detail.cast"
+    ) {
         self.people = []
         self.credits = credits
+        self.title = title
+        self.identifier = identifier
     }
 
     /// Server order is kept. Library people without a headshot keep their
@@ -55,7 +70,7 @@ struct CastStrip: View {
     var body: some View {
         if !cast.isEmpty {
             #if os(tvOS)
-            if credits == nil {
+            if cast.allSatisfy(\.opensPage) {
                 rail
             } else {
                 fixedRow
@@ -67,18 +82,18 @@ struct CastStrip: View {
     }
 
     private var rail: some View {
-        RailShelf(title: String(localized: "Cast and Crew"), alignment: .top) {
+        RailShelf(title: title, alignment: .top) {
             ForEach(cast) { member in
                 castMember(member)
             }
         }
-        .accessibilityIdentifier("detail.cast")
+        .accessibilityIdentifier(identifier)
     }
 
     #if os(tvOS)
     private var fixedRow: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Cast and Crew")
+            Text(title)
                 .font(.headline)
                 .padding(.leading, Metrics.screenGutter)
 
@@ -112,32 +127,10 @@ struct CastStrip: View {
     @ViewBuilder
     private func castMember(_ member: CastCredit) -> some View {
         if let person = member.person {
-            #if os(tvOS)
-            // Only the portrait is the button, as in the profile picker: the
-            // card lift follows the circle and the name stays put beneath.
-            VStack(spacing: Metrics.Space.l) {
-                NavigationLink(value: ContentNavigationRoute.person(person)) {
-                    portrait(member)
-                }
-                .cardButtonStyle()
-                .buttonBorderShape(.circle)
-                .accessibilityLabel(accessibilityLabel(member))
-                .accessibilityIdentifier("cast.member.\(person.id)")
-
-                caption(member)
-                    .accessibilityHidden(true)
-            }
-            #else
-            NavigationLink(value: ContentNavigationRoute.person(person)) {
-                VStack(spacing: Metrics.Space.s) {
-                    portrait(member)
-                    caption(member)
-                }
-            }
-            .buttonStyle(.plain)
-            .accessibilityElement(children: .combine)
-            .accessibilityIdentifier("cast.member.\(person.id)")
-            #endif
+            castLink(member, to: ContentNavigationRoute.person(person), identifier: "cast.member.\(person.id)")
+        } else if let person = member.tmdbPerson {
+            // Seerr pages navigate by their own routes.
+            castLink(member, to: SeerrNavigationRoute.person(person), identifier: "cast.member.tmdb.\(person.id)")
         } else {
             VStack(spacing: Metrics.Space.s) {
                 portrait(member)
@@ -145,6 +138,36 @@ struct CastStrip: View {
             }
             .accessibilityElement(children: .combine)
         }
+    }
+
+    @ViewBuilder
+    private func castLink(_ member: CastCredit, to route: some Hashable, identifier: String) -> some View {
+        #if os(tvOS)
+        // Only the portrait is the button, as in the profile picker: the
+        // card lift follows the circle and the name stays put beneath.
+        VStack(spacing: Metrics.Space.l) {
+            NavigationLink(value: route) {
+                portrait(member)
+            }
+            .cardButtonStyle()
+            .buttonBorderShape(.circle)
+            .accessibilityLabel(accessibilityLabel(member))
+            .accessibilityIdentifier(identifier)
+
+            caption(member)
+                .accessibilityHidden(true)
+        }
+        #else
+        NavigationLink(value: route) {
+            VStack(spacing: Metrics.Space.s) {
+                portrait(member)
+                caption(member)
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .combine)
+        .accessibilityIdentifier(identifier)
+        #endif
     }
 
     private func accessibilityLabel(_ member: CastCredit) -> String {
