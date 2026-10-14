@@ -330,6 +330,32 @@ extension JellyfinClient {
         displayOrder == "SortName" ? "SortName" : "PremiereDate,SortName"
     }
 
+    /// The viewer's video playlists by name; audio ones are left out. User
+    /// data off for the same reason as `collections`: a playlist is a folder.
+    func playlists(limit: Int = 100) async throws -> [MediaItem] {
+        try await items(
+            includeTypes: [.playlist],
+            sortBy: "SortName",
+            limit: limit,
+            enableUserData: false
+        ).items.filter(Self.isVideoPlaylist)
+    }
+
+    nonisolated static func isVideoPlaylist(_ item: MediaItem) -> Bool {
+        item.type == .playlist && item.mediaType == "Video" && (item.childCount ?? 0) > 0
+    }
+
+    /// A playlist's entries in the order its owner arranged them, a title
+    /// listed twice appearing twice.
+    func playlistItems(playlistId: String, limit: Int = 500) async throws -> [MediaItem] {
+        let page: ItemsPage = try await get("Playlists/\(playlistId)/Items", query: [
+            URLQueryItem(name: "UserId", value: try requireUserId()),
+            URLQueryItem(name: "Limit", value: String(limit)),
+            URLQueryItem(name: "Fields", value: Self.defaultFields),
+        ])
+        return page.items
+    }
+
     /// The Favorites rail. Movies and series only: the favourite star
     /// targets the series, not episodes.
     func favorites(limit: Int = 16) async throws -> [MediaItem] {

@@ -12,16 +12,15 @@ final class CollectionDetailViewModel {
         guard !isLoading else { return }
         isLoading = true
         errorMessage = nil
-        // The collection's own record adds overview and artwork; its
-        // failure never fails the page.
+        // The list's own record adds overview and artwork; its failure
+        // never fails the page.
         async let detailTask = try? await client.item(id: collection.id)
         do {
-            items = try await client.collectionItems(
-                collectionId: collection.id,
-                displayOrder: (detail ?? collection).displayOrder
-            )
+            items = try await contents(of: collection, client: client)
         } catch {
-            errorMessage = "Couldn't load this collection."
+            errorMessage = collection.type == .playlist
+                ? String(localized: "Couldn't load this playlist.")
+                : String(localized: "Couldn't load this collection.")
         }
         if let refreshedDetail = await detailTask {
             detail = refreshedDetail
@@ -32,16 +31,32 @@ final class CollectionDetailViewModel {
     /// After a poster-menu toggle or playback only the titles can have
     /// moved.
     func refreshItems(client: JellyfinClient, collection: MediaItem) async {
-        guard let refreshed = try? await client.collectionItems(
-            collectionId: collection.id,
-            displayOrder: (detail ?? collection).displayOrder
-        ) else { return }
+        guard let refreshed = try? await contents(of: collection, client: client) else { return }
         items = refreshed
+    }
+
+    /// A playlist in the order its owner arranged it; a collection in the
+    /// order it is set to.
+    private func contents(of list: MediaItem, client: JellyfinClient) async throws -> [MediaItem] {
+        if list.type == .playlist {
+            return try await client.playlistItems(playlistId: list.id)
+        }
+        return try await client.collectionItems(
+            collectionId: list.id,
+            displayOrder: (detail ?? list).displayOrder
+        )
     }
 }
 
-/// A collection's page, in the collection's own order. Play runs the whole
-/// collection as a queue; a poster in the grid opens just that title.
+/// One grid cell. Keyed by position, because a playlist can list a title
+/// twice under the same ids.
+private struct ListEntry: Identifiable {
+    let id: Int
+    let media: MediaItem
+}
+
+/// A collection's or playlist's page, in the list's own order. Play runs the
+/// whole list as a queue; a poster in the grid opens just that title.
 struct CollectionDetailView: View {
     let item: MediaItem
 
@@ -78,7 +93,10 @@ struct CollectionDetailView: View {
             contents
         }
         #if os(iOS)
-        .navigationTitle(displayed.name ?? "Collection")
+        .navigationTitle(displayed.name ?? (item.type == .playlist ? "Playlist" : "Collection"))
+        // The page draws its own title; a large one inherited from Library or
+        // Playlists would repeat it.
+        .navigationBarTitleDisplayMode(.inline)
         #endif
         .task(id: item.id) {
             if viewModel.items.isEmpty {
@@ -109,19 +127,25 @@ struct CollectionDetailView: View {
             LoadingView()
         } else if viewModel.items.isEmpty {
             // The only focusable element when empty; without it Menu quits the app.
-            InlineRetryView(message: viewModel.errorMessage ?? "There's nothing in this collection.") {
+            InlineRetryView(message: viewModel.errorMessage ?? emptyMessage) {
                 Task { await viewModel.load(client: session.client, collection: item) }
             }
             .padding(.horizontal, Metrics.screenGutter)
         } else {
-            PosterGridView(items: viewModel.items) { title in
-                PosterCard(item: title)
-                    .itemUserDataMenu(item: title) {
+            PosterGridView(items: viewModel.items.enumerated().map(ListEntry.init)) { entry in
+                PosterCard(item: entry.media)
+                    .itemUserDataMenu(item: entry.media) {
                         await viewModel.refreshItems(client: session.client, collection: item)
                     }
             }
             .padding(.horizontal, Metrics.screenGutter)
         }
+    }
+
+    private var emptyMessage: String {
+        item.type == .playlist
+            ? String(localized: "There's nothing in this playlist.")
+            : String(localized: "There's nothing in this collection.")
     }
 
     private func actions(_ playback: ListPlayback) -> some View {

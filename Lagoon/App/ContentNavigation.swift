@@ -9,6 +9,8 @@ nonisolated enum ContentNavigationRoute: Hashable {
     case search(String)
     /// A cast or crew member's page.
     case person(Person)
+    /// Every video playlist, from Library.
+    case playlists
     #if os(iOS)
     /// The offline downloads list (tvOS has no downloads).
     case downloads
@@ -26,6 +28,8 @@ nonisolated enum ContentNavigationRoute: Hashable {
             query == other
         case let (.person(a), .person(b)):
             a.id == b.id
+        case (.playlists, .playlists):
+            true
         #if os(iOS)
         case (.downloads, .downloads):
             true
@@ -50,6 +54,8 @@ nonisolated enum ContentNavigationRoute: Hashable {
         case .person(let person):
             hasher.combine(4)
             hasher.combine(person.id)
+        case .playlists:
+            hasher.combine(5)
         #if os(iOS)
         case .downloads:
             hasher.combine(3)
@@ -72,6 +78,8 @@ private struct ContentNavigationDestination: View {
             SearchResultsView(query: query, source: .library)
         case .person(let person):
             PersonDetailView(subject: .library(person))
+        case .playlists:
+            PlaylistsView()
         #if os(iOS)
         case .downloads:
             DownloadsView()

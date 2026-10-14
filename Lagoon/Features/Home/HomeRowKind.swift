@@ -12,6 +12,7 @@ nonisolated enum HomeRowKind: Equatable {
     case movieGenres
     case showGenres
     case collections
+    case playlists
     case topTen
     /// A rail `HomeViewModel` publishes into `curatedRails` under its id.
     case curated
@@ -27,6 +28,7 @@ nonisolated enum HomeRowKind: Equatable {
         HomeRowID.movieGenres: .movieGenres,
         HomeRowID.showGenres: .showGenres,
         CollectionShelf.rowID: .collections,
+        PlaylistShelf.rowID: .playlists,
         HomeCuratedRows.ID.topMovies: .topTen,
         HomeCuratedRows.ID.topShows: .topTen,
         HomeCuratedRows.ID.becauseYouWatched: .curated,

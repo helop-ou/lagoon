@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// One collection as Home draws it.
+/// One collection or playlist as Home draws it.
 nonisolated struct CollectionShelfItem: Identifiable, Equatable {
     var id: String { collection.id }
     let collection: MediaItem
@@ -97,28 +97,59 @@ nonisolated enum CollectionShelf {
     }
 }
 
-/// The Collections row. Not a `MediaRail`, because a card with borrowed
-/// artwork needs a label to tell the collection from the film.
+/// The Playlists row: every video playlist with something in it, in the
+/// server's name order. Artwork is borrowed as for collections, since
+/// Jellyfin often has none for a playlist.
+nonisolated enum PlaylistShelf {
+    /// Persisted per account; renaming would re-enable a hidden row.
+    static let rowID = "lagoon.playlists"
+
+    /// Home's row and the Library page. Nil when the list request fails.
+    @MainActor
+    static func load(client: JellyfinClient, limit: Int? = nil) async -> [CollectionShelfItem]? {
+        guard let fetched = try? await client.playlists() else { return nil }
+        let playlists = limit.map { Array(fetched.prefix($0)) } ?? fetched
+        var borrowed: [String: MediaItem] = [:]
+        await withTaskGroup(of: (String, MediaItem?).self) { group in
+            for playlist in playlists where !CollectionShelf.hasLandscapeArtwork(playlist) {
+                group.addTask {
+                    let contents = (try? await client.playlistItems(playlistId: playlist.id, limit: 8)) ?? []
+                    return (playlist.id, CollectionShelf.artworkSource(from: contents))
+                }
+            }
+            for await (id, artwork) in group {
+                borrowed[id] = artwork
+            }
+        }
+        return CollectionShelf.shelf(playlists, borrowedArtwork: borrowed)
+    }
+}
+
+/// The Collections or Playlists row. Not a `MediaRail`, because a card with
+/// borrowed artwork needs a label to tell the list from the film.
 struct CollectionRail: View {
     let title: String
     let collections: [CollectionShelfItem]
+    /// `collection` or `playlist`, for the row's and cards' identifiers.
+    var identifier = "collection"
 
     var body: some View {
         if !collections.isEmpty {
             RailShelf(title: title) {
                 ForEach(collections) { collection in
-                    CollectionCard(collection: collection)
+                    CollectionCard(collection: collection, identifier: identifier)
                 }
             }
-            .accessibilityIdentifier("home.collections")
+            .accessibilityIdentifier("home.\(identifier)s")
         }
     }
 }
 
 /// The name sits under the artwork, not over it: collection art often has
 /// the name painted in already, and a caption can wrap instead of truncating.
-private struct CollectionCard: View {
+struct CollectionCard: View {
     let collection: CollectionShelfItem
+    var identifier = "collection"
 
     var body: some View {
         // Room for the `.card` focus lift, which scales the art about 10%.
@@ -130,7 +161,7 @@ private struct CollectionCard: View {
             }
             .cardButtonStyle()
             .accessibilityLabel("\(collection.name), \(CollectionShelf.countLabel(collection.titleCount))")
-            .accessibilityIdentifier("home.collection.\(collection.id)")
+            .accessibilityIdentifier("home.\(identifier).\(collection.id)")
 
             caption
         }

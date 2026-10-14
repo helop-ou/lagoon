@@ -65,6 +65,7 @@ nonisolated enum MediaItemType: String, Codable, Hashable {
     case season = "Season"
     case episode = "Episode"
     case boxSet = "BoxSet"
+    case playlist = "Playlist"
     case other
 
     init(from decoder: Decoder) throws {
@@ -97,6 +98,11 @@ nonisolated struct MediaItem: Decodable, Identifiable {
     /// A collection's order as its owner set it, such as `SortName` or
     /// `PremiereDate`. Nil for everything else.
     let displayOrder: String?
+    /// `Video` or `Audio`; a playlist takes its first entry's.
+    let mediaType: String?
+    /// Set on a playlist's entries. Not unique: Jellyfin 12 returns the
+    /// title's own id, so a title listed twice repeats it.
+    let playlistItemId: String?
     let indexNumber: Int?
     /// The last number of a double episode (`E1–2`); nil for a single one.
     let indexNumberEnd: Int?
@@ -134,6 +140,8 @@ nonisolated struct MediaItem: Decodable, Identifiable {
         originalLanguage = try c.decodeIfPresent(String.self, forKey: "originalLanguage")
         childCount = try c.decodeIfPresent(Int.self, forKey: "childCount")
         displayOrder = try? c.decodeIfPresent(String.self, forKey: "displayOrder")
+        mediaType = try? c.decodeIfPresent(String.self, forKey: "mediaType")
+        playlistItemId = try? c.decodeIfPresent(String.self, forKey: "playlistItemId")
         indexNumber = try c.decodeIfPresent(Int.self, forKey: "indexNumber")
         indexNumberEnd = try c.decodeIfPresent(Int.self, forKey: "indexNumberEnd")
         parentIndexNumber = try c.decodeIfPresent(Int.self, forKey: "parentIndexNumber")

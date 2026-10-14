@@ -23,7 +23,7 @@ struct ListPlayback {
             resumes = false
         }
         guard let queue = PlayQueueList(
-            entries: playable.map { PlayQueueList.Entry(media: $0) },
+            entries: playable.map { PlayQueueList.Entry(media: $0, playlistItemId: $0.playlistItemId) },
             position: start
         ) else { return nil }
         self.queue = queue

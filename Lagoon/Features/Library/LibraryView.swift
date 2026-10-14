@@ -13,6 +13,9 @@ struct LibraryView: View {
     @State private var decadeRetry = 0
     @State private var genreViewModel = LibraryGenreViewModel()
     @State private var genreRetry = 0
+    /// Video playlists; the Playlists entry shows only above zero. A failed
+    /// count keeps the last one.
+    @State private var playlistCount = 0
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     private struct DecadeRequest: Hashable {
@@ -33,6 +36,7 @@ struct LibraryView: View {
             VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
                 #if os(iOS)
                 downloadsEntry
+                playlistsEntry
                 #endif
                 controls
                 results
@@ -60,6 +64,7 @@ struct LibraryView: View {
         .task(id: genreRetry) {
             await loadGenres()
         }
+        .task { await loadPlaylistCount() }
         .onChange(of: selection) { _, value in
             value.save(accountID: accountID)
         }
@@ -85,29 +90,35 @@ struct LibraryView: View {
     @ViewBuilder
     private var downloadsEntry: some View {
         if !DownloadStore.shared.entries.isEmpty || serverSync.serverUnreachable {
-            NavigationLink(value: ContentNavigationRoute.downloads) {
-                HStack(spacing: Metrics.Space.m) {
-                    Image(systemName: "arrow.down.circle.fill")
-                        .font(.title2)
-                    VStack(alignment: .leading, spacing: Metrics.Space.hair) {
-                        Text("Downloads")
-                            .font(.headline)
-                        Text(downloadsSubtitle)
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer(minLength: Metrics.Space.m)
-                    Image(systemName: "chevron.forward")
-                        .font(.caption.bold())
-                        .foregroundStyle(.tertiary)
-                }
-                .padding(Metrics.Space.l)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.roundedRectangle(radius: Metrics.cardCornerRadius))
+            LibraryEntryLink(
+                route: .downloads,
+                title: "Downloads",
+                subtitle: downloadsSubtitle,
+                systemImage: "arrow.down.circle.fill"
+            )
             .accessibilityIdentifier("library.downloads")
         }
+    }
+
+    /// Opens the playlists page, like Downloads; tvOS has it in the controls
+    /// row instead.
+    @ViewBuilder
+    private var playlistsEntry: some View {
+        if playlistCount > 0 {
+            LibraryEntryLink(
+                route: .playlists,
+                title: "Playlists",
+                subtitle: playlistsSubtitle,
+                systemImage: "list.and.film"
+            )
+            .accessibilityIdentifier("library.playlists")
+        }
+    }
+
+    private var playlistsSubtitle: String {
+        playlistCount == 1
+            ? String(localized: "1 playlist")
+            : String(localized: "\(playlistCount) playlists")
     }
 
     private var downloadsSubtitle: String {
@@ -147,6 +158,13 @@ struct LibraryView: View {
             }
             HStack(spacing: Metrics.Space.xl) {
                 kindPicker
+                if playlistCount > 0 {
+                    NavigationLink(value: ContentNavigationRoute.playlists) {
+                        Label("Playlists", systemImage: "list.and.film")
+                    }
+                    .buttonStyle(.glass)
+                    .accessibilityIdentifier("library.playlists")
+                }
                 Spacer(minLength: Metrics.Space.xl)
                 sortMenu
                 filterMenu
@@ -370,7 +388,13 @@ struct LibraryView: View {
         } else {
             await viewModel.load(selection: selection, fetch: session.client.libraryItems)
         }
-        _ = await (years, genres)
+        async let playlists: Void = loadPlaylistCount()
+        _ = await (years, genres, playlists)
+    }
+
+    private func loadPlaylistCount() async {
+        guard let playlists = try? await session.client.playlists() else { return }
+        playlistCount = playlists.count
     }
 
     private func loadGenres() async {
@@ -379,6 +403,38 @@ struct LibraryView: View {
 }
 
 #if os(iOS)
+/// A full-width glass row above the controls that opens another list.
+private struct LibraryEntryLink: View {
+    let route: ContentNavigationRoute
+    let title: LocalizedStringKey
+    let subtitle: String
+    let systemImage: String
+
+    var body: some View {
+        NavigationLink(value: route) {
+            HStack(spacing: Metrics.Space.m) {
+                Image(systemName: systemImage)
+                    .font(.title2)
+                VStack(alignment: .leading, spacing: Metrics.Space.hair) {
+                    Text(title)
+                        .font(.headline)
+                    Text(subtitle)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: Metrics.Space.m)
+                Image(systemName: "chevron.forward")
+                    .font(.caption.bold())
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(Metrics.Space.l)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .buttonStyle(.glass)
+        .buttonBorderShape(.roundedRectangle(radius: Metrics.cardCornerRadius))
+    }
+}
+
 private struct LibraryKindPickerStyle: ViewModifier {
     let usesMenu: Bool
 

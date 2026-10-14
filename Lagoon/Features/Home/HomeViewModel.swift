@@ -35,6 +35,7 @@ final class HomeViewModel {
     private var librarySample: [MediaItem] = []
     var curatedRails: [String: LibraryRail] = [:]
     var collections: [CollectionShelfItem] = []
+    var playlists: [CollectionShelfItem] = []
     var isLoading = true
     var errorMessage: String?
 
@@ -229,6 +230,10 @@ final class HomeViewModel {
                 guard let self else { return }
                 await self.loadCollections(client: client, generation: generation)
             },
+            Task { [weak self] in
+                guard let self else { return }
+                await self.loadPlaylists(client: client, generation: generation)
+            },
         ]
     }
 
@@ -305,7 +310,11 @@ final class HomeViewModel {
             client: client,
             generation: generation
         )
-        _ = await (progress, latest, plugin, curated, topTen, refreshedCollections)
+        async let refreshedPlaylists: Void = loadPlaylists(
+            client: client,
+            generation: generation
+        )
+        _ = await (progress, latest, plugin, curated, topTen, refreshedCollections, refreshedPlaylists)
     }
 
     func refreshPluginRails(
@@ -560,6 +569,14 @@ final class HomeViewModel {
         collections = CollectionShelf.shelf(ranked, borrowedArtwork: borrowed)
     }
 
+    /// The Playlists row; see `PlaylistShelf.load`.
+    private func loadPlaylists(client: JellyfinClient, generation: Int) async {
+        let identity = client.sessionIdentity
+        guard let shelf = await PlaylistShelf.load(client: client, limit: CollectionShelf.maximumVisible),
+              isCurrent(generation, identity: identity, client: client) else { return }
+        playlists = shelf
+    }
+
     /// Nil when there is too little watch history to pick a genre.
     private func spotlightRail(genre: String?, client: JellyfinClient) async -> LibraryRail? {
         guard let genre else { return nil }
@@ -766,6 +783,7 @@ final class HomeViewModel {
         // Or the old account's "Because You Watched" shows on the new one.
         curatedRails = [:]
         collections = []
+        playlists = []
         errorMessage = nil
     }
 

@@ -170,6 +170,8 @@ struct HomeView: View {
             )
         case .collections:
             CollectionRail(title: "Collections", collections: viewModel.collections)
+        case .playlists:
+            CollectionRail(title: "Playlists", collections: viewModel.playlists, identifier: "playlist")
         case .topTen:
             topTenRail(id)
         case .curated:

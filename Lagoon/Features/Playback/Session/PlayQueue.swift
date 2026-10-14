@@ -41,12 +41,14 @@ nonisolated enum PlayQueue: Equatable {
 }
 
 /// A collection's or playlist's titles in play order, and which one is
-/// playing. Entries are told apart by position, never by title, because a
-/// playlist can hold the same title twice.
+/// playing. Entries are told apart by position, never by title or
+/// `PlaylistItemId`: a playlist can hold the same title twice, and Jellyfin 12
+/// gives both entries the same `PlaylistItemId`.
 nonisolated struct PlayQueueList: Equatable {
     nonisolated struct Entry: Equatable {
         let media: MediaItem
-        /// The playlist's own id for this entry. Nil in a collection.
+        /// The server's id for this playlist entry, kept for editing later.
+        /// Nil in a collection; not unique (see the type).
         var playlistItemId: String?
     }
 

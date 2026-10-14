@@ -91,6 +91,18 @@ struct HomeRowPreferenceTests {
         #expect(reconciled.first { $0.id == HomeCuratedRows.ID.topMovies }?.isEnabled == true)
     }
 
+    @Test func playlistsArriveDirectlyBelowCollectionsInAnArrangedLayout() {
+        // A layout saved before the row existed, with Collections moved up.
+        var layout = HomeSectionPreferenceResolver.defaultLayout.filter { $0.id != PlaylistShelf.rowID }
+        let collections = layout.remove(at: layout.firstIndex { $0.id == CollectionShelf.rowID }!)
+        layout.insert(collections, at: 0)
+
+        let ids = HomeSectionPreferenceResolver.reconciled(layout, sections: []).map(\.id)
+
+        #expect(ids.prefix(2) == [CollectionShelf.rowID, PlaylistShelf.rowID])
+        #expect(HomeRowKind(id: PlaylistShelf.rowID) == .playlists)
+    }
+
     @Test func aFirstNativeRowWithNoPredecessorStillLandsAtTheTop() {
         var layout = HomeSectionPreferenceResolver.defaultLayout
         layout.removeAll { $0.id == HomeRowID.continueWatching }
