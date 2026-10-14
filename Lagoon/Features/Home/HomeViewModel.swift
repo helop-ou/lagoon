@@ -545,6 +545,7 @@ final class HomeViewModel {
                 group.addTask {
                     let contents = (try? await client.collectionItems(
                         collectionId: collection.id,
+                        displayOrder: collection.displayOrder,
                         limit: 8
                     )) ?? []
                     return (collection.id, CollectionShelf.artworkSource(from: contents))

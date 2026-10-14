@@ -13,3 +13,10 @@ nonisolated struct PlayerItem: Identifiable {
     /// What follows `media`. In a list queue, `media` is the current entry.
     var queue: PlayQueue = .series
 }
+
+nonisolated extension PlayerItem {
+    /// Plays a list from its current entry.
+    init(list: PlayQueueList, startFromBeginning: Bool = false) {
+        self.init(media: list.current.media, startFromBeginning: startFromBeginning, queue: .list(list))
+    }
+}

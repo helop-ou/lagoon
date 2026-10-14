@@ -94,6 +94,9 @@ nonisolated struct MediaItem: Decodable, Identifiable {
     let status: String?
     let originalLanguage: String?
     let childCount: Int?
+    /// A collection's order as its owner set it, such as `SortName` or
+    /// `PremiereDate`. Nil for everything else.
+    let displayOrder: String?
     let indexNumber: Int?
     /// The last number of a double episode (`E1–2`); nil for a single one.
     let indexNumberEnd: Int?
@@ -130,6 +133,7 @@ nonisolated struct MediaItem: Decodable, Identifiable {
         status = try c.decodeIfPresent(String.self, forKey: "status")
         originalLanguage = try c.decodeIfPresent(String.self, forKey: "originalLanguage")
         childCount = try c.decodeIfPresent(Int.self, forKey: "childCount")
+        displayOrder = try? c.decodeIfPresent(String.self, forKey: "displayOrder")
         indexNumber = try c.decodeIfPresent(Int.self, forKey: "indexNumber")
         indexNumberEnd = try c.decodeIfPresent(Int.self, forKey: "indexNumberEnd")
         parentIndexNumber = try c.decodeIfPresent(Int.self, forKey: "parentIndexNumber")

@@ -312,16 +312,22 @@ extension JellyfinClient {
         ).items
     }
 
-    /// One collection's titles in release order; `SortName` breaks ties for
-    /// undated titles. Not recursive: membership is direct.
-    func collectionItems(collectionId: String, limit: Int = 200) async throws -> [MediaItem] {
+    /// One collection's titles in the order its owner set: by name, or by
+    /// release date with `SortName` breaking ties for undated titles. Release
+    /// order when the server does not say. Not recursive: membership is
+    /// direct.
+    func collectionItems(collectionId: String, displayOrder: String?, limit: Int = 200) async throws -> [MediaItem] {
         try await items(
             parentId: collectionId,
             recursive: false,
-            sortBy: "PremiereDate,SortName",
+            sortBy: Self.collectionSortBy(displayOrder: displayOrder),
             sortOrder: "Ascending",
             limit: limit
         ).items
+    }
+
+    nonisolated static func collectionSortBy(displayOrder: String?) -> String {
+        displayOrder == "SortName" ? "SortName" : "PremiereDate,SortName"
     }
 
     /// The Favorites rail. Movies and series only: the favourite star

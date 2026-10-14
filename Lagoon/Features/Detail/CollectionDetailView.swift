@@ -8,15 +8,18 @@ final class CollectionDetailViewModel {
     var isLoading = false
     var errorMessage: String?
 
-    func load(client: JellyfinClient, collectionId: String) async {
+    func load(client: JellyfinClient, collection: MediaItem) async {
         guard !isLoading else { return }
         isLoading = true
         errorMessage = nil
         // The collection's own record adds overview and artwork; its
         // failure never fails the page.
-        async let detailTask = try? await client.item(id: collectionId)
+        async let detailTask = try? await client.item(id: collection.id)
         do {
-            items = try await client.collectionItems(collectionId: collectionId)
+            items = try await client.collectionItems(
+                collectionId: collection.id,
+                displayOrder: (detail ?? collection).displayOrder
+            )
         } catch {
             errorMessage = "Couldn't load this collection."
         }
@@ -26,21 +29,32 @@ final class CollectionDetailViewModel {
         isLoading = false
     }
 
-    /// After a poster-menu toggle only the grid can have moved.
-    func refreshItems(client: JellyfinClient, collectionId: String) async {
-        guard let refreshed = try? await client.collectionItems(collectionId: collectionId) else { return }
+    /// After a poster-menu toggle or playback only the titles can have
+    /// moved.
+    func refreshItems(client: JellyfinClient, collection: MediaItem) async {
+        guard let refreshed = try? await client.collectionItems(
+            collectionId: collection.id,
+            displayOrder: (detail ?? collection).displayOrder
+        ) else { return }
         items = refreshed
     }
 }
 
-/// A collection's page, in release order. No Play button on purpose:
-/// "play a franchise" is ambiguous, and the grid answers it in one press.
+/// A collection's page, in the collection's own order. Play runs the whole
+/// collection as a queue; a poster in the grid opens just that title.
 struct CollectionDetailView: View {
     let item: MediaItem
 
     @Environment(SessionStore.self) private var session
     @Environment(ServerSyncState.self) private var serverSync
     @State private var viewModel = CollectionDetailViewModel()
+    @State private var playerItem: PlayerItem?
+    #if os(tvOS)
+    /// tvOS left focus on the tab bar after the player closed from this
+    /// page, where the shared reset does not reach the actions; the film
+    /// page does not need it. Claimed back explicitly.
+    @FocusState private var actionsFocused: Bool
+    #endif
 
     private var displayed: MediaItem { viewModel.detail ?? item }
 
@@ -53,7 +67,12 @@ struct CollectionDetailView: View {
             ) {
                 TitleArtView(item: displayed)
             } buttons: {
-                EmptyView()
+                if let playback = CollectionPlayback(items: viewModel.items) {
+                    actions(playback)
+                        #if os(tvOS)
+                        .focused($actionsFocused)
+                        #endif
+                }
             }
 
             contents
@@ -63,12 +82,23 @@ struct CollectionDetailView: View {
         #endif
         .task(id: item.id) {
             if viewModel.items.isEmpty {
-                await viewModel.load(client: session.client, collectionId: item.id)
+                await viewModel.load(client: session.client, collection: item)
             }
         }
         .onChange(of: serverSync.generation) { _, _ in
-            Task { await viewModel.load(client: session.client, collectionId: item.id) }
+            Task { await viewModel.load(client: session.client, collection: item) }
         }
+        .restoresFocusAfterPlayer(isPresented: playerItem != nil)
+        .playerPresentation(item: $playerItem, onDismiss: {
+            #if os(tvOS)
+            actionsFocused = true
+            #endif
+            Task {
+                // Read progress back only once the stop report has landed.
+                await session.client.playbackReports.settle()
+                await viewModel.refreshItems(client: session.client, collection: item)
+            }
+        })
         .accessibilityIdentifier("collection.detail.\(item.id)")
         .accessibilityValue("\(viewModel.items.count) titles")
     }
@@ -80,17 +110,30 @@ struct CollectionDetailView: View {
         } else if viewModel.items.isEmpty {
             // The only focusable element when empty; without it Menu quits the app.
             InlineRetryView(message: viewModel.errorMessage ?? "There's nothing in this collection.") {
-                Task { await viewModel.load(client: session.client, collectionId: item.id) }
+                Task { await viewModel.load(client: session.client, collection: item) }
             }
             .padding(.horizontal, Metrics.screenGutter)
         } else {
             PosterGridView(items: viewModel.items) { title in
                 PosterCard(item: title)
                     .itemUserDataMenu(item: title) {
-                        await viewModel.refreshItems(client: session.client, collectionId: item.id)
+                        await viewModel.refreshItems(client: session.client, collection: item)
                     }
             }
             .padding(.horizontal, Metrics.screenGutter)
+        }
+    }
+
+    private func actions(_ playback: CollectionPlayback) -> some View {
+        DetailPlayActions(
+            resumes: playback.resumes,
+            caption: playback.caption,
+            play: { playerItem = PlayerItem(list: playback.queue) },
+            playFromBeginning: playback.fromBeginning.map { list in
+                { playerItem = PlayerItem(list: list, startFromBeginning: true) }
+            }
+        ) {
+            EmptyView()
         }
     }
 
