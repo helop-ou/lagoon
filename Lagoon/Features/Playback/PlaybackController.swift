@@ -29,8 +29,9 @@ final class PlaybackController {
     let subtitleSearch = SubtitleSearchCoordinator()
     let incidents = PlaybackIncidentMonitor()
 
-    /// The next episode, resolved at start so Up Next can appear instantly.
-    /// Nil for movies and at the end of a series.
+    /// The next episode or list entry, resolved at start so Up Next can
+    /// appear instantly. Nil for a lone movie and at the end of a series or
+    /// list.
     private(set) var nextUp: MediaItem? {
         didSet { automation.setNextUpAvailable(nextUp != nil) }
     }
@@ -84,6 +85,9 @@ final class PlaybackController {
     var playheadPrefetchCount: Int { engine?.bufferState.playheadPrefetchCount ?? 0 }
 
     private var client: JellyfinClient?
+    /// Set by the viewer's start and moved on by each hand-off. A retry or a
+    /// quality change replays the same entry.
+    private var queue: PlayQueue = .series
     /// Kept so a failed attempt can be replayed on the next rung.
     private var currentMedia: MediaItem?
     /// The current rung and the position a retry resumes from. A new item
@@ -211,8 +215,10 @@ final class PlaybackController {
         preferredSubtitleLanguages: [String] = [],
         missingSubtitleMode: MissingSubtitleMode = .ask,
         startPosition: Double? = nil,
-        startPaused: Bool = false
+        startPaused: Bool = false,
+        queue: PlayQueue = .series
     ) async {
+        self.queue = queue
         selection = TrackSelectionSettings(
             audioMode: trackPreferences.audioMode,
             subtitleMode: trackPreferences.subtitleMode,
@@ -700,7 +706,7 @@ final class PlaybackController {
     }
 
     private func beginAutomation(segments: [MediaSegment], engine: SampleBufferPlayerEngine) {
-        automation.beginItem(segments: segments)
+        automation.beginItem(segments: segments, countdownWaitsForEnd: queue.countdownWaitsForEnd)
         // Seeded: the callback only reports changes.
         automation.isBuffering = engine.isBuffering
         // Through the controller, so a skip in a group is a group seek.
@@ -713,7 +719,7 @@ final class PlaybackController {
                 return
             }
             self.isAutoplayPending = true
-            Task { await self.playNextEpisode() }
+            Task { await self.playNext() }
         }
     }
 
@@ -994,16 +1000,22 @@ final class PlaybackController {
         nextUpTask?.cancel()
         successorPreparation.cancel()
         nextUp = nil
-        guard media.type == .episode else { return }
-        nextUpTask = Task { [weak self] in
-            let next = try? await client.episodeAfter(media)
-            guard !Task.isCancelled else { return }
-            self?.nextUp = next
+        switch queue.successor(after: media) {
+        case .none:
+            break
+        case .entry(let next):
+            nextUp = next
+        case .nextEpisode:
+            nextUpTask = Task { [weak self] in
+                let next = try? await client.episodeAfter(media)
+                guard !Task.isCancelled else { return }
+                self?.nextUp = next
+            }
         }
     }
 
-    /// Negotiates and warms the successor in the last two minutes of an
-    /// episode.
+    /// Negotiates and warms the successor in the last two minutes of a
+    /// title.
     private func prepareNextIfNeeded(force: Bool = false) {
         guard !successorPreparation.hasPreparation,
               let next = nextUp, let client else { return }
@@ -1042,15 +1054,16 @@ final class PlaybackController {
         )
     }
 
-    /// Roll into the queued episode without leaving the player.
+    /// Roll into the next episode or list entry without leaving the player.
     ///
-    /// The finished episode's stop report must land before the next one
+    /// The finished title's stop report must land before the next one
     /// starts, or Jellyfin leaves it unresolved instead of marking it played.
-    func playNextEpisode() async {
+    func playNext() async {
         defer { isAutoplayPending = false }
         guard !isAdvancing, let next = nextUp, client != nil else { return }
         isAdvancing = true
         defer { isAdvancing = false }
+        queue = queue.advanced()
         beginEpisodeHandoff(to: next)
         prepareNextIfNeeded(force: true)
         let prepared = await successorPreparation.preparedForHandoff()
@@ -1120,7 +1133,7 @@ final class PlaybackController {
     }
 
     /// The file ran out. Races a running countdown; whichever arrives first
-    /// wins, and `playNextEpisode` guards against both. Decided here, not in
+    /// wins, and `playNext` guards against both. Decided here, not in
     /// the view, so a locked phone rolls on too.
     private func playbackDidFinish() {
         didFinish = true
@@ -1196,12 +1209,14 @@ final class PlaybackController {
     // MARK: - Group playback
 
     /// Swaps the item in one player session when the group moves on. Same
-    /// stop-then-start as `playNextEpisode`, so the video surface survives,
-    /// without the successor warm-up.
+    /// stop-then-start as `playNext`, so the video surface survives,
+    /// without the successor warm-up. The group's order replaces any list
+    /// the viewer started.
     func startGroupItem(_ media: MediaItem, startPosition: Double) async {
         guard !isAdvancing, !isClosed, client != nil else { return }
         isAdvancing = true
         defer { isAdvancing = false }
+        queue = .series
         await restart(
             media,
             scope: "group",

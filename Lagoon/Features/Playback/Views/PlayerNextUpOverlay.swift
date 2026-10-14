@@ -21,15 +21,17 @@ nonisolated enum NextUpPolicy {
     }
 
     /// With an outro the countdown runs from the credits' first frame.
-    /// Without one it is pinned to the file's last seconds, so autoplay
-    /// never cuts into content.
+    /// Without one, or when `waitsForEnd` (a list queue, whose movies can
+    /// hide a scene after the credits), it is pinned to the file's last
+    /// seconds, so autoplay never cuts into content.
     static func countdownStart(
         cardStart: Double?,
         outroStart: Double?,
-        duration: Double
+        duration: Double,
+        waitsForEnd: Bool = false
     ) -> Double? {
         guard let cardStart else { return nil }
-        if outroStart != nil { return cardStart }
+        if outroStart != nil, !waitsForEnd { return cardStart }
         return max(cardStart, duration - AutoplayMode.countdownSeconds)
     }
 
@@ -41,12 +43,25 @@ nonisolated enum NextUpPolicy {
     }
 }
 
+extension NextUpEpisode {
+    /// An episode reads as its number and name; a movie, from a list queue,
+    /// as its title and year.
+    init(_ media: MediaItem, imageURL: URL?) {
+        self.init(
+            title: media.name ?? "",
+            subtitle: media.type == .movie ? media.productionYear.map(String.init) : media.episodeLabel,
+            imageURL: imageURL
+        )
+    }
+}
+
 /// Draws `PlaybackAutomation`'s state, which runs off the engine's clock so
 /// a locked phone still rolls into the next episode. Shares the corner with
 /// the skip pill; the two are never up together.
 struct PlayerNextUpOverlay: View {
     let automation: PlaybackAutomation
-    /// Nil for movies, at a series end, and until the lookup lands.
+    /// Nil for a lone movie, at the end of a series or list, and until the
+    /// lookup lands.
     let episode: NextUpEpisode?
     let reduceMotion: Bool
     let hint: LocalizedStringKey

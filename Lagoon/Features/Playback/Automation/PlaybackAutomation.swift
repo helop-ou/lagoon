@@ -56,6 +56,9 @@ final class PlaybackAutomation {
     @ObservationIgnored var onPlayNext: (() -> Void)?
 
     private var segments: [MediaSegment] = []
+    /// The item is in a list queue: the card still comes at the credits,
+    /// but its countdown waits for the end of the file.
+    private var countdownWaitsForEnd = false
     private var hasNextUp = false
     private var duration: Double = 0
     private var position: Double = 0
@@ -104,8 +107,9 @@ final class PlaybackAutomation {
 
     /// A "no" belongs to the episode it was said during, not the rest of the
     /// binge.
-    func beginItem(segments: [MediaSegment]) {
+    func beginItem(segments: [MediaSegment], countdownWaitsForEnd: Bool = false) {
         self.segments = segments
+        self.countdownWaitsForEnd = countdownWaitsForEnd
         handledSegmentIDs.removeAll()
         nextUpAnswer = .none
         position = 0
@@ -265,7 +269,8 @@ final class PlaybackAutomation {
             countdownStart = NextUpPolicy.countdownStart(
                 cardStart: offeredStart,
                 outroStart: outroStart,
-                duration: duration
+                duration: duration,
+                waitsForEnd: countdownWaitsForEnd
             )
         }
         nextUpCardStart = cardStart

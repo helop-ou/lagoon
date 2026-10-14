@@ -47,8 +47,7 @@ struct VideoPlayerView: View {
     private var nextUpEpisode: NextUpEpisode? {
         guard let next = controller.nextUp else { return nil }
         return NextUpEpisode(
-            title: next.name ?? "",
-            subtitle: next.episodeLabel,
+            next,
             imageURL: session.client.imageURL(for: next, kind: .thumb, maxWidth: 480)
         )
     }
@@ -151,7 +150,8 @@ struct VideoPlayerView: View {
                 preferredSubtitleLanguages: subtitlePreferences.preferredLanguages,
                 missingSubtitleMode: subtitlePreferences.values.missingMode,
                 startPosition: playerItem.startPosition,
-                startPaused: playerItem.startPaused
+                startPaused: playerItem.startPaused,
+                queue: playerItem.queue
             )
         }
         .onChange(of: controller.didFinish) { _, finished in
@@ -304,7 +304,7 @@ struct VideoPlayerView: View {
         ProgressView()
             .controlSize(.large)
             .tint(.white)
-            .accessibilityLabel("Loading next episode")
+            .accessibilityLabel("Loading next title")
             .accessibilityIdentifier("player.episodeTransition")
         // Focus stays on the video surface, so the transition never
         // leaves a focusless frame.

@@ -10,4 +10,6 @@ nonisolated struct PlayerItem: Identifiable {
     var startPosition: Double?
     /// Hold on the first frame; a group member starts at the agreed instant.
     var startPaused = false
+    /// What follows `media`. In a list queue, `media` is the current entry.
+    var queue: PlayQueue = .series
 }
