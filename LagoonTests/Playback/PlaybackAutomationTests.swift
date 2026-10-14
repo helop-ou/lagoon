@@ -31,13 +31,14 @@ struct PlaybackAutomationTests {
         skip: SkipMode = .autoDelay,
         autoplay: AutoplayMode = .autoDelay,
         segments: [MediaSegment] = [intro],
-        nextUp: Bool = true
+        nextUp: Bool = true,
+        countdownWaitsForEnd: Bool = false
     ) -> PlaybackAutomation {
         let automation = PlaybackAutomation(
             defaults: defaults(skip: skip, autoplay: autoplay),
             countdown: Self.countdown
         )
-        automation.beginItem(segments: segments)
+        automation.beginItem(segments: segments, countdownWaitsForEnd: countdownWaitsForEnd)
         automation.setNextUpAvailable(nextUp)
         return automation
     }
@@ -373,6 +374,36 @@ struct PlaybackAutomationTests {
         automation.tick(position: 1_316, duration: 1_320)
         #expect(automation.isCountingDown)
         await eventually { played }
+        #expect(played)
+    }
+
+    @Test func inAListTheCardComesAtTheCreditsButCountsDownOnlyAtTheEnd() async throws {
+        // A collection's movie can hide a scene after its credits.
+        let automation = automation(segments: [Self.intro, Self.outro], countdownWaitsForEnd: true)
+        var played = false
+        automation.onPlayNext = { played = true }
+
+        automation.tick(position: 1_201, duration: 1_320)
+        #expect(automation.showsNextUp)
+        #expect(automation.nextUpCardStart == 1_200)
+        #expect(!automation.isCountingDown)
+        try await Task.sleep(for: Self.settled)
+        #expect(!played)
+
+        automation.tick(position: 1_314, duration: 1_320)
+        #expect(!automation.isCountingDown)
+        automation.tick(position: 1_315, duration: 1_320)
+        #expect(automation.isCountingDown)
+        await eventually { played }
+        #expect(played)
+    }
+
+    @Test func inAListThePlayNowOfferStillTakesTheViewerOnAtTheCredits() {
+        let automation = automation(segments: [Self.intro, Self.outro], countdownWaitsForEnd: true)
+        var played = false
+        automation.onPlayNext = { played = true }
+        automation.tick(position: 1_201, duration: 1_320)
+        automation.playNext()
         #expect(played)
     }
 
