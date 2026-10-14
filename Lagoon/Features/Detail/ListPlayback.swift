@@ -12,7 +12,7 @@ struct ListPlayback {
     ///
     /// Play resumes the part-watched title furthest along, else starts the
     /// first unwatched one, else the first title.
-    init?(items: [MediaItem]) {
+    init?(items: [MediaItem], source: QueueSource? = nil) {
         let playable = items.filter { $0.type == .movie || $0.type == .episode }
         let start: Int
         if let partWatched = playable.lastIndex(where: { $0.playbackProgress != nil }) {
@@ -24,7 +24,8 @@ struct ListPlayback {
         }
         guard let queue = PlayQueueList(
             entries: playable.map { PlayQueueList.Entry(media: $0, playlistItemId: $0.playlistItemId) },
-            position: start
+            position: start,
+            source: source
         ) else { return nil }
         self.queue = queue
     }
@@ -34,7 +35,7 @@ struct ListPlayback {
     /// Nil when Play already starts the first title from its first frame.
     var fromBeginning: PlayQueueList? {
         guard resumes || queue.position > 0 else { return nil }
-        return PlayQueueList(entries: queue.entries, position: 0)
+        return PlayQueueList(entries: queue.entries, position: 0, source: queue.source)
     }
 
     /// Names the title Play starts, and where when it resumes.

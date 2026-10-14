@@ -463,6 +463,11 @@ final class JellyfinClient {
         ))
     }
 
+    /// A JSON body built elsewhere, sent as it is.
+    func postVoid(_ path: String, query: [URLQueryItem] = [], rawBody: Data) async throws {
+        _ = try await data(for: request(for: url(path: path, query: query), method: "POST", body: rawBody))
+    }
+
     func deleteVoid(_ path: String, query: [URLQueryItem] = []) async throws {
         _ = try await data(for: request(for: url(path: path, query: query), method: "DELETE"))
     }

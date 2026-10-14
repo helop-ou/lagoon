@@ -324,6 +324,7 @@ final class PlaybackController {
             }
             beginSession(engine: engine, resolved: resolved)
             resolveNextUp(after: media, client: client)
+            recordQueueProgress(client: client)
         } catch {
             failStart(error, stage: startStage)
         }
@@ -1012,6 +1013,13 @@ final class PlaybackController {
                 self?.nextUp = next
             }
         }
+    }
+
+    /// Keeps a list's place on the server, so Home on any device can continue
+    /// it. Best effort: a failed write costs that, never playback.
+    private func recordQueueProgress(client: JellyfinClient) {
+        guard case .list(let list) = queue, let entry = list.progress else { return }
+        Task { try? await client.recordQueueProgress(entry) }
     }
 
     /// Negotiates and warms the successor in the last two minutes of a

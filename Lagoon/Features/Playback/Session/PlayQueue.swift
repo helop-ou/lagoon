@@ -54,12 +54,20 @@ nonisolated struct PlayQueueList: Equatable {
 
     let entries: [Entry]
     private(set) var position: Int
+    /// The collection or playlist, so progress through it can be kept.
+    var source: QueueSource?
 
     /// Nil when `position` is outside `entries`.
-    init?(entries: [Entry], position: Int = 0) {
+    init?(entries: [Entry], position: Int = 0, source: QueueSource? = nil) {
         guard entries.indices.contains(position) else { return nil }
         self.entries = entries
         self.position = position
+        self.source = source
+    }
+
+    /// Nil without a source.
+    var progress: QueueProgressEntry? {
+        source.map { QueueProgressEntry(source: $0, position: position, itemId: current.media.id) }
     }
 
     var current: Entry { entries[position] }

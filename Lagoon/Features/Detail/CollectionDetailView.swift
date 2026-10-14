@@ -82,7 +82,7 @@ struct CollectionDetailView: View {
             ) {
                 TitleArtView(item: displayed)
             } buttons: {
-                if let playback = ListPlayback(items: viewModel.items) {
+                if let playback = ListPlayback(items: viewModel.items, source: source) {
                     actions(playback)
                         #if os(tvOS)
                         .focused($actionsFocused)
@@ -140,6 +140,17 @@ struct CollectionDetailView: View {
             }
             .padding(.horizontal, Metrics.screenGutter)
         }
+    }
+
+    /// Recorded with the queue, so Home can continue the list on any device.
+    private var source: QueueSource {
+        let isPlaylist = item.type == .playlist
+        return QueueSource(
+            id: item.id,
+            kind: isPlaylist ? .playlist : .collection,
+            name: displayed.name ?? "",
+            displayOrder: isPlaylist ? nil : displayed.displayOrder
+        )
     }
 
     private var emptyMessage: String {
