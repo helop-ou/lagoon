@@ -139,7 +139,7 @@ Settings → Playback → Maximum Quality on Auto asks before negotiating
 | Seasons/episodes | `Shows/{seriesId}/Seasons` / `…/Episodes?SeasonId=` | seasons ask for `Fields=RemoteTrailers` |
 | The episode after this one | `Shows/{seriesId}/Episodes?startItemId=&Limit=2` | index 1 is the next one |
 | Collections | `Users/{uid}/Items?IncludeItemTypes=BoxSet` | **`EnableUserData=false` or it takes 40 s**, see below |
-| What is in a collection | `Users/{uid}/Items?ParentId={boxSetId}&Recursive=false` | `SortBy=PremiereDate,SortName` for release order |
+| What is in a collection | `Users/{uid}/Items?ParentId={boxSetId}&Recursive=false` | `SortBy` from the collection's `DisplayOrder`, see below |
 | A person | `Users/{uid}/Items/{personId}` | birth date in `PremiereDate`, death in `EndDate`, birthplace in `ProductionLocations`; dates stay strings |
 | What credits a person | `Users/{uid}/Items?PersonIds={personId}&IncludeItemTypes=Movie,Series` | every role, not just acting; `SortBy=PremiereDate,ProductionYear,SortName` descending |
 | A person by TMDB id | `Persons?userId=&searchTerm={name}&Fields=ProviderIds` | **`AnyProviderIdEquals` is ignored for people** (12.2 answers with arbitrary ones), so search by name and keep only an exact `ProviderIds.Tmdb` match |
@@ -186,6 +186,12 @@ Measured against a server with 173 collections:
   without a request per collection.
 - **Artwork is patchy.** 11 of those 18 had no landscape image, so Home
   borrows the first title's through `CollectionShelf.artworkSource`.
+- **A collection carries its own order.** `DisplayOrder` comes back on the
+  collection record and on list results without asking: `SortName` or
+  `PremiereDate` (every collection on the test server was `PremiereDate`).
+  `collectionSortBy` maps `SortName` to itself and everything else,
+  including a server that omits it, to `PremiereDate,SortName`. The page's
+  grid and its Play queue both use that order.
 
 ## Playback language defaults
 
