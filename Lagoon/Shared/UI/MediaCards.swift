@@ -168,6 +168,8 @@ struct PosterCard: View {
 struct LandscapeCard: View {
     let item: MediaItem
     var showsMetadata = false
+    /// Replaces `railSubtitle`, as for a title continuing a list.
+    var subtitle: String? = nil
     var action: (() -> Void)? = nil
     @Environment(\.jellyfinClient) private var client
     @Environment(\.itemDownloads) private var downloads
@@ -215,7 +217,7 @@ struct LandscapeCard: View {
                 Text(item.railTitle)
                     .font(.footnote.bold())
                     .lineLimit(1)
-                if let subtitle = item.railSubtitle {
+                if let subtitle = subtitle ?? item.railSubtitle {
                     Text(subtitle)
                         .font(.caption2)
                         .foregroundStyle(.secondary)

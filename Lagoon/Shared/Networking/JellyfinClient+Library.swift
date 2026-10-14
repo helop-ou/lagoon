@@ -330,6 +330,25 @@ extension JellyfinClient {
         displayOrder == "SortName" ? "SortName" : "PremiereDate,SortName"
     }
 
+    /// When each show was last watched, from its most recently played
+    /// episodes, for ordering Next Up. Keyed by series id.
+    func seriesLastPlayed(limit: Int = 100) async throws -> [String: String] {
+        let page = try await items(
+            includeTypes: [.episode],
+            sortBy: "DatePlayed",
+            sortOrder: "Descending",
+            limit: limit,
+            filters: ["IsPlayed"]
+        )
+        var latest: [String: String] = [:]
+        for episode in page.items {
+            guard let seriesId = episode.seriesId, latest[seriesId] == nil,
+                  let played = episode.userData?.lastPlayedDate else { continue }
+            latest[seriesId] = played
+        }
+        return latest
+    }
+
     /// The viewer's video playlists by name; audio ones are left out. User
     /// data off for the same reason as `collections`: a playlist is a folder.
     func playlists(limit: Int = 100) async throws -> [MediaItem] {

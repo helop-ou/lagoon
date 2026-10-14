@@ -98,6 +98,8 @@ struct MediaRail: View {
     var style: RailStyle = .poster
     /// For Continue Watching and Next Up, which need episode context.
     var showsLandscapeMetadata = false
+    /// Replaces a landscape card's subtitle, by item id.
+    var subtitles: [String: String] = [:]
     var playAction: ((MediaItem) -> Void)?
     /// Lets a card's watched/favourite menu re-fetch the list it sits in.
     var onUserDataChange: (() async -> Void)?
@@ -113,11 +115,11 @@ struct MediaRail: View {
                             PosterCard(item: item)
                         case .landscape:
                             if let playAction {
-                                LandscapeCard(item: item, showsMetadata: showsLandscapeMetadata) {
+                                LandscapeCard(item: item, showsMetadata: showsLandscapeMetadata, subtitle: subtitles[item.id]) {
                                     playAction(item)
                                 }
                             } else {
-                                LandscapeCard(item: item, showsMetadata: showsLandscapeMetadata)
+                                LandscapeCard(item: item, showsMetadata: showsLandscapeMetadata, subtitle: subtitles[item.id])
                             }
                         }
                     }

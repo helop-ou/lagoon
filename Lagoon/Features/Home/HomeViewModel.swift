@@ -36,6 +36,17 @@ final class HomeViewModel {
     var curatedRails: [String: LibraryRail] = [:]
     var collections: [CollectionShelfItem] = []
     var playlists: [CollectionShelfItem] = []
+    /// Titles in Continue Watching or Next Up that continue a collection or
+    /// playlist, by title id.
+    private(set) var queueContexts: [String: QueueContext] = [:]
+
+    /// Labels for those titles' cards.
+    var queueLabels: [String: String] { queueContexts.mapValues(\.label) }
+
+    /// A title that continues a list plays the list from it.
+    func playerItem(for item: MediaItem) -> PlayerItem {
+        queueContexts[item.id].map { PlayerItem(list: $0.list) } ?? PlayerItem(media: item)
+    }
     var isLoading = true
     var errorMessage: String?
 
@@ -101,6 +112,17 @@ final class HomeViewModel {
         let showGenreCandidates: [MediaItem]
         let latestRails: [LibraryRail]
         let pluginRails: [LibraryRail]
+        /// Nil when the stored lists could not be read.
+        let queues: QueueSnapshot?
+    }
+
+    /// The lists the viewer is working through, as Home shows them.
+    struct QueueSnapshot {
+        var contexts: [String: QueueContext] = [:]
+        var upNext: [(title: MediaItem, lastPlayed: String?)] = []
+        var seriesLastPlayed: [String: String] = [:]
+        /// Lists to forget: finished, emptied or deleted.
+        var finished: Set<String> = []
     }
 
     /// Throws only when the library list fails; that is the one request
@@ -114,6 +136,7 @@ final class HomeViewModel {
 
         async let resumeItems = try? client.resumeItems()
         async let nextUpItems = try? client.nextUp()
+        async let queueSnapshot = loadQueueSnapshot(client: client)
         // A failure costs the rail, not the screen.
         async let favoriteItems = try? client.favorites()
         async let movieGenreCatalog = try? client.genres(includeTypes: [.movie])
@@ -152,7 +175,8 @@ final class HomeViewModel {
             movieGenreCandidates: resolvedMovieGenreCandidates,
             showGenreCandidates: resolvedShowGenreCandidates,
             latestRails: rails,
-            pluginRails: resolvedPluginRails
+            pluginRails: resolvedPluginRails,
+            queues: await queueSnapshot
         )
     }
 
@@ -163,7 +187,7 @@ final class HomeViewModel {
         identity: JellyfinClient.SessionIdentity?
     ) {
         if let resolvedResume = content.resume { resume = resolvedResume }
-        nextUp = content.nextUp
+        nextUp = applyQueues(content.queues, serverNextUp: content.nextUp, client: client)
         favorites = content.favorites
         movieGenreShelf = GenreShelfResolver.resolve(
             catalog: content.movieGenres,
@@ -261,14 +285,18 @@ final class HomeViewModel {
         async let resumeItems = try? client.resumeItems()
         async let nextUpItems = try? client.nextUp()
         async let favoriteItems = try? client.favorites()
+        async let queueSnapshot = loadQueueSnapshot(client: client)
         let refreshed = await (resume: resumeItems, nextUp: nextUpItems)
+        let refreshedQueues = await queueSnapshot
         let refreshedFavorites = await favoriteItems
         guard isCurrent(generation, identity: identity, client: client) else { return }
         if let refreshedResume = refreshed.resume {
             resume = refreshedResume
             TopShelfStore.publish(refreshedResume, client: client, identity: identity)
         }
-        if let refreshedNextUp = refreshed.nextUp { nextUp = refreshedNextUp }
+        if let refreshedNextUp = refreshed.nextUp {
+            nextUp = applyQueues(refreshedQueues, serverNextUp: refreshedNextUp, client: client)
+        }
         if let refreshedFavorites {
             favorites = refreshedFavorites
         }
@@ -569,6 +597,74 @@ final class HomeViewModel {
         collections = CollectionShelf.shelf(ranked, borrowedArtwork: borrowed)
     }
 
+    /// Reads where the viewer is in each stored list. Each list is fetched
+    /// for the server's watch state; one that cannot be fetched is left
+    /// alone, one the server no longer has is forgotten.
+    private func loadQueueSnapshot(client: JellyfinClient) async -> QueueSnapshot? {
+        guard let entries = try? await client.queueProgress() else { return nil }
+        guard !entries.isEmpty else { return QueueSnapshot() }
+        var contents: [String: Result<[MediaItem], Error>] = [:]
+        await withTaskGroup(of: (String, Result<[MediaItem], Error>).self) { group in
+            for entry in entries {
+                let source = entry.source
+                group.addTask {
+                    do {
+                        let items = switch source.kind {
+                        case .playlist:
+                            try await client.playlistItems(playlistId: source.id)
+                        case .collection:
+                            try await client.collectionItems(collectionId: source.id, displayOrder: source.displayOrder)
+                        }
+                        return (source.id, .success(items))
+                    } catch {
+                        return (source.id, .failure(error))
+                    }
+                }
+            }
+            for await (id, result) in group { contents[id] = result }
+        }
+
+        var snapshot = QueueSnapshot()
+        for entry in entries {
+            switch contents[entry.source.id] {
+            case .success(let items)?:
+                switch QueueProgressResolver.resolve(entry, items: items) {
+                case .inProgress(let context):
+                    if snapshot.contexts[context.title.id] == nil { snapshot.contexts[context.title.id] = context }
+                case .upNext(let context, let lastPlayed):
+                    guard snapshot.contexts[context.title.id] == nil else { continue }
+                    snapshot.contexts[context.title.id] = context
+                    snapshot.upNext.append((context.title, lastPlayed))
+                case .finished:
+                    snapshot.finished.insert(entry.source.id)
+                }
+            case .failure(JellyfinError.server(status: 404, _))?:
+                snapshot.finished.insert(entry.source.id)
+            default:
+                continue
+            }
+        }
+        if !snapshot.upNext.isEmpty {
+            snapshot.seriesLastPlayed = (try? await client.seriesLastPlayed()) ?? [:]
+        }
+        return snapshot
+    }
+
+    /// Publishes the lists' cards and returns Next Up with their next titles
+    /// mixed in. A failed read keeps the last cards' context.
+    private func applyQueues(_ snapshot: QueueSnapshot?, serverNextUp: [MediaItem], client: JellyfinClient) -> [MediaItem] {
+        guard let snapshot else { return serverNextUp }
+        queueContexts = snapshot.contexts
+        if !snapshot.finished.isEmpty {
+            Task { try? await client.removeQueueProgress(listIDs: snapshot.finished) }
+        }
+        return QueueProgressResolver.mergedNextUp(
+            server: serverNextUp,
+            seriesLastPlayed: snapshot.seriesLastPlayed,
+            queued: snapshot.upNext
+        )
+    }
+
     /// The Playlists row; see `PlaylistShelf.load`.
     private func loadPlaylists(client: JellyfinClient, generation: Int) async {
         let identity = client.sessionIdentity
@@ -784,6 +880,7 @@ final class HomeViewModel {
         curatedRails = [:]
         collections = []
         playlists = []
+        queueContexts = [:]
         errorMessage = nil
     }
 

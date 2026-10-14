@@ -79,6 +79,8 @@ nonisolated struct UserItemData: Decodable, Hashable {
     let playedPercentage: Double?
     let played: Bool?
     let isFavorite: Bool?
+    /// Kept as the server's string; see `JellyfinTimestamp`.
+    let lastPlayedDate: String?
 }
 
 nonisolated struct MediaItem: Decodable, Identifiable {

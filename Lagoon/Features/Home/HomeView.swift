@@ -131,7 +131,8 @@ struct HomeView: View {
                 items: viewModel.resume,
                 style: .landscape,
                 showsLandscapeMetadata: true,
-                playAction: { playerItem = PlayerItem(media: $0) },
+                subtitles: viewModel.queueLabels,
+                playAction: { playerItem = viewModel.playerItem(for: $0) },
                 onUserDataChange: refreshUserData
             )
         case .nextUp:
@@ -140,7 +141,8 @@ struct HomeView: View {
                 items: viewModel.nextUp,
                 style: .landscape,
                 showsLandscapeMetadata: true,
-                playAction: { playerItem = PlayerItem(media: $0) },
+                subtitles: viewModel.queueLabels,
+                playAction: { playerItem = viewModel.playerItem(for: $0) },
                 onUserDataChange: refreshUserData
             )
         case .favorites:
