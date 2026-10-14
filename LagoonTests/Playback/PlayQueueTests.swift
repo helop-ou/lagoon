@@ -83,16 +83,24 @@ struct PlayQueueTests {
 
     @Test func aMovieReadsAsItsTitleAndYear() throws {
         let movie = try item("Iron Man", extra: #","ProductionYear":2008"#)
-        let card = NextUpEpisode(movie, imageURL: nil)
+        let card = NextUpEpisode(movie, after: nil, imageURL: nil)
         #expect(card.title == "Iron Man")
         #expect(card.subtitle == "2008")
     }
 
     @Test func anEpisodeKeepsItsEpisodeLabel() throws {
-        let episode = try item("Pilot", type: "Episode", extra: #","ParentIndexNumber":1,"IndexNumber":1,"ProductionYear":2004"#)
-        let card = NextUpEpisode(episode, imageURL: nil)
+        let episode = try item("Pilot", type: "Episode", extra: #","SeriesId":"s","SeriesName":"Lost","ParentIndexNumber":1,"IndexNumber":1,"ProductionYear":2004"#)
+        let previous = try item("Prologue", type: "Episode", extra: #","SeriesId":"s""#)
+        let card = NextUpEpisode(episode, after: previous, imageURL: nil)
         #expect(card.title == "Pilot")
         #expect(card.subtitle == episode.episodeLabel)
         #expect(card.subtitle != "2004")
+    }
+
+    @Test func anEpisodeAfterSomethingElseNamesItsShow() throws {
+        // A playlist moving from a film into a series.
+        let episode = try item("1:23:45", type: "Episode", extra: #","SeriesId":"c","SeriesName":"Chernobyl","ParentIndexNumber":1,"IndexNumber":1"#)
+        let card = NextUpEpisode(episode, after: try item("Cars"), imageURL: nil)
+        #expect(card.subtitle == "Chernobyl · \(episode.episodeLabel ?? "")")
     }
 }

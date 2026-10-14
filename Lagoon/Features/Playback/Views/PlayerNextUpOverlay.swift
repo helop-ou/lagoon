@@ -44,14 +44,18 @@ nonisolated enum NextUpPolicy {
 }
 
 extension NextUpEpisode {
-    /// An episode reads as its number and name; a movie, from a list queue,
-    /// as its title and year.
-    init(_ media: MediaItem, imageURL: URL?) {
-        self.init(
-            title: media.name ?? "",
-            subtitle: media.type == .movie ? media.productionYear.map(String.init) : media.episodeLabel,
-            imageURL: imageURL
-        )
+    /// An episode reads as its number and name, with its show's name when it
+    /// follows something else, as in a playlist; a movie as its title and
+    /// year.
+    init(_ media: MediaItem, after current: MediaItem?, imageURL: URL?) {
+        let subtitle: String? = if media.type == .movie {
+            media.productionYear.map(String.init)
+        } else if media.type == .episode, media.seriesId != current?.seriesId {
+            [media.seriesName, media.episodeLabel].compactMap(\.self).joined(separator: " · ")
+        } else {
+            media.episodeLabel
+        }
+        self.init(title: media.name ?? "", subtitle: subtitle, imageURL: imageURL)
     }
 }
 

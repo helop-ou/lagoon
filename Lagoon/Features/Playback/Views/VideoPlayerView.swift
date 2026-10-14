@@ -48,6 +48,7 @@ struct VideoPlayerView: View {
         guard let next = controller.nextUp else { return nil }
         return NextUpEpisode(
             next,
+            after: controller.currentMedia,
             imageURL: session.client.imageURL(for: next, kind: .thumb, maxWidth: 480)
         )
     }

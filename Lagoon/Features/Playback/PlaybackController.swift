@@ -89,7 +89,7 @@ final class PlaybackController {
     /// quality change replays the same entry.
     private var queue: PlayQueue = .series
     /// Kept so a failed attempt can be replayed on the next rung.
-    private var currentMedia: MediaItem?
+    private(set) var currentMedia: MediaItem?
     /// The current rung and the position a retry resumes from. A new item
     /// starts at the top of the ladder.
     private var delivery: PlaybackDelivery = .negotiated
