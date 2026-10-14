@@ -1,14 +1,14 @@
 import Foundation
 
-/// What the collection page's Play button starts: the collection as a list
+/// What a collection or playlist page's Play button starts: the list as a
 /// queue, positioned at the title Play begins with.
-struct CollectionPlayback {
+struct ListPlayback {
     let queue: PlayQueueList
     /// The starting title is part-watched, so Play reads Resume.
     let resumes: Bool
 
-    /// Movies and episodes in the collection's order; a series inside it is
-    /// skipped rather than expanded. Nil when nothing in it can play.
+    /// Movies and episodes in the list's order; a series inside a collection
+    /// is skipped rather than expanded. Nil when nothing in it can play.
     ///
     /// Play resumes the part-watched title furthest along, else starts the
     /// first unwatched one, else the first title.

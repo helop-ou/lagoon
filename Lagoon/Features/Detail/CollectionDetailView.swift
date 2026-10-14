@@ -67,7 +67,7 @@ struct CollectionDetailView: View {
             ) {
                 TitleArtView(item: displayed)
             } buttons: {
-                if let playback = CollectionPlayback(items: viewModel.items) {
+                if let playback = ListPlayback(items: viewModel.items) {
                     actions(playback)
                         #if os(tvOS)
                         .focused($actionsFocused)
@@ -124,7 +124,7 @@ struct CollectionDetailView: View {
         }
     }
 
-    private func actions(_ playback: CollectionPlayback) -> some View {
+    private func actions(_ playback: ListPlayback) -> some View {
         DetailPlayActions(
             resumes: playback.resumes,
             caption: playback.caption,

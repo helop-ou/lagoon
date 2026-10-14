@@ -2,10 +2,11 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// Where the collection page's Play button starts, and the order it plays.
-@Suite("Collection playback")
+/// Where a collection or playlist page's Play button starts, and the order
+/// it plays.
+@Suite("List playback")
 @MainActor
-struct CollectionPlaybackTests {
+struct ListPlaybackTests {
     private func item(_ id: String, type: String = "Movie", played: Bool = false, percent: Double? = nil, ticks: Int64? = nil) throws -> MediaItem {
         var userData = #""Played":\#(played)"#
         if let percent { userData += #","PlayedPercentage":\#(percent)"# }
@@ -15,7 +16,7 @@ struct CollectionPlaybackTests {
     }
 
     @Test func aFreshCollectionPlaysFromItsFirstTitle() throws {
-        let playback = try #require(CollectionPlayback(items: [try item("Cars"), try item("Cars 2"), try item("Cars 3")]))
+        let playback = try #require(ListPlayback(items: [try item("Cars"), try item("Cars 2"), try item("Cars 3")]))
         #expect(playback.title.id == "Cars")
         #expect(!playback.resumes)
         // Play already starts at the top, so From Beginning would repeat it.
@@ -24,7 +25,7 @@ struct CollectionPlaybackTests {
     }
 
     @Test func playStartsAtTheFirstUnwatchedTitle() throws {
-        let playback = try #require(CollectionPlayback(items: [
+        let playback = try #require(ListPlayback(items: [
             try item("Cars", played: true), try item("Cars 2"), try item("Cars 3"),
         ]))
         #expect(playback.title.id == "Cars 2")
@@ -34,7 +35,7 @@ struct CollectionPlaybackTests {
     }
 
     @Test func aPartWatchedTitleIsResumedAndNamed() throws {
-        let playback = try #require(CollectionPlayback(items: [
+        let playback = try #require(ListPlayback(items: [
             try item("Cars", played: true), try item("Cars 2", percent: 40, ticks: 25_300_000_000), try item("Cars 3"),
         ]))
         #expect(playback.title.id == "Cars 2")
@@ -45,33 +46,33 @@ struct CollectionPlaybackTests {
 
     @Test func theFurthestPartWatchedTitleWins() throws {
         // An abandoned first film must not pull Resume back to the start.
-        let playback = try #require(CollectionPlayback(items: [
+        let playback = try #require(ListPlayback(items: [
             try item("Rise", percent: 5, ticks: 3_000_000_000), try item("Dawn", played: true), try item("War", percent: 60, ticks: 40_000_000_000),
         ]))
         #expect(playback.title.id == "War")
     }
 
     @Test func aWatchedCollectionStartsOver() throws {
-        let playback = try #require(CollectionPlayback(items: [try item("A", played: true), try item("B", played: true)]))
+        let playback = try #require(ListPlayback(items: [try item("A", played: true), try item("B", played: true)]))
         #expect(playback.title.id == "A")
         #expect(!playback.resumes)
         #expect(playback.fromBeginning == nil)
     }
 
     @Test func aSeriesInsideIsSkippedAndEpisodesStay() throws {
-        let playback = try #require(CollectionPlayback(items: [
+        let playback = try #require(ListPlayback(items: [
             try item("Show", type: "Series"), try item("Film"), try item("Special", type: "Episode"),
         ]))
         #expect(playback.queue.entries.map(\.media.id) == ["Film", "Special"])
     }
 
     @Test func nothingPlayableMeansNoButton() throws {
-        #expect(CollectionPlayback(items: [try item("Show", type: "Series")]) == nil)
-        #expect(CollectionPlayback(items: []) == nil)
+        #expect(ListPlayback(items: [try item("Show", type: "Series")]) == nil)
+        #expect(ListPlayback(items: []) == nil)
     }
 
     @Test func playStartsAListQueue() throws {
-        let playback = try #require(CollectionPlayback(items: [try item("A", played: true), try item("B")]))
+        let playback = try #require(ListPlayback(items: [try item("A", played: true), try item("B")]))
         let player = PlayerItem(list: playback.queue)
         #expect(player.media.id == "B")
         #expect(player.queue == .list(playback.queue))
