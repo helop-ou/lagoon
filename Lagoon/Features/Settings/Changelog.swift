@@ -56,6 +56,7 @@ nonisolated enum Changelog {
                     "Collections have Play, Resume and From Beginning, and play their titles one after another in the collection's own order.",
                     "Your Jellyfin playlists appear on Home below Collections and in Library, and play in the order you arranged them, movies and episodes mixed.",
                     "Between movies, Up Next waits for the very end of the film, so a scene after the credits still plays.",
+                    "Continue Watching and Next Up remember where you are in a collection or playlist, on every device, and pick the list up from there.",
                 ]),
                 ChangelogSection(category: .improvements, changes: [
                     "Up Next shows a movie's title and year, and names the show when an episode follows something else.",
