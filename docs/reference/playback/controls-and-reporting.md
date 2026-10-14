@@ -206,10 +206,18 @@ Platform limits, verified on device:
 
 **Autoplay the next episode:**
 
-- `PlaybackController.playNextEpisode()` reports the finished episode stopped,
+- `PlaybackController.playNext()` reports the finished title stopped,
   resets one-shot state and starts the next, in the same player.
   `AutoplayMode`: automatic (default), ask every time, off. The countdown is
   5 s, matching `SkipMode`.
+- **What comes next is the `PlayQueue`.** A `.series` queue asks the server
+  for the episode after an episode, and nothing follows a movie. A `.list`
+  queue is a collection's or playlist's entries in play order, movies and
+  episodes mixed, and needs no request. Its entries are keyed by position,
+  because a playlist can hold the same title twice. A hand-off advances the
+  position; a fallback or a quality change replays the same entry; a Watch
+  Together item change drops back to `.series`, because the group orders
+  the items. The card reads title and year for a movie.
 - The player and its `AVSampleBufferDisplayLayer` stay mounted across the
   handoff. In the last 120 s the controller negotiates the successor's
   PlaybackInfo and warms its first 8 MiB (direct file) on the same
@@ -234,7 +242,9 @@ Platform limits, verified on device:
 - **Two anchors.** With an `Outro` segment that runs to the end, the card
   appears at its start and counts down from there. Without one, or when the
   outro is skippable credits, the card appears on a fixed 15 s run-out, with
-  the fill pinned to the last 5 s of the file.
+  the fill pinned to the last 5 s of the file. In a list queue the card
+  still appears at the outro, but its countdown waits for those last 5 s, so
+  a scene after a movie's credits plays.
 - **Track choices carry over by language and title, not ordinal**, since a
   commentary track on one episode shifts every ordinal below it.
   Subtitles-off carries over as its own choice. A carry that matches no
@@ -250,7 +260,7 @@ Platform limits, verified on device:
   the end of the file still advances. A Back during that final countdown,
   any Back in card mode, or a first Back already inside the last five
   seconds is `.stay`: the episode ends and nothing autoplays. The answer
-  lasts until the next item begins. `playNextEpisode` is guarded by
+  lasts until the next item begins. `playNext` is guarded by
   `isAdvancing`, so the countdown and `didFinish` cannot both advance.
 - The card is **not focusable**, like the skip pill, and shares the
   bottom-trailing shelf (intros are at the start, credits at the end). Its

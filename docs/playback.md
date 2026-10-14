@@ -11,7 +11,7 @@ notes](reference/playback/README.md).
 PlaybackController
   ├─ Jellyfin negotiation, subtitles and system media
   ├─ PlaybackReportingSession → start/progress/stop and report ledger
-  ├─ PlaybackSuccessorPreparation → next episode negotiation
+  ├─ PlaybackSuccessorPreparation → next title negotiation
   ├─ PlaybackDiagnosticsSampler → optional HUD and decode trace
   ├─ PlaybackIncidentMonitor → opt-in incident sampling
   └─ PlayerEngine (LagoonEngine package)
@@ -362,6 +362,9 @@ integration](reference/playback/system-integration.md).
   while buffering waits until the picture moves (seeking would spend the
   buffer the stall is waiting on), and is taken only if the playhead is still
   inside the segment. Select and a tap go straight through.
+- In a list queue (a collection or playlist) the Up Next card still appears
+  at the credits, but its countdown waits for the file's last seconds, so a
+  scene after a movie's credits plays.
 - An accepted hand-off keeps its card through `playNext` while the successor
   prepares, so the offer never looks withdrawn.
 
