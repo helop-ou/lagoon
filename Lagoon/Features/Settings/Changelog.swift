@@ -47,12 +47,18 @@ nonisolated enum Changelog {
     /// screen highlights whichever one matches the running bundle.
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
-            version: "0.6.1",
+            version: "0.7.0",
             build: "117",
             released: "October 2026",
-            headline: "The player's glass timeline is a little slimmer.",
+            headline: "Play a whole collection or playlist in a row, rolling into the next title like episodes do.",
             sections: [
+                ChangelogSection(category: .newFeatures, changes: [
+                    "Collections have Play, Resume and From Beginning, and play their titles one after another in the collection's own order.",
+                    "Your Jellyfin playlists appear on Home below Collections and in Library, and play in the order you arranged them, movies and episodes mixed.",
+                    "Between movies, Up Next waits for the very end of the film, so a scene after the credits still plays.",
+                ]),
                 ChangelogSection(category: .improvements, changes: [
+                    "Up Next shows a movie's title and year, and names the show when an episode follows something else.",
                     "The player's glass timeline is slightly thinner, so it sits lighter over the picture while staying easy to scrub.",
                 ]),
             ]
