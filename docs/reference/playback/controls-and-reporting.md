@@ -217,7 +217,10 @@ Platform limits, verified on device:
   because a playlist can hold the same title twice. A hand-off advances the
   position; a fallback or a quality change replays the same entry; a Watch
   Together item change drops back to `.series`, because the group orders
-  the items. The card reads title and year for a movie.
+  the items. The card reads title and year for a movie, and names the show
+  when an episode follows another title. Each list entry that starts
+  records the list's place on the server (`recordQueueProgress`, best
+  effort), which Home turns into Continue Watching and Next Up cards.
 - The player and its `AVSampleBufferDisplayLayer` stay mounted across the
   handoff. In the last 120 s the controller negotiates the successor's
   PlaybackInfo and warms its first 8 MiB (direct file) on the same

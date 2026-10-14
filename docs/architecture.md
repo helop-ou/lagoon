@@ -141,6 +141,16 @@ the per-account manifest, the background `URLSession` and each file's artwork.
 - After playback dismissal, the underlying screen refreshes only once
   `client.playbackReports.settle()` returns, but the dismissal itself never
   waits for that report.
+- Queue progress, the collections and playlists a viewer is working
+  through, lives on the server in Lagoon's display preferences
+  (`QueueProgressRecord`), so every device shares it. The player records an
+  entry whenever a list entry starts. Home reads it beside Continue Watching
+  and Next Up, on load and in `refreshProgress`, and asks the server's watch
+  state what each entry means (`QueueProgressResolver`): a part-watched
+  title's card gets the list's label and continues the list, the next title
+  joins Next Up by when it was last watched, and a finished list is
+  forgotten. Top Shelf stays the server's Continue Watching, where a
+  part-watched list title already appears; it carries no list context.
 
 ## Reusable components
 
@@ -164,6 +174,10 @@ wrapper. [Design system](design-system.md) owns the visual rules.
 ## tvOS invariants (violating these regresses real bugs)
 
 - Every screen needs a focusable element, or Menu can exit the app.
+- The collection and playlist page claims focus back for its actions when
+  the player closes. There the shared `restoresFocusAfterPlayer` reset left
+  focus on the tab bar with the remote dead; film and series pages do not
+  need it.
 - Keep `.scrollClipDisabled()` and rail focus padding. Episode rails stay
   mounted while seasons switch, so focus and layout survive loading.
 - The hero's focused control sits outside its `.id()`-keyed, transitioning

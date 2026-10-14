@@ -142,6 +142,7 @@ Settings → Playback → Maximum Quality on Auto asks before negotiating
 | What is in a collection | `Users/{uid}/Items?ParentId={boxSetId}&Recursive=false` | `SortBy` from the collection's `DisplayOrder`, see below |
 | Playlists | `Users/{uid}/Items?IncludeItemTypes=Playlist` | `EnableUserData=false` as for collections; keep `MediaType=Video` with a `ChildCount`, see below |
 | What is in a playlist | `Playlists/{playlistId}/Items?UserId=` | no `SortBy`: the owner's order; a title listed twice comes back twice |
+| Queue progress | `DisplayPreferences/lagoon?userId=&client=Lagoon` | read the whole record and write it all back, see below |
 | A person | `Users/{uid}/Items/{personId}` | birth date in `PremiereDate`, death in `EndDate`, birthplace in `ProductionLocations`; dates stay strings |
 | What credits a person | `Users/{uid}/Items?PersonIds={personId}&IncludeItemTypes=Movie,Series` | every role, not just acting; `SortBy=PremiereDate,ProductionYear,SortName` descending |
 | A person by TMDB id | `Persons?userId=&searchTerm={name}&Fields=ProviderIds` | **`AnyProviderIdEquals` is ignored for people** (12.2 answers with arbitrary ones), so search by name and keep only an exact `ProviderIds.Tmdb` match |
@@ -205,6 +206,16 @@ Measured against a server with 173 collections:
   play queue and the page's grid key entries by position.
 - **Artwork is usually missing.** A new playlist has no images until the
   server generates a collage, so cards borrow a title's, as collections do.
+- **Display preferences are not Lagoon's alone.** Jellyfin keeps
+  account-wide settings in every record's `CustomPrefs` (`skipForwardLength`,
+  `skipBackLength`, `enableNextVideoInfoOverlay`, `chromecastVersion`) and
+  resets them to defaults when a write leaves them out: a probe that posted
+  only its own key moved the skip lengths from 30 s and 10 s to 15 s each.
+  A write also replaces the record's custom keys wholesale. So queue
+  progress reads the record as untyped JSON, changes its one key
+  (`lagoonQueues`) and posts everything else back as it came. Both jaflix
+  and the demo (12.2) accept the write; the record is per user and client,
+  so every Lagoon device shares it.
 - **The server adds a `Playlists` view** (`CollectionType=playlists`) to
   `Users/{uid}/Views` once a playlist exists, audio ones included. Library
   counts playlists itself instead of trusting it.
