@@ -7,9 +7,6 @@ struct ItemDetailView: View {
     @Environment(SessionStore.self) private var session
     @Environment(ServerSyncState.self) private var serverSync
     @Environment(SyncPlayStore.self) private var syncPlay
-    #if os(iOS)
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
-    #endif
     @State private var detail: MediaItem?
     @State private var similar: [MediaItem] = []
     @State private var playerItem: PlayerItem?
@@ -92,63 +89,17 @@ struct ItemDetailView: View {
         return ticks
     }
 
-    /// The resume caption sits under the row on wide layouts and under the
-    /// Resume pill on a phone.
-    @ViewBuilder
-    private var playButtons: some View {
-        #if os(iOS)
-        if !usesLeadingColumn {
-            actions
-        } else {
-            captionedActions
-        }
-        #else
-        captionedActions
-        #endif
-    }
-
-    private var captionedActions: some View {
-        VStack(alignment: .leading, spacing: Metrics.Space.m) {
-            actions
-            resumeCaption
-        }
-    }
-
-    @ViewBuilder
-    private var resumeCaption: some View {
-        if let resumeTicks {
-            Text("Resume from \(Self.timestamp(resumeTicks))")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    #if os(iOS)
-    private var usesLeadingColumn: Bool {
-        DetailLayout.usesLeadingColumn(horizontalSizeClass)
-    }
-    #endif
-
     /// Play leads so it takes first focus; otherwise Select on arrival marks
     /// the film watched instead of playing it.
-    private var actions: some View {
-        DetailActionLayout {
-            #if os(iOS)
-            if usesLeadingColumn {
-                playButton
-            } else {
-                // The caption hangs under the pill alone so the row stays level.
-                VStack(spacing: Metrics.Space.xs) {
-                    playButton
-                        .alignmentGuide(.detailPillCenter) { $0[VerticalAlignment.center] }
-                    resumeCaption
-                }
-            }
-            #else
-            playButton
-            #endif
-        } secondary: {
-            fromBeginningButton
+    private var playButtons: some View {
+        DetailPlayActions(
+            resumes: resumeTicks != nil,
+            caption: resumeTicks.map { String(localized: "Resume from \(Ticks.timestamp($0))") },
+            play: { playerItem = PlayerItem(media: displayed) },
+            playFromBeginning: resumeTicks == nil
+                ? nil
+                : { playerItem = PlayerItem(media: displayed, startFromBeginning: true) }
+        ) {
             actionRow
                 #if os(tvOS)
                 .padding(.leading, Metrics.Space.l)
@@ -168,58 +119,5 @@ struct ItemDetailView: View {
             detail = fresh
             return true
         }
-    }
-
-    private var playButton: some View {
-        Button {
-            playerItem = PlayerItem(media: displayed)
-        } label: {
-            Label(resumeTicks == nil ? "Play" : "Resume", systemImage: "play.fill")
-                .detailPrimaryLabel()
-        }
-        .detailPrimaryButton()
-        #if os(iOS)
-        .accessibilityIdentifier("detail.play")
-        #endif
-    }
-
-    /// A pill beside Play on TV and wide iPad; a circle on a phone, where a
-    /// pill folds the four-control row into a column.
-    @ViewBuilder
-    private var fromBeginningButton: some View {
-        if resumeTicks != nil {
-            #if os(iOS)
-            if usesLeadingColumn {
-                Button {
-                    playerItem = PlayerItem(media: displayed, startFromBeginning: true)
-                } label: {
-                    Label("From Beginning", systemImage: "arrow.counterclockwise")
-                }
-                .buttonStyle(.glass)
-            } else {
-                DetailCircleButton {
-                    playerItem = PlayerItem(media: displayed, startFromBeginning: true)
-                } label: {
-                    Image(systemName: "arrow.counterclockwise")
-                }
-                .accessibilityLabel("From Beginning")
-            }
-            #else
-            Button {
-                playerItem = PlayerItem(media: displayed, startFromBeginning: true)
-            } label: {
-                Label("From Beginning", systemImage: "arrow.counterclockwise")
-            }
-            .buttonStyle(.glass)
-            #endif
-        }
-    }
-
-    private static func timestamp(_ ticks: Int64) -> String {
-        let seconds = Int(Ticks.seconds(ticks))
-        if seconds >= 3600 {
-            return String(format: "%d:%02d:%02d", seconds / 3600, (seconds % 3600) / 60, seconds % 60)
-        }
-        return String(format: "%d:%02d", seconds / 60, seconds % 60)
     }
 }
