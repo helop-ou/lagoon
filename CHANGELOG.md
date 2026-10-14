@@ -17,6 +17,16 @@ what identifies a binary: it is what About shows, what a release tag
 carries, and what to quote in a bug report. One marketing version spans
 many builds.
 
+## 0.6.1 (117)
+
+October 2026
+
+**The player's glass timeline is a little slimmer.**
+
+### Improvements
+
+- The player's glass timeline is slightly thinner, so it sits lighter over the picture while staying easy to scrub.
+
 ## 0.6.0 (116)
 
 October 2026

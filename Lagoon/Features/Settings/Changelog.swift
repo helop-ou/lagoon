@@ -47,6 +47,17 @@ nonisolated enum Changelog {
     /// screen highlights whichever one matches the running bundle.
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
+            version: "0.6.1",
+            build: "117",
+            released: "October 2026",
+            headline: "The player's glass timeline is a little slimmer.",
+            sections: [
+                ChangelogSection(category: .improvements, changes: [
+                    "The player's glass timeline is slightly thinner, so it sits lighter over the picture while staying easy to scrub.",
+                ]),
+            ]
+        ),
+        ChangelogEntry(
             version: "0.6.0",
             build: "116",
             released: "October 2026",
