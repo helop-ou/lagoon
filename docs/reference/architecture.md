@@ -127,8 +127,9 @@ Seerr is an optional second service, separate from `JellyfinClient`.
 ## Navigation
 
 Each of the five tabs owns a `NavigationStack`. `ItemDetailRouter` resolves a
-`ContentNavigationRoute`: `.series` → `SeriesDetailView`, everything else →
-`ItemDetailView`. On tvOS playback is a `fullScreenCover(item:)` on the screen
+`ContentNavigationRoute`: `.series` → `SeriesDetailView`, a collection or
+playlist → `CollectionDetailView`, everything else → `ItemDetailView`.
+`.playlists` opens Library's `PlaylistsView`. On tvOS playback is a `fullScreenCover(item:)` on the screen
 that started it; on iOS the screen requests it and the tab root's host
 presents it ([Playback](../playback.md#controls-and-presentation)).
 

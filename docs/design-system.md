@@ -137,7 +137,7 @@ notes](reference/design-system.md#themes).
 ## Components
 
 - **Browsing:** reuse `MediaRail` and the media cards. Every horizontal shelf
-  (`MediaRail`, `SeerrMediaRail`, `TopTenRail`, `CollectionRail`, `GenreRail`,
+  (`MediaRail`, `SeerrMediaRail`, `TopTenRail`, `CollectionRail` (Collections and Playlists), `GenreRail`,
   the Seerr genre and search rails) is built on the shared `RailShelf`, which
   owns the heading, the iOS "See All" link, the gutter/rail paddings and
   `.scrollClipDisabled()`; `RailPlaceholder` matches its shape while a shelf

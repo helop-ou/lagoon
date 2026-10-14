@@ -140,6 +140,8 @@ Settings → Playback → Maximum Quality on Auto asks before negotiating
 | The episode after this one | `Shows/{seriesId}/Episodes?startItemId=&Limit=2` | index 1 is the next one |
 | Collections | `Users/{uid}/Items?IncludeItemTypes=BoxSet` | **`EnableUserData=false` or it takes 40 s**, see below |
 | What is in a collection | `Users/{uid}/Items?ParentId={boxSetId}&Recursive=false` | `SortBy` from the collection's `DisplayOrder`, see below |
+| Playlists | `Users/{uid}/Items?IncludeItemTypes=Playlist` | `EnableUserData=false` as for collections; keep `MediaType=Video` with a `ChildCount`, see below |
+| What is in a playlist | `Playlists/{playlistId}/Items?UserId=` | no `SortBy`: the owner's order; a title listed twice comes back twice |
 | A person | `Users/{uid}/Items/{personId}` | birth date in `PremiereDate`, death in `EndDate`, birthplace in `ProductionLocations`; dates stay strings |
 | What credits a person | `Users/{uid}/Items?PersonIds={personId}&IncludeItemTypes=Movie,Series` | every role, not just acting; `SortBy=PremiereDate,ProductionYear,SortName` descending |
 | A person by TMDB id | `Persons?userId=&searchTerm={name}&Fields=ProviderIds` | **`AnyProviderIdEquals` is ignored for people** (12.2 answers with arbitrary ones), so search by name and keep only an exact `ProviderIds.Tmdb` match |
@@ -192,6 +194,20 @@ Measured against a server with 173 collections:
   `collectionSortBy` maps `SortName` to itself and everything else,
   including a server that omits it, to `PremiereDate,SortName`. The page's
   grid and its Play queue both use that order.
+
+## Playlists
+
+- **Audio and video share the endpoint.** A playlist's `MediaType` is its
+  first entry's; the demo server's two are both `Audio`. Lagoon keeps
+  `Video` playlists with a `ChildCount` above zero (`isVideoPlaylist`).
+- **`PlaylistItemId` is not an entry id on 12.2.** It returns the title's own
+  `Id`, so a title listed twice comes back twice with identical ids. The
+  play queue and the page's grid key entries by position.
+- **Artwork is usually missing.** A new playlist has no images until the
+  server generates a collage, so cards borrow a title's, as collections do.
+- **The server adds a `Playlists` view** (`CollectionType=playlists`) to
+  `Users/{uid}/Views` once a playlist exists, audio ones included. Library
+  counts playlists itself instead of trusting it.
 
 ## Playback language defaults
 
