@@ -496,14 +496,14 @@ enum ScrubMetrics {
     #if os(tvOS)
     static let markerWidth: CGFloat = 3
     /// Stands clear of the rail on both sides.
-    static let markerHeight: CGFloat = 28
+    static let markerHeight: CGFloat = 26
     static let timeLabelWidth: CGFloat = 150
     static let timeLabelHeight: CGFloat = 36
     /// Smaller than the 320 px tile on purpose; 320 pt dominates the TV.
     static let previewWidth: CGFloat = 240
     #else
     static let markerWidth: CGFloat = 3
-    static let markerHeight: CGFloat = 24
+    static let markerHeight: CGFloat = 22
     static let timeLabelWidth: CGFloat = 96
     static let timeLabelHeight: CGFloat = 30
     static let previewWidth: CGFloat = 160
