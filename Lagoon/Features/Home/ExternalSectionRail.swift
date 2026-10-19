@@ -2,7 +2,8 @@ import SwiftUI
 
 /// A Home Screen Sections row of titles from Sonarr, Radarr or Seerr. None
 /// is in the library, so a card opens the title's Seerr page, as Discover's
-/// do, once `HomeViewModel` has found it in Seerr, and nothing until then.
+/// do, once `HomeViewModel` has found it in Seerr. Signed out of Seerr, it
+/// opens Seerr's sign-in first.
 struct ExternalSectionRail: View {
     let title: String
     let items: [JellyfinClient.ExternalSectionItem]
@@ -25,6 +26,7 @@ struct ExternalSectionRail: View {
 private struct ExternalSectionCard: View {
     let item: JellyfinClient.ExternalSectionItem
     let seerrTitle: ExternalSeerrTitle?
+    @Environment(SeerrSessionStore.self) private var seerr
     @Environment(\.jellyfinClient) private var client
     @Environment(\.displayScale) private var displayScale
 
@@ -64,17 +66,19 @@ private struct ExternalSectionCard: View {
             ?? item.posterPath.flatMap { client?.serverRelativeURL($0) }
     }
 
-    /// A button that does nothing when there is no page: tvOS can only
-    /// scroll a rail through focusable cards.
+    /// A button that does nothing when there is no page, such as music or
+    /// a title Seerr does not have: tvOS can only scroll a rail through
+    /// focusable cards.
     @ViewBuilder
     private func link(@ViewBuilder label: () -> some View) -> some View {
-        if let seerrTitle {
-            NavigationLink(
-                value: SeerrNavigationRoute.media(id: seerrTitle.id, type: seerrTitle.mediaType),
-                label: label
-            )
+        if let route {
+            NavigationLink(value: route, label: label)
         } else {
             Button(action: {}, label: label)
         }
+    }
+
+    private var route: SeerrNavigationRoute? {
+        ExternalSeerrMatcher.route(for: item, seerrTitle: seerrTitle, isSignedIn: seerr.isConnected)
     }
 }
