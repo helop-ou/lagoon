@@ -1,10 +1,8 @@
-# Branch name, title, description and commits of every pull request.
 # See docs/standards.md, "Pull requests".
 name: Conventions
 
 on:
   pull_request:
-    # Also on edits, so fixing a title or description re-runs it.
     types: [opened, edited, reopened, synchronize]
 
 concurrency:
@@ -24,8 +22,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Passed through the environment, never interpolated into the script,
-      # so a title or description cannot run as shell.
+      # Via the environment, so a title cannot run as shell.
       - name: Check
         env:
           BRANCH: ${{ github.event.pull_request.head.ref }}
