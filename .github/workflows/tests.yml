@@ -45,6 +45,11 @@ jobs:
           path: build/SourcePackages
           key: spm-${{ hashFiles('Lagoon.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
 
+      # Xcode ships the Metal compiler as a separate download, which the
+      # image does not carry, and Lagoon compiles Metal shaders.
+      - name: Install the Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
+
       - name: Show toolchain
         run: |
           xcodebuild -version
