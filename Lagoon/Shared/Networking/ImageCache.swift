@@ -45,6 +45,17 @@ final class ImageCache {
         return cache.object(forKey: key as NSString)
     }
 
+    /// Puts decoded artwork in the memory cache, as a finished load does.
+    /// Snapshot tests seed it so a card draws its artwork on the first frame.
+    func store(_ image: UIImage, for url: URL, maxPixelSize: Int) {
+        remember(image, forKey: key(url, maxPixelSize: maxPixelSize))
+    }
+
+    private func remember(_ image: UIImage, forKey key: String) {
+        let cost = Int(image.size.width * image.size.height * image.scale * image.scale * 4)
+        cache.setObject(image, forKey: key as NSString, cost: cost)
+    }
+
     #if os(iOS)
     /// A downloaded title's artwork from disk, decoded off-main like a
     /// network fetch.
@@ -65,8 +76,7 @@ final class ImageCache {
         }
         #if os(iOS)
         if let local = await localImage(for: url, maxPixelSize: maxPixelSize) {
-            let cost = Int(local.size.width * local.size.height * local.scale * local.scale * 4)
-            cache.setObject(local, forKey: key as NSString, cost: cost)
+            remember(local, forKey: key)
             return local
         }
         #endif
@@ -111,10 +121,7 @@ final class ImageCache {
     private func finish(key: String, id: UUID, image: UIImage?) {
         guard let load = inFlight[key], load.id == id else { return }
         inFlight.removeValue(forKey: key)
-        if let image {
-            let cost = Int(image.size.width * image.size.height * image.scale * image.scale * 4)
-            cache.setObject(image, forKey: key as NSString, cost: cost)
-        }
+        if let image { remember(image, forKey: key) }
         for waiter in load.waiters.values { waiter.resume(returning: image) }
     }
 }
