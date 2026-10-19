@@ -546,7 +546,7 @@ own rails.
 knows (Books, Music and Jellyseerr included, even on a movies-and-TV server),
 each with `OrderIndex` 999. The admin's enabled set is not readable anywhere
 (`HomeScreen/UserSettings`, `/Settings`, `/Config` and `/Users/{id}/Settings`
-404; `DisplayPreferences/usersettings` has no `homesection*` keys).
+404, and `DisplayPreferences/usersettings` has no `homesection*` keys).
 
 **A section can have several instances.** `Starring`, `DirectedBy`,
 `BecauseYouWatched`, `Genre`, `Studio`, `Decade` and `RecentlyAddedInLibrary`
@@ -556,7 +556,7 @@ named by their own `DisplayText` ("Starring Mark Hamill"). Without
 `additionalData` the section fetch returns nothing. The plugin picks the
 instances and can repeat one (two identical `Genre`/`Drama` entries), so
 `HomeSection.id` is the section plus its data, and duplicates of it are
-dropped. Home draws one rail per instance; Settings shows one row per section
+dropped. Home draws one rail per instance. Settings shows one row per section
 type, named from its key ("Because You Watched"), and that row's place and
 switch cover all its instances, since which actors appear changes.
 
@@ -594,21 +594,21 @@ id in `ProviderIds` (`SonarrEpisodeId`, `RadarrMovieId`, `LidarrAlbumId`,
 - The poster is `ProviderIds.<Source>Poster`: `/HomeScreen/CachedImage/…`,
   resolved like any server-relative route, or an absolute URL. The endpoint
   needs no token.
-- `FormattedDate` is the plugin's own countdown text; Seerr titles carry
+- `FormattedDate` is the plugin's own countdown text. Seerr titles carry
   `SourceType` (`movie`/`tv`) and a `PremiereDate` of `1970-01-01` when Seerr
   has none.
 - They become `ExternalSectionItem`s and never join the hero.
   `ExternalSectionRail` draws them 16:9 like Home's other rails, and each
   opens the same Seerr page as Discover once `HomeViewModel` has found it in
   Seerr:
-  - Seerr's own titles carry their TMDB id; the backdrop comes from the list
+  - Seerr's own titles carry their TMDB id. The backdrop comes from the list
     the plugin read (`Discover` is `discover/trending`, `DiscoverMovies` and
     `DiscoverTV` are `discover/movies` and `discover/tv`), or from
     `movie/{id}` / `tv/{id}` for a title that list no longer holds.
   - Sonarr's and Radarr's carry only their own ids, so Seerr's `search`
     finds them: same kind, same title once case, accents and punctuation are
     dropped, and for a Radarr movie the same year. The first such result
-    wins, as Seerr ranks by popularity; no match leaves no page.
+    wins, as Seerr ranks by popularity. No match leaves no page.
   - Each title is looked up once per Seerr session.
   - Signed out, Seerr shows no title at all (`movie/{id}` answers 401), so a
     card shows the plugin's poster cropped and opens `SeerrSignInGate`:

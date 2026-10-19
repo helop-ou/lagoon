@@ -895,7 +895,7 @@ final class HomeViewModel {
     ) async -> [String: ExternalSeerrTitle] {
         var found: [String: ExternalSeerrTitle] = [:]
 
-        // One list page has twenty backdrops; details cost a request each.
+        // One list page has twenty backdrops. Details cost a request each.
         var unlisted = items.filter { $0.seerrID != nil }
         if let list = ExternalSeerrMatcher.list(forSection: section) {
             for page in 1...3 where !unlisted.isEmpty {

@@ -11,7 +11,7 @@ extension JellyfinClient {
         /// `Landscape`, `Portrait` or `Square` (drawn as a poster rail).
         let viewMode: String?
         let orderIndex: Int?
-        /// Which person, genre or library; the section fetches empty without it.
+        /// Which person, genre or library. The section fetches empty without it.
         let additionalData: String?
 
         var id: String {
