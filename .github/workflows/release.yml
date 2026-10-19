@@ -1,0 +1,100 @@
+# See docs/release.md, "Releasing from CI".
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "trial: sign both apps, upload nothing. upload: send an external-eligible build to App Store Connect. publish: create the GitHub release of a build that went out."
+        type: choice
+        options: [trial, upload, publish]
+      build:
+        description: "Build number, for publish only"
+        required: false
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  archive:
+    name: ${{ inputs.action }}
+    if: inputs.action != 'publish'
+    runs-on: xcode-27
+    timeout-minutes: 90
+    permissions:
+      contents: write
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
+      ACTION: ${{ inputs.action }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+      LAGOON_SENTRY_DSN: ${{ secrets.LAGOON_SENTRY_DSN }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Only from main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Release from main, not ${GITHUB_REF_NAME}."
+          exit 1
+
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Install the Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
+
+      - name: Write the API key
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          key="$RUNNER_TEMP/AuthKey.p8"
+          printf '%s\n' "$ASC_KEY_P8" > "$key"
+          echo "ASC_KEY_PATH=$key" >> "$GITHUB_ENV"
+
+      - name: Archive and sign
+        run: |
+          if [ "$ACTION" = trial ]; then
+            scripts/upload-testflight.sh both --export-only
+          else
+            scripts/upload-testflight.sh both --external
+          fi
+
+      # So the publish run, on another machine, tags exactly this revision.
+      - name: Record the archived revision
+        if: inputs.action == 'upload'
+        run: |
+          build="$(grep -m1 -o 'CURRENT_PROJECT_VERSION = [0-9]*' Lagoon.xcodeproj/project.pbxproj | grep -o '[0-9]*$')"
+          git push origin "HEAD:refs/archived/${build}"
+
+      - name: Keep the signed apps
+        if: inputs.action == 'trial'
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-apps
+          path: build/export-*
+          retention-days: 3
+
+  publish:
+    name: publish
+    if: inputs.action == 'publish'
+    runs-on: xcode-27
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
+      BUILD: ${{ inputs.build }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      # The script checks the codec table against the profile, which builds.
+      - name: Install the Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
+
+      - name: Publish
+        run: scripts/publish-release.sh "$BUILD"
