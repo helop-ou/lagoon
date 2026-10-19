@@ -359,9 +359,13 @@ request. `HomeCardSnapshotTests` is the pattern.
   re-record, delete the PNG, run the suite on both platforms, and look at
   every image written before committing it: a reference is only as right as
   the look it captured.
-- A mismatch over the tolerance (0.2 % of pixels) writes
-  `<name>.<platform>.failed.png` beside the reference, which git ignores, and
-  attaches it to the test result. On CI it is in the failed run's `.xcresult`.
+- A mismatch over the tolerance (0.2 % of pixels) fails with the share that
+  changed and where, such as "within x 80–1239, y 99–301", measured from the
+  top left. Beside the reference it writes `<name>.<platform>.failed.png`
+  (what rendered) and `<name>.<platform>.diff.png` (the reference dimmed,
+  every changed pixel red), both ignored by git, and attaches those and the
+  reference to the test result. A size change reports both sizes instead.
+  On CI all three are in the failed run's artifacts.
 - References depend on the simulator runtime. CI and local runs use the same
   tvOS 27.0 and iOS 27.0 runtimes; when Xcode moves, re-record in the same
   change.
