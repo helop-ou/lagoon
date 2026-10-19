@@ -314,6 +314,47 @@ struct HomeRailContentTests {
         #expect(model.pluginRails.map { HomeRowID.section(forPluginRailID: $0.id) } == ["MyList"])
     }
 
+    /// Shapes as a live server returned them: Sonarr and Radarr titles carry
+    /// a random `Id`, Seerr's all zeros. None is in the library.
+    @Test func pluginTitlesFromSonarrRadarrAndSeerrStayOutOfTheLibraryRail() async throws {
+        let client = makeClient()
+        let model = HomeViewModel()
+        let seerrMovie = #"{"Name":"Matchbox","Id":"00000000000000000000000000000000","SourceType":"movie","PremiereDate":"2026-10-05T00:00:00.0000000Z","Type":"AggregateFolder","ProviderIds":{"Jellyseerr":"1148365","JellyseerrPoster":"/HomeScreen/CachedImage/m"}}"#
+        HomeRailURLProtocol.set(
+            homeSections: #"[{"Section":"Upcoming","DisplayText":"Upcoming"}]"#,
+            homeSectionItems: #"""
+            [
+                {"Name":"90 Day","Id":"8ef3fd1c2ae647449e086e02448d210c","Type":"Episode","ParentIndexNumber":2,"IndexNumber":3,"ProviderIds":{"SonarrSeriesId":"226","SonarrEpisodeId":"21295","FormattedDate":"1 Day - 2026/10/20","SonarrPoster":"/HomeScreen/CachedImage/s"}},
+                {"Name":"Verity","Id":"eec0cbad6c1c469188509f2065671ad7","Type":"Movie","ProviderIds":{"RadarrMovieId":"973","FormattedDate":"1 Week - 2026/10/27","RadarrPoster":"https://image.example/v.jpg"}},
+                \#(seerrMovie),
+                \#(seerrMovie),
+                {"Name":"Matchbox","Id":"00000000000000000000000000000000","SourceType":"tv","PremiereDate":"1970-01-01T00:00:00.0000000Z","ProviderIds":{"Jellyseerr":"1148365","JellyseerrPoster":"/HomeScreen/CachedImage/t"}}
+            ]
+            """#
+        )
+
+        await model.load(client: client, accountID: "account")
+
+        let rail = try #require(model.pluginRails.first)
+        #expect(rail.items.isEmpty)
+        #expect(rail.externalItems.map(\.id) == [
+            "Sonarr:21295", "Radarr:973", "Jellyseerr:movie:1148365", "Jellyseerr:tv:1148365",
+        ])
+        #expect(rail.externalItems.map(\.subtitle) == [
+            "S2 E3 · 1 Day - 2026/10/20", "1 Week - 2026/10/27", "2026", nil,
+        ])
+        #expect(rail.externalItems.map(\.posterPath) == [
+            "/HomeScreen/CachedImage/s", "https://image.example/v.jpg",
+            "/HomeScreen/CachedImage/m", "/HomeScreen/CachedImage/t",
+        ])
+        #expect(rail.externalItems.map(\.seerrType) == [nil, nil, .movie, .tv])
+        #expect(rail.externalItems.last?.seerrID == 1148365)
+        // Its artwork and page are a Jellyfin id that 404s.
+        #expect(model.heroItems.isEmpty)
+        #expect(client.serverRelativeURL("/HomeScreen/CachedImage/s")?.absoluteString
+            == "https://home-rails.test/HomeScreen/CachedImage/s")
+    }
+
     @Test func theTopTenScanAdvancesByWhatTheServerReturnsAndStopsAtItsTotal() async throws {
         let client = makeClient()
         let model = HomeViewModel()
