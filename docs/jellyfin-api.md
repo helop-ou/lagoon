@@ -567,6 +567,25 @@ Arrangement (Settings › Home Rows):
 - A row added by a later Lagoon build is inserted at its designed place, not
   appended after the plugin rows.
 
+Titles from Sonarr, Radarr, Lidarr, Readarr and Seerr (`UpcomingShows`,
+`UpcomingMovies`, `Discover`, `DiscoverMovies`, `DiscoverTV` and the rest)
+come back in the same `BaseItemDto` shape, but none is in the library. Their
+`Id` is random on every request (Upcoming) or all zeros (Discover), so
+Jellyfin artwork and item pages for them 404. They are told apart by a source
+id in `ProviderIds` (`SonarrEpisodeId`, `RadarrMovieId`, `LidarrAlbumId`,
+`ReadarrBookId`, `Jellyseerr`), which also names them stably:
+
+- The poster is `ProviderIds.<Source>Poster`: `/HomeScreen/CachedImage/…`,
+  resolved like any server-relative route, or an absolute URL. The endpoint
+  needs no token.
+- `FormattedDate` is the plugin's own countdown text; Seerr titles carry
+  `SourceType` (`movie`/`tv`) and a `PremiereDate` of `1970-01-01` when Seerr
+  has none.
+- They become `ExternalSectionItem`s, drawn as posters by
+  `ExternalSectionRail`, and never join the hero. A Seerr title opens Lagoon's
+  Seerr page when Lagoon is signed in to Seerr; anything else is a card with
+  nothing to open.
+
 On a plain movies/TV server this correctly shows **nothing** new; it matters
 with Jellyseerr requests, My List, Discover or custom collection sections. All
 28 sections resolve in about 1.8 s concurrently (empties about 0.1 s each), so
