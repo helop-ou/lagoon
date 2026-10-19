@@ -56,7 +56,9 @@ jobs:
           xcrun simctl list devices available | grep -E "iPhone 17 \(|Apple TV 4K \(3rd generation\) \("
 
       # Without -collect-test-diagnostics never a failing run spends ten
-      # minutes collecting simulator diagnostics.
+      # minutes collecting simulator diagnostics. Serial: in parallel, about
+      # a thousand tests share one main actor on the runner's three cores,
+      # and tests that wait on a clock starve.
       - name: Test
         # The full log is thousands of lines; the step shows errors, failures
         # and the verdict, and a failed run keeps the rest.
@@ -70,6 +72,7 @@ jobs:
             -derivedDataPath build/DerivedData \
             -resultBundlePath build/TestResults.xcresult \
             -collect-test-diagnostics never \
+            -parallel-testing-enabled NO \
             > build/xcodebuild.log 2>&1 || status=$?
           grep -E ": error: |^error: |✘|\*\* (BUILD|TEST) |Test run with" build/xcodebuild.log || true
           exit "$status"
