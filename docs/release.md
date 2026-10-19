@@ -293,8 +293,9 @@ three actions:
 - **upload** runs `scripts/upload-testflight.sh both --external`, then pushes
   `refs/archived/<build>` to record the revision it archived. The upload
   script's checks all apply, including the [release guard](#release-tags).
-- **publish**, with a build number, runs `scripts/publish-release.sh`, which
-  tags the recorded revision. Run it once the build is accepted.
+- **publish** runs `scripts/publish-release.sh`, which tags the recorded
+  revision. Run it once the build is accepted. Leave the build empty for the
+  build `main` declares, or give an earlier one.
 
 Signing goes through the App Store Connect API key, so the runner needs no
 certificates. The secrets belong to the `release` environment (Settings,
