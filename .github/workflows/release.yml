@@ -20,6 +20,8 @@ jobs:
   archive:
     name: ${{ inputs.action }}
     if: inputs.action != 'publish'
+    # Holds the secrets, and only main may use it.
+    environment: release
     runs-on: xcode-27
     timeout-minutes: 90
     permissions:
@@ -32,12 +34,6 @@ jobs:
       LAGOON_SENTRY_DSN: ${{ secrets.LAGOON_SENTRY_DSN }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - name: Only from main
-        if: github.ref != 'refs/heads/main'
-        run: |
-          echo "::error::Release from main, not ${GITHUB_REF_NAME}."
-          exit 1
-
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
@@ -68,17 +64,10 @@ jobs:
           build="$(grep -m1 -o 'CURRENT_PROJECT_VERSION = [0-9]*' Lagoon.xcodeproj/project.pbxproj | grep -o '[0-9]*$')"
           git push origin "HEAD:refs/archived/${build}"
 
-      - name: Keep the signed apps
-        if: inputs.action == 'trial'
-        uses: actions/upload-artifact@v4
-        with:
-          name: signed-apps
-          path: build/export-*
-          retention-days: 3
-
   publish:
     name: publish
     if: inputs.action == 'publish'
+    environment: release
     runs-on: xcode-27
     timeout-minutes: 30
     permissions:
