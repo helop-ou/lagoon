@@ -117,19 +117,36 @@ here.
 
 ### Pull requests
 
-Work reaches `main` through a pull request from a feature branch. Its
-description is a short list and nothing more:
+Work reaches `main` through a pull request from a feature branch. The types
+are the commit types: `feat`, `fix`, `docs`, `test`, `refactor`, `perf`,
+`build`, `chore`, `ci`, `style` and `revert`.
 
-```
-Changes:
-- Run the unit tests on tvOS and iOS for every pull request
-- Install the Metal toolchain the runner lacks
-```
+- **Branch:** `<type>/<kebab-case-words>`, such as `fix/home-screen-sections`.
+- **Title:** written like a commit subject, `<type>: <lowercase start>`, at
+  most 72 characters, no full stop: `fix: show Home Screen Sections rows`.
+- **Commits:** a conventional subject line and nothing else: no body, no
+  trailers.
+- **Description:** a short list and nothing more:
 
-One plain line per change. Something the reviewer must act on, such as
-"Stacked on #2" or "Needs a device check", is one more line. Rationale goes in
-the guide that owns the area, not the description. No Sentry issue ids or
-Jira keys, in the title or the description.
+  ```
+  Changes:
+  - Run the unit tests on tvOS and iOS for every pull request
+  - Install the Metal toolchain the runner lacks
+  ```
+
+  One plain line per change. Something the reviewer must act on, such as
+  "Needs a device check", is one more line. Rationale goes in the guide that
+  owns the area, not the description.
+- **No Sentry issue ids or Jira keys** in any of them.
+- **Dependent changes** go in a GitHub stack (`gh stack`), one pull request
+  per theme, merged from the bottom up.
+
+`.github/workflows/conventions.yml` runs `scripts/check-pull-request.sh` on
+every pull request and again when its title or description is edited, and
+`main` requires it to pass. The script reads the pull request from the
+environment, so it runs locally the same way (usage is at its top).
+`.github/CODEOWNERS` names the owner of every file, whose review GitHub
+requests on each pull request.
 
 ### Continuous integration
 
