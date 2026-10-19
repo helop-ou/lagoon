@@ -17,9 +17,13 @@ nonisolated struct ExternalSeerrTitle: Equatable, Sendable {
     }
 
     init(_ details: SeerrMediaDetails, mediaType: SeerrMediaType) {
-        id = details.id
+        self.init(id: details.id, mediaType: mediaType, backdropPath: details.backdropPath)
+    }
+
+    init(id: Int, mediaType: SeerrMediaType, backdropPath: String?) {
+        self.id = id
         self.mediaType = mediaType
-        backdropPath = details.backdropPath
+        self.backdropPath = backdropPath
     }
 }
 
@@ -37,6 +41,22 @@ nonisolated enum ExternalSeerrMatcher {
         case "DiscoverTV": .discover(.tv)
         default: nil
         }
+    }
+
+    /// Seerr's record of one title: by id for Seerr's own, by search for
+    /// Sonarr's and Radarr's. Nil when Seerr has none or cannot be reached.
+    @MainActor
+    static func find(
+        _ item: JellyfinClient.ExternalSectionItem,
+        seerr: SeerrClient
+    ) async -> ExternalSeerrTitle? {
+        if let id = item.seerrID, let type = item.seerrType {
+            let details = try? await seerr.details(id: id, mediaType: type)
+            return details.map { ExternalSeerrTitle($0, mediaType: type) }
+        }
+        guard item.seerrType != nil else { return nil }
+        let results = (try? await seerr.search(query: item.title))?.results ?? []
+        return match(item, in: results)
     }
 
     /// A Sonarr or Radarr title among Seerr's search results: the same kind

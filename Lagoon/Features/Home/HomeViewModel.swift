@@ -937,20 +937,11 @@ final class HomeViewModel {
             }
         }
 
+        // Sonarr and Radarr name a title; Seerr's search finds its id.
+        let searched = items.filter { $0.seerrID == nil && $0.seerrType != nil }
         await withTaskGroup(of: (String, ExternalSeerrTitle?).self) { group in
-            for item in unlisted {
-                guard let id = item.seerrID, let type = item.seerrType else { continue }
-                group.addTask {
-                    let details = try? await seerr.details(id: id, mediaType: type)
-                    return (item.id, details.map { ExternalSeerrTitle($0, mediaType: type) })
-                }
-            }
-            // Sonarr and Radarr name a title; Seerr's search finds its id.
-            for item in items where item.seerrID == nil && item.seerrType != nil {
-                group.addTask {
-                    let results = (try? await seerr.search(query: item.title))?.results ?? []
-                    return (item.id, ExternalSeerrMatcher.match(item, in: results))
-                }
+            for item in unlisted + searched {
+                group.addTask { (item.id, await ExternalSeerrMatcher.find(item, seerr: seerr)) }
             }
             for await (id, title) in group {
                 if let title { found[id] = title }
