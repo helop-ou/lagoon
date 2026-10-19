@@ -8,8 +8,7 @@ import SwiftUI
 /// `ItemProgressBar` and `StatusCapsule`); a corner mark is the caller's
 /// `.downloadedBadge`.
 struct PosterCardShell<Route: Hashable, Badge: View>: View {
-    /// Nil for a title with nothing to open; the card still takes focus.
-    let route: Route?
+    let route: Route
     let imageURL: URL?
     let maxPixelSize: Int
     let title: String
@@ -24,7 +23,7 @@ struct PosterCardShell<Route: Hashable, Badge: View>: View {
     let layout = PosterLayout()
 
     init(
-        route: Route?,
+        route: Route,
         imageURL: URL?,
         maxPixelSize: Int,
         title: String,
@@ -51,7 +50,7 @@ struct PosterCardShell<Route: Hashable, Badge: View>: View {
         // The gap must clear the focus lift: `.card` grows the poster ~20pt
         // past its bottom edge.
         VStack(alignment: .leading, spacing: layout.spacing) {
-            link {
+            NavigationLink(value: route) {
                 ZStack {
                     CachedAsyncImage(
                         url: imageURL,
@@ -78,17 +77,6 @@ struct PosterCardShell<Route: Hashable, Badge: View>: View {
             caption
         }
         .frame(width: layout.width)
-    }
-
-    /// A button that does nothing when there is no route: tvOS can only
-    /// scroll a rail through focusable cards.
-    @ViewBuilder
-    private func link(@ViewBuilder label: () -> some View) -> some View {
-        if let route {
-            NavigationLink(value: route, label: label)
-        } else {
-            Button(action: {}, label: label)
-        }
     }
 
     private var placeholder: some View {
