@@ -9,7 +9,7 @@ on:
         type: choice
         options: [trial, upload, publish]
       build:
-        description: "Build number, for publish only"
+        description: "Build to publish, for publish only. Empty publishes the build main declares."
         required: false
 
 concurrency:
@@ -86,4 +86,6 @@ jobs:
         run: xcodebuild -downloadComponent MetalToolchain
 
       - name: Publish
-        run: scripts/publish-release.sh "$BUILD"
+        run: |
+          build="${BUILD:-$(grep -m1 -o 'CURRENT_PROJECT_VERSION = [0-9]*' Lagoon.xcodeproj/project.pbxproj | grep -o '[0-9]*$')}"
+          scripts/publish-release.sh "$build"
