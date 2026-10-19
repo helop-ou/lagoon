@@ -41,7 +41,7 @@ already be installed and signed in on the target simulator:
   movie title), `debug.benchStartSeconds` (the pinned start) and optionally
   `debug.benchProductionYear` with `simctl spawn … defaults write`, then
   relaunches. The app resolves the title in the Movies library and starts at
-  that position; `debug.benchAutoExit` leaves through the clean teardown once
+  that position, and `debug.benchAutoExit` leaves through the clean teardown once
   the window completes.
 - The title must **exactly** match a movie's name (case- and
   diacritic-insensitive). Only movies are searched, so episodes cannot be
@@ -49,7 +49,7 @@ already be installed and signed in on the target simulator:
 - `--set key=bool` flips app defaults between A/B configurations.
 - Every default it wrote, including `--set` keys, is deleted afterwards.
 - Results come from the simulator's own log store
-  (`xcrun simctl spawn <udid> log show`); the host's `log show` sees nothing.
+  (`xcrun simctl spawn <udid> log show`). The host's `log show` sees nothing.
 
 For a scripted device A/B the same defaults work as launch arguments:
 `-debug.frameLossBench YES -debug.benchStartSeconds <seconds>`, plus
@@ -67,12 +67,12 @@ numbers that matter come from Apple TV hardware:
   above it, to test whether composition over an HDR frame costs frames.
 - `debug.benchFlatCues` skips rasterizing subtitle cues. The cue shadow and
   background filtered every frame dropped frames on Apple TV HDR, and
-  `drawingGroup()` fixed it; this switch undoes the fix for comparison.
+  `drawingGroup()` fixed it, and this switch undoes the fix for comparison.
 - `debug.benchPinnedTransport` keeps the transport up for the whole run.
   The bench re-arms on any input, so this is the only way to measure the
   chrome while it shows. Pair each pinned run with an unpinned one: the
   transport stays mounted at zero opacity while hidden, so it can cost
-  something there too. Frame loss rarely moves; with `-debug.decodeTrace YES`
+  something there too. Frame loss rarely moves, so with `-debug.decodeTrace YES`
   the median `main=` of the `CPUTrace` lines is the finer signal.
 
 The bench, the passthrough timeline and the EL NAL filter are covered by
@@ -83,7 +83,7 @@ discipline are pure logic a simulator pass cannot pin down.
 `os_proc_available_memory()` (0 in the simulator, real on device), and the
 progress loop emits a `Playback Memory` signpost every 10 s with both figures
 and the position. Watch the footprint's _slope_: a leak is a straight line
-that never plateaus, and jetsam leaves a `JetsamEvent` report; no crash report
+that never plateaus, and jetsam leaves a `JetsamEvent` report, but no crash report
 appears. Anything above about 0.2 MB/s sustained over a few minutes needs
 explaining.
 

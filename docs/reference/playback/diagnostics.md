@@ -3,7 +3,7 @@
 Automatic, privacy-bounded reports of playback and request failures, so
 intermittent problems surface without tester reports. The rules for changing
 the player are in the [playback
-guide](../../playback.md#diagnostic-reporting); this page covers the schema,
+guide](../../playback.md#diagnostic-reporting). This page covers the schema,
 detectors, limits and Sentry setup.
 
 ## Decision
@@ -95,15 +95,15 @@ asserts none reach the envelope bytes.
 `DiagnosticEventCode` names the history events: `playback.start`, `.ready`,
 `.play`, `.pause`, `.seek`, `.track`, `.subtitleLoadFailed`, `.stallBegin`,
 `.stallEnd`, `.rendererRecovery`, `.cacheFallback`, `.sample`, `.fallback`,
-`.handoffBegin`, `.handoffEnd`, `.finished`, `.stop`, `.failure`;
-`audio.interruption`, `audio.route`; `api.failure`, `api.sessionExpired`;
+`.handoffBegin`, `.handoffEnd`, `.finished`, `.stop`, `.failure`,
+`audio.interruption`, `audio.route`, `api.failure`, `api.sessionExpired`,
 `app.memoryWarning`, `app.thermal`, `app.foreground`, `app.background`.
 
 `DiagnosticIncidentCode` names the reports and their fingerprints:
 
 | Code | Level | Fingerprint variant | Fires when |
 | --- | --- | --- | --- |
-| `playback.startFailed` | error | stage, error domain, code | negotiation or engine start threw; not when the viewer left (`CancellationError`, or URLSession's `-999` while the start task or controller was cancelled) |
+| `playback.startFailed` | error | stage, error domain, code | negotiation or engine start threw, but not when the viewer left (`CancellationError`, or URLSession's `-999` while the start task or controller was cancelled) |
 | `playback.fallback` | warning / error | cause, stage, domain, code, `afterTrackSwitch` | reported once the next rung has a verdict: `recovered` (warning, with the reload time in `elapsedMs`), `failed`, or `cancelled` by the viewer |
 | `playback.failed` | error | same as fallback | the ladder is spent |
 | `playback.rendererRecovery` | warning | reason, domain, code | audio renderer replaced, video renderer flushed, restart-point retry |
@@ -116,8 +116,8 @@ asserts none reach the envelope bytes.
 | `api.decodeFailed` | error | client, route token, kind, key | a 2xx body the app could not decode |
 
 Sentry groups on the fingerprint verbatim: `[code] + variant`. The build is a
-tag and part of the release; the fingerprint excludes it. Values that vary per
-occurrence (positions, durations) never enter a fingerprint.
+tag and part of the release, but the fingerprint excludes it. Values that
+vary per occurrence (positions, durations) never enter a fingerprint.
 
 ## Detectors and thresholds
 
@@ -143,8 +143,8 @@ occurrence (positions, durations) never enter a fingerprint.
   depths, audio lead, counters, memory, thermal and app state, so an
   incident's attachment covers about the last minute.
 - **API**: expected conditions are recorded, not reported: cancellation,
-  offline, lost connection, timeout, unreachable host, DNS failure; HTTP 401,
-  403, 304. Everything else is an incident. A request whose failure is an
+  offline, lost connection, timeout, unreachable host, DNS failure, and HTTP
+  401, 403, 304. Everything else is an incident. A request whose failure is an
   answer (an optional plugin route like `HomeScreen/Sections`, a newer-server
   endpoint like `MediaSegments`) passes `probe: true` to `JellyfinClient.get`
   and is never reported.
@@ -159,11 +159,11 @@ occurrence (positions, durations) never enter a fingerprint.
   - at most 20 envelopes pending on disk (oldest dropped), 256 KiB each, one
     upload in flight
   - backoff 30 s, doubling to 1 h, on transport or 5xx failures
-  - `X-Sentry-Rate-Limits` honoured on every status including 200; `429`
-    falls back to `Retry-After`; other 4xx envelopes are discarded
+  - `X-Sentry-Rate-Limits` honoured on every status including 200. `429`
+    falls back to `Retry-After`, and other 4xx envelopes are discarded
   - pending envelopes live in Caches/`Diagnostics/pending` and retry on the
     next submit, on foreground, or when the backoff timer fires
-  - turning reporting off discards the queue and stops uploads; nothing
+  - turning reporting off discards the queue and stops uploads, and nothing
     recorded before the switch leaves the device after it
 
 ## Tester controls and disclosure
@@ -173,8 +173,8 @@ Settings → Advanced → Diagnostic Reports → *Send Diagnostic Reports* contr
 
 - **Off means off:** history stops, the playback sampler stops, and the
   pending queue is discarded. Switching off mid-playback cancels the sampler's
-  timer; switching back on resumes the same attempt with fresh freeze and
-  frequent-stall windows. An in-flight renderer metrics request may finish;
+  timer. Switching back on resumes the same attempt with fresh freeze and
+  frequent-stall windows. An in-flight renderer metrics request may finish, but
   none start while opted out.
 - HUD, decode trace and benchmark sampling have their own controls.
 - While on, the renderer metrics load runs every two seconds, asynchronously,
@@ -182,7 +182,7 @@ Settings → Advanced → Diagnostic Reports → *Send Diagnostic Reports* contr
   Apple TV (see [physical device
   verification](#physical-device-verification)).
 - Release builds default on. Debug builds default off so development never
-  spends quota; `-diagnostics.reportingEnabled YES` turns a debug run on.
+  spends quota. `-diagnostics.reportingEnabled YES` turns a debug run on.
 - The footer under the toggle states what a report contains.
 - `PrivacyInfo.xcprivacy` declares *Other Diagnostic Data* and *Performance
   Data*, not linked and not used for tracking. App Store Connect's privacy
@@ -194,12 +194,12 @@ Settings → Advanced → Diagnostic Reports → *Send Diagnostic Reports* contr
 
 - **DSN.** A client key that can only submit to this project. It is injected
   at build time, never tracked: the `LAGOON_SENTRY_DSN` build setting lands in
-  Info.plist and `DiagnosticsConfiguration` reads it back;
+  Info.plist and `DiagnosticsConfiguration` reads it back.
   `-diagnostics.sentryDSN` overrides it for a capture run. A build with no DSN
   (every ordinary checkout) has no sink and reports nothing.
   `scripts/upload-testflight.sh` requires the variable.
 - **IP addresses.** Project → Settings → Security & Privacy → *Prevent
-  Storing of IP Addresses* is on. No scrubbing rules are relied on; the app
+  Storing of IP Addresses* is on. No scrubbing rules are relied on. The app
   never sends the fields they would scrub, nor a `user` or `request` object.
   Events declare `platform: native`, because for `platform: cocoa` Sentry
   fills `user.ip_address` from the connection and derives a location (this
@@ -237,7 +237,7 @@ xcrun simctl launch <udid> ee.helop.lagoon \
 Play any direct-play title: four seconds in, the hook injects a delivery
 failure, the ladder falls to remux, and a `playback.fallback` envelope lands
 in the output directory as `*.event.json` and `*.history.json`. Closing the
-player after thirty seconds exercises the stop path; `--status 429` and
+player after thirty seconds exercises the stop path. `--status 429` and
 `--status 500` exercise rate limiting and backoff. Read the JSON for anything
 that should not be there.
 
@@ -284,7 +284,7 @@ appeared under Issues.
 
 **Reporting on vs off** (Release, 4K Dolby Vision profile 8, 600 s in, two
 interleaved pairs): 0 dropped frames in every run, footprint within 2 MB. This
-is the sampler's cost over an already instrumented run; CPU and energy with
+is the sampler's cost over an already instrumented run. CPU and energy with
 the bench off were not measured.
 
 Not yet verified: a physical iPhone, and a Release build sending a naturally

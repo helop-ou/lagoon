@@ -88,7 +88,7 @@ local.
 
 - **Entry point:** a *Watch Together* control in the detail page's secondary
   row, icon `person.2.fill` (never SharePlay's glyph). It draws only once
-  `SyncPlayStore.availability` allows joining; the detail page asks, since a
+  `SyncPlayStore.availability` allows joining. The detail page asks, since a
   view that renders nothing never runs its task.
 - **`WatchTogetherSheet`** (a sheet on iOS, a `TVSettingsPage` in a sheet on
   tvOS) lists the server's groups, polled every 5 s since the socket only
@@ -127,7 +127,7 @@ local.
 - A delivery fallback in a group primes paused and reports Ready before the
   server restarts it.
 - Readiness reports retry once after a second, with current timestamp and
-  position; cancellation or newer readiness supersedes the retry. Viewer
+  position. Cancellation or newer readiness supersedes the retry. Viewer
   transport commands are never retried automatically.
 - Ignore Waiting changes publish after server acknowledgement.
 - An unavailable queued title tries to opt out of waiting and offers Rejoin or
@@ -137,6 +137,6 @@ local.
 
 It takes two members. `-debug.syncPlayJoinGroup <name>` joins the named group
 after the regression bootstrap signs in, polling up to 30 s so the other
-member can create it; the group's queue then drives playback instead of the
+member can create it. The group's queue then drives playback instead of the
 bench fixture. Add `-debug.playbackHUD YES` and read the `Sync:` line: group
 state, member count, last command, drift.

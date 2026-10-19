@@ -66,7 +66,7 @@ here.
 ## Files and reusable components
 
 - Name a file after its main type. Screens and substantial models get their
-  own file; a small private helper can stay beside its only caller.
+  own file, and a small private helper can stay beside its only caller.
 - Extract when responsibilities, state lifetime or callers differ. Line count
   is a prompt to review, not a limit.
 - Use `Type+Responsibility.swift` for a focused conformance or extension. Do
@@ -87,11 +87,11 @@ here.
 ## State, concurrency, and boundaries
 
 - Use Observation for new observable state. The owner of a model's lifetime
-  stores it in `@State`; controls that need bindings use `@Bindable`. A
+  stores it in `@State`, and controls that need bindings use `@Bindable`. A
   caller's value is never a second source of truth.
 - Respect the default `MainActor` isolation. Mark values that cross isolation
   explicitly. Never use `@unchecked Sendable` or broaden isolation to silence
-  the compiler; document and verify the real synchronization contract.
+  the compiler. Document and verify the real synchronization contract.
 - Every async operation has an owner, a cancellation behavior and a policy for
   late results. Keep the generation checks on account, query, seek and
   episode changes. UI loading must not cancel itself by replacing the view
@@ -175,6 +175,6 @@ reports after the push.
   the [regression lane](reference/regression-lane.md).
 
 [Design system](design-system.md) owns tokens, controls, focus, artwork and
-accessibility; [Jellyfin API](jellyfin-api.md) owns wire contracts;
+accessibility, [Jellyfin API](jellyfin-api.md) owns wire contracts, and
 [Release](release.md) owns build numbers and release evidence. Update the
 guide that owns a contract when you change it.

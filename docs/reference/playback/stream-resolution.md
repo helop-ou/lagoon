@@ -11,23 +11,23 @@ guide](../../playback.md). See also the [notes index](README.md).
    mirrors exactly what the engine can play. Its fMP4 HLS transcoding profile
    lands back inside the same envelope, so a fallback is never answered with
    something undecodable. The literal in `DeviceProfile.swift` is the
-   authority on codecs; the server decides.
+   authority on codecs, and the server decides.
 2. Take the first `MediaSource` and resolve a URL with
    `JellyfinClient.streamURL`:
    - `SupportsDirectPlay` → `Videos/{id}/stream?static=true&mediaSourceId=…`
      (+ `deviceId`, `Tag`), PlayMethod `DirectPlay`.
    - else `SupportsDirectStream` → `Videos/{id}/stream.{container}` with the
      same query, PlayMethod `DirectStream`. The container can be an ffprobe
-     list; take the first entry.
+     list, so take the first entry.
    - else the server's `TranscodingUrl`, PlayMethod `Transcode`. It is
      server-relative with its own query: resolve it against the server URL,
-     never rebuild it. libavformat's HLS demuxer reads the fMP4 playlist; the
+     never rebuild it. libavformat's HLS demuxer reads the fMP4 playlist, and the
      video-copy variant is listed first.
 3. The engine plays it. Jellyfin's HLS playlists cover the full duration, so
    resume is the same initial seek as direct play, and reported positions stay
    absolute for every method.
 
-None of these URLs carries the token; see [Auth](../../jellyfin-api.md#auth)
+None of these URLs carries the token, as [Auth](../../jellyfin-api.md#auth)
 for how returned URLs are sanitized.
 
 ### What this device is offered
@@ -46,7 +46,7 @@ Only two hardware checks, for specific reasons:
   libdav1d software path without.
 
 Everything else survives without hardware: H.264 goes to
-`AVSampleBufferVideoRenderer` compressed and may decode in software; VP9 and
+`AVSampleBufferVideoRenderer` compressed and may decode in software, while VP9 and
 legacy codecs use libavcodec.
 
 **Do not gate anything else on `VTIsHardwareDecodeSupported`.** It reports
@@ -64,7 +64,7 @@ Removing HEVC touches three places, and missing one undoes the others:
 H.264 is capped at 1080p in the reduced profile. Without the cap a 4K HEVC
 film would be requested as H.264 _at 4K_, a huge transcode the device cannot
 decode anyway (observed: the player stuck at 0 s with empty queues). This is a
-heuristic; VideoToolbox answers per codec, not per resolution. On Jellyfin
+heuristic, since VideoToolbox answers per codec, not per resolution. On Jellyfin
 10.11 a 4K HEVC/DoVi source direct-plays under the full profile and returns as
 `VideoCodec=h264 MaxWidth=1920 MaxHeight=1080` under the reduced one.
 
@@ -77,7 +77,7 @@ the same honest envelope through software.
 `NetworkPathObserver` watches `NWPathMonitor`, and `cappedForMeteredPath`
 bounds the profile when the path is expensive (cellular, personal hotspot) or
 constrained (Low Data Mode). Without it an 89 Mbps remux was offered as direct
-play over cellular; with it that source becomes a 720p 2.5 Mbps offer with
+play over cellular, and with it that source becomes a 720p 2.5 Mbps offer with
 direct play refused. (The playback cache already skipped proactive fills on
 such paths.)
 
@@ -89,7 +89,7 @@ such paths.)
 - **A resolution ceiling comes too.** Bitrate alone leaves `MaxWidth` unset,
   and the server answers a 4K source with a 4K re-encode at 3 Mbps.
 - **The viewer can override it** (Settings → Playback → Cellular). Apple says
-  a path is expensive, never that it is slow; fast tethered 5G and a
+  a path is expensive, never that it is slow, and fast tethered 5G and a
   throttled hotspot look the same.
 
 Known limits, both deliberate:

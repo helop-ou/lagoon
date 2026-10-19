@@ -21,7 +21,7 @@ This side:
   summary line, so without it Down from the tab finds nothing and focus never
   reaches the card. (The Audio tab's left column is focusable rows, so it
   needs none.)
-- The control lives in the panel, not the transport; see [putting controls in
+- The control lives in the panel, not the transport, as [putting controls in
   the transport](controls-and-reporting.md#putting-controls-in-the-transport-tvos).
 - The transport names the rate beside the title when it is not 1×. Pause,
   seek, buffering, renderer recovery, delivery fallback and next-episode
@@ -29,7 +29,7 @@ This side:
 - Every audio renderer uses the time-domain pitch algorithm, including after a
   media-services reset.
 - Stall recovery, the delivered-PTS margin, priming and demux watermarks scale
-  their media-time cushion by rate; the decoded-frame hard limits stay fixed.
+  their media-time cushion by rate, while the decoded-frame hard limits stay fixed.
 - Now Playing publishes the real rate, and `changePlaybackRateCommand` offers
   the same choices to Control Center, headsets and system clients.
 
@@ -49,8 +49,8 @@ state are removed on teardown. The plist declares
 - Entering the background stops proactive cache fill. Unless PiP is active or
   transitioning (`isPictureInPictureShowing`) or AirPlay owns the route, the
   engine goes audio-only: `setVideoOutputSuspended(true)` flushes the video
-  renderer, intake and queue on the pump queue; the demuxer discards the video
-  stream (`FFmpegDemuxer.setVideoDiscarded`); the software decode stage
+  renderer, intake and queue on the pump queue. The demuxer discards the video
+  stream (`FFmpegDemuxer.setVideoDiscarded`). The software decode stage
   resets. No decode or GPU work runs.
 - Audio, the synchronizer clock, the time observer, subtitles and the finish
   boundary continue. Priming, starvation detection and stall recovery treat a
@@ -72,7 +72,7 @@ state are removed on teardown. The plist declares
   where a rebuild cannot hold it suspends video until the foreground rather
   than reporting the samples undecodable, so the ladder never falls back to a
   transcode, which decodes through VideoToolbox too.
-- tvOS still pauses on background via `scenePhase`; it has no lock screen.
+- tvOS still pauses on background via `scenePhase`, and it has no lock screen.
 - `-debug.regressionNoAutomaticPiP YES` disables automatic PiP so the
   simulator (which cannot lock) reaches audio-only mode through Home.
 
@@ -90,12 +90,12 @@ The engine has hooks, not a group feature:
   `now + 0.1 s` with the group's instant.
 - A start request arriving during a seek or the initial open is remembered
   and applied when `beginPlayback` runs, but only if the instant is still
-  ahead; a late member needs the default anchor. `pause()` and `seek(to:)`
+  ahead, because a late member needs the default anchor. `pause()` and `seek(to:)`
   drop a remembered instant.
 - `setCorrectionRate` stays separate from `setRate`: a drift nudge is not a
   speed the viewer chose. `PlaybackRatePolicy.effectiveRate` clamps the
   product. Demux watermarks, starvation margins and the stall cushion all read
-  it, since a corrected clock drains media faster; at correction 1 nothing
+  it, since a corrected clock drains media faster, and at correction 1 nothing
   changes. Pitch is unaffected, since every renderer uses `.timeDomain`.
 - `clockPosition` exists because `timePosition` is deliberately optimistic.
   While the clock is stopped it answers with the target, since a Buffering
@@ -139,9 +139,9 @@ a token shared across two device ids binds every socket to whichever session
 the server resolves first.
 
 **What a join costs the group.** Joining a Playing group produces:
-`UserJoined`; a `Pause` for everyone at the live position; the joiner's
-`PlayQueue` (`NewPlaylist`) with item and position; the joiner's `Buffering`;
-its `Ready`; then the other member's `Unpause`. The server catches a newcomer
+`UserJoined`, a `Pause` for everyone at the live position, the joiner's
+`PlayQueue` (`NewPlaylist`) with item and position, the joiner's `Buffering`,
+its `Ready`, and then the other member's `Unpause`. The server catches a newcomer
 up, which is why `onEngineReady` fires on every seek, not only the first open.
 
 **The corrective seek.** `WaitingGroupState` answers a `Ready` more than
@@ -192,12 +192,12 @@ AVPlayerViewController does automatically.
   `AVDisplayManager.preferredDisplayCriteria` (`DisplayModeMatcher`) and
   clears it on exit.
 - Lagoon always submits it. The user's Settings → Video and Audio → Match
-  Content options decide; criteria are silently ignored when those are off.
+  Content options decide, and criteria are silently ignored when those are off.
 - **Do not require the key window** in the lookup. During a fullScreenCover
   the key flag is not guaranteed, and nil silently disables matching. Any
   window of the scene reaches the screen's manager.
-- The HUD's `Display:` line names each layer: the requested rate; `no window`
-  / `no manager` (lookup failed); `system on/off` (the user setting); and
+- The HUD's `Display:` line names each layer: the requested rate, `no window`
+  / `no manager` (lookup failed), `system on/off` (the user setting), and
   `switched ×N`, counting `AVDisplayManagerModeSwitchStart` notifications, the
   proof a switch happened.
 
@@ -206,7 +206,7 @@ compositor cadence-converts and tone-maps every frame. That was the suspect
 for hardware drops on full 3840×2160 HDR10 titles, while a 3840×1600 encode of
 the same codec, range and bitrate class played clean. Both previously failing
 4K HDR10 cases now measure zero loss in normal viewing on hardware. The
-simulator has no display modes (`system match off`); criteria are a no-op
+simulator has no display modes (`system match off`), so criteria are a no-op
 there.
 
 ## Debug playback HUD
@@ -223,7 +223,7 @@ Release, and defaults off (`debug.playbackHUD`, read at playback start).
   work, renderer teardown, demux close, the stopped report, and every increase
   in dropped or corrupted frames (with delta, position, queue depths and stall
   count, so a trace separates decoder pressure from starvation). Capture with
-  Instruments' **Points of Interest** template on hardware; the signposts ship
+  Instruments' **Points of Interest** template on hardware, and the signposts ship
   in Release.
 - **The HUD itself costs frames**: on a full-raster 4K stress scene, two
   otherwise clean hardware windows had 4–5 drops with it on and zero in two

@@ -7,7 +7,7 @@ These notes are not a release checklist or proof of hardware acceptance.
 ## Spacing and type
 
 - `Metrics.Space` is one scale for both platforms. Internal rhythm does not
-  need to shrink like structure does; gutters, card widths and hero heights
+  need to shrink like structure does. Gutters, card widths and hero heights
   follow the 10-foot safe zone and have their own tokens.
 - Steps grow about ×1.5 after `s`, so adjacent steps look deliberately
   different. (Before the scale, views used 22 distinct spacing values and 71
@@ -31,7 +31,7 @@ gives the system's dark backing, which on tvOS is a lifted grey tinted by
 what is behind it (measured rgb(47, 45, 42) on Settings against rgb(0, 0, 0)
 elsewhere). Any screen not covered edge to edge by content needs an explicit
 background. `TVSettingsPage` and `SettingsView.splitLayout` carry it for the
-whole settings hierarchy; onboarding uses `BrandBackground`.
+whole settings hierarchy. Onboarding uses `BrandBackground`.
 
 Token names differ from the package on purpose:
 
@@ -50,12 +50,13 @@ fix its button style (see `.glassProminent` below), not the accent.
 three onboarding screens so they read as one place. Past onboarding, content
 plays against black. On iOS, server entry and sign-in put native text fields
 straight on that background: plain style, a faint bottom divider, 44 pt
-minimum touch height; no `.roundedBorder` fields or grouped Form rows. tvOS
+minimum touch height, with no `.roundedBorder` fields or grouped Form rows. tvOS
 keeps its centred column and glass buttons.
 
 **`LagoonLockup`** composes the mark, because the package has no
-dark-background lockup (its colour lockup's Ink wordmark vanishes on black; its
-white lockup merges the shores). Colour symbol plus Light wordmark keeps both.
+dark-background lockup (its colour lockup's Ink wordmark vanishes on black, and
+its white lockup merges the shores). Colour symbol plus Light wordmark keeps
+both.
 
 - Proportions come from the package's horizontal lockup, which sets the
   wordmark almost twice as large relative to the mark as the stacked one, and
@@ -85,7 +86,7 @@ dragged sticker. Four coupled behaviours:
 
 Every value is a closed-form function of time, so the motion cannot drift or
 desynchronise. Placement is per screen (`JellyfishSwimLayer.School`): the
-connect and sign-in forms leave both flanks open; the picker's rail owns the
+connect and sign-in forms leave both flanks open. The picker's rail owns the
 middle band and grows rightwards.
 
 - The body stays upright and leans only into its sideways drift. Turned fully
@@ -98,7 +99,7 @@ middle band and grows rightwards.
 ## Iconography
 
 SF Symbols, and **fill is not a free choice**: navigation (tabs, library rows)
-and transport controls are filled; empty and error states are outline, since
+and transport controls are filled. Empty and error states are outline, since
 they are pictures, not controls. `checkmark`, `chevron.*`, `plus`, `minus`,
 `xmark`, `magnifyingglass` and `speedometer` have no filled variant.
 
@@ -108,7 +109,7 @@ drifted apart).
 
 **Shape is a selection criterion.** `house.fill` and `gearshape.fill` anchor
 the tab bar at 1.00–1.13 width-to-height and about 0.55 ink density. Glyphs far
-from that look out of place (`film.fill` measured 1.28 wide and 0.85 dense;
+from that look out of place (`film.fill` measured 1.28 wide and 0.85 dense, and
 `play.square.stack.fill` 0.75 wide). The set now spans 1.00–1.13:
 
 | tab | glyph | w/h | ink |
@@ -134,7 +135,7 @@ running OS. A missing symbol renders as nothing, with no crash or warning.
 Seerr's unsettled states animate their symbol **while their container holds
 focus**: Processing rotates (`.rotate`), an active download bounces
 (`.bounce`), Pending pulses (`.pulse`). Settled states (available, declined,
-failed, removed, blocked) never move; a fact that wobbles reads as an error.
+failed, removed, blocked) never move. A fact that wobbles reads as an error.
 
 - Focus-gated because twenty animating cards is noise. `SeerrStatusLabel`
   reads `\.isFocused`, which reports the nearest focusable ancestor, so it
@@ -142,8 +143,8 @@ failed, removed, blocked) never move; a fact that wobbles reads as an error.
 - **Symbol effects do not honour Reduce Motion on their own.**
   `SeerrStatusLabel` gates on `accessibilityReduceMotion`, like
   `HeroSection`'s carousel.
-- tvOS availability: `pulse`, `bounce`, `variableColor`, `scale` are tvOS 17;
-  `rotate`, `breathe`, `wiggle` tvOS 18; `drawOn`/`drawOff` tvOS 26.
+- tvOS availability: `pulse`, `bounce`, `variableColor`, `scale` are tvOS 17.
+  `rotate`, `breathe`, `wiggle` are tvOS 18. `drawOn`/`drawOff` are tvOS 26.
 
 ## Focus strategy
 
@@ -169,10 +170,10 @@ hero glow.
 pill labelled in white. On tvOS a filled button at rest also looks like the
 focused lozenge, so the page seems to have two focused controls. Prominence
 comes from position and order. iOS follows the same rule for one design
-language; do not reopen it per platform.
+language. Do not reopen it per platform.
 
 **Never set a foreground colour on a focusable control or any ancestor.** The
-focused lozenge picks its own label colour for the white pill; an explicit
+focused lozenge picks its own label colour for the white pill. An explicit
 `.foregroundStyle` overrides it and the text vanishes when focused. It has
 happened twice: `.foregroundStyle(.white)` on the player's panel card, and
 `.primary`/`.secondary` selection on season chips (`.primary` is white here,
@@ -185,8 +186,8 @@ lozenge (`.glass` and the default `Button`), where even `.secondary` becomes
 low-contrast grey on white. It does **not** bind `.card`, whose focus is lift
 and parallax, so label colours survive. The poster caption, landscape and
 episode overlays and hero synopsis correctly keep `.secondary`. An audit of
-all 37 foreground overrides found each was non-focusable or `.card` content;
-do not "fix" them.
+all 37 foreground overrides found each was non-focusable or `.card` content.
+Do not "fix" them.
 
 **A tvOS `Form` row needs an explicit control style.** A default-styled
 `Button` or `Toggle` in a tvOS `Form` does not flip its title colour under the
@@ -203,7 +204,7 @@ checkmark.
   categories match on both platforms.
 - On tvOS the left column is identity (avatar, user, server, host, app
   version), not navigation. A short category list on the right opens focused
-  `TVSettingsPage` destinations; glass rows and native menu pickers keep the
+  `TVSettingsPage` destinations. Glass rows and native menu pickers keep the
   system focus treatment. On iOS each row pushes a page in the Settings tab's
   `NavigationStack`.
 - Account actions and playback diagnostics stay off the root.
@@ -213,8 +214,8 @@ checkmark.
 ## Components
 
 - **Rails** (`MediaRail`): `.headline` title and a `LazyHStack` at
-  `cardSpacing`, gutter padding, asymmetric top/bottom padding for focus lift;
-  the page ScrollView has `.scrollClipDisabled()`. On iOS every media rail
+  `cardSpacing`, gutter padding, asymmetric top/bottom padding for focus lift.
+  The page ScrollView has `.scrollClipDisabled()`. On iOS every media rail
   uses 12 pt from heading to cards and 40 pt to the next heading (the same
   40 pt grids use between rows).
 - **Any horizontal ScrollView of focusable things** puts the gutter _inside_
@@ -227,7 +228,7 @@ checkmark.
 - **Cards:**
   - `PosterCard` opens details. Artwork starts at 280×420 pt on tvOS and
     160×240 pt on iOS, scaled by `PosterLayout` with Dynamic Type.
-  - `LandscapeCard` is 360×203 pt on tvOS and 240×135 pt on iOS; Continue
+  - `LandscapeCard` is 360×203 pt on tvOS and 240×135 pt on iOS. Continue
     Watching and Next Up give it a direct-play action.
   - `EpisodeCard` is 89% of `Metrics.landscapeWidth` at 16:9 (about 320×180 pt
     tvOS, 214×120 pt iOS). It opens details on iOS and plays on tvOS.
@@ -258,14 +259,14 @@ checkmark.
     Type.
   - The title is the item's logo via `TitleArtView` at `heroLogoHeight`.
     Legibility comes from a **leading wash** over the text column only, like
-    detail pages; no mask over a third of the image.
+    detail pages, with no mask over a third of the image.
   - Paging: a native paging ScrollView on iOS. On tvOS Left/Right wraps
     through slides **without replacing the focused `.card`**, and Up/Down
     leave normally.
   - Auto-advance every 7 s while visible and idle, pre-warming adjacent
     artwork and palettes. Manual paging restarts the interval. tvOS focus,
     touch scrolling, hidden destinations, backgrounding, Reduce Motion and
-    VoiceOver pause it; Reduce Motion still allows manual paging without the
+    VoiceOver pause it. Reduce Motion still allows manual paging without the
     transition.
   - **The whole banner is the link** to the on-screen item's detail. There is
     no separate "See more" button. VoiceOver gets adjustable next/previous
@@ -302,7 +303,7 @@ checkmark.
 - **Series pages describe an episode, not the show.** The header's label and
   synopsis follow the focused episode, else `Shows/NextUp?seriesId=` (the
   in-progress or next unwatched episode). Play, Resume and the watched toggle
-  act on the same subject; the title art stays the show's.
+  act on the same subject. The title art stays the show's.
   - The highlight is **not** cleared when focus leaves the rail: after
     browsing to E5, Play starts E5. It is cleared on a season change.
   - On iOS the header shows what's next, a native menu picks the season, and
@@ -318,18 +319,18 @@ checkmark.
   (`logoMaxWidth` × `logoMaxHeight`) rather than a fixed frame.
 - **Cast** (`CastStrip`): circular portraits, name over role, in server
   order. Library people are a `RailShelf` of `.card` buttons with
-  `.buttonBorderShape(.circle)`, so the system lift follows the circle; on
+  `.buttonBorderShape(.circle)`, so the system lift follows the circle. On
   tvOS only the portrait is the button and the name stays beneath, as in the
   profile picker. Everyone is listed, a missing headshot shows `person.fill`,
   and one person can appear once per credit (director and writer). Seerr's
-  credits open the TMDB person's page; one without a TMDB id would open
+  credits open the TMDB person's page. One without a TMDB id would open
   nothing, so a strip holding one stays a fixed, non-focusable row of
   `castCount` on tvOS: a focusable row that does nothing is worse. Search
   reuses the strip, titled "People", for Seerr's person results.
 - **Person page** (`PersonDetailView`): headshot, name and the birth and death
   lines, then "In Your Library" as a poster rail, then, with Seerr connected,
   "More from TMDB" in Seerr's cards, then the biography. The rails come
-  before the biography so focus lands on a title, not on a wall of text; on
+  before the biography so focus lands on a title, not on a wall of text. On
   tvOS the biography's paragraphs are focusable so Down scrolls through them,
   and an empty library says so in a focusable line, so the page always has a
   focus target. A library person's page shows the TMDB rail only when it has
@@ -339,7 +340,7 @@ checkmark.
   line when it is empty.
 - **Overlays over credits** (the Up Next card): system translucent material,
   never a black wash. White credits on black show through any flat scrim as
-  readable letters; only blur hides them. On tvOS the track panel is
+  readable letters. Only blur hides them. On tvOS the track panel is
   regular-material content with Liquid Glass tabs and actions, avoiding
   nested glass, and its height follows the selected tab.
 
@@ -360,13 +361,13 @@ Mechanics behind the [guide's rules](../design-system.md#themes).
 
 Palettes:
 
-- `AppTheme.lagoon`: Twin Shores over true black; controls in pale aqua (the
-  accent lifted 40% toward white); no surface, artwork or chrome tint.
+- `AppTheme.lagoon`: Twin Shores over true black. Controls in pale aqua (the
+  accent lifted 40% toward white). No surface, artwork or chrome tint.
 - `AppTheme.babyPink`: `#FFB7CF` accent, `#5E2848` rose ground, `#1F1019`
-  background, `#33182A` rows; the accent as both tints, and a faint wash of
+  background, `#33182A` rows. The accent as both tints, and a faint wash of
   the ground as chrome.
 - `AppTheme.spooky`: `#FF8C1A` pumpkin accent, `#2B1433` aubergine ground,
-  `#110B14` background, `#21152A` rows, `#5C2E91` purple glow; controls in
+  `#110B14` background, `#21152A` rows, `#5C2E91` purple glow. Controls in
   pale pumpkin `#FFB870`. Its artwork tint is the purple, not the accent: an
   orange blush turned every page brown, which read as autumn rather than
   night.
@@ -390,8 +391,8 @@ account counts only from the owner that activated the current one (the
 `DownloadStore` rule): SwiftUI constructs the root session store more than
 once, and the extras announce no account. With nobody active the last
 profile's theme stays visible but stops saving. So the picker, sign-in and
-add-account screens show the last viewer's look; an account re-signing in
-after expiry shows its own; a launch with nobody remembered shows the brand.
+add-account screens show the last viewer's look. An account re-signing in
+after expiry shows its own. A launch with nobody remembered shows the brand.
 Those screens use `GroundBackground` with the jellyfish in the theme accent.
 `AccountLocalData` removes `appearance.theme.<accountID>` with the account, and
 the regression reset clears it.
@@ -399,19 +400,19 @@ the regression reset clears it.
 **The bloom.** Choosing a theme in Settings › Appearance plays
 `ThemeBloomOverlay` from the root: a bloom of the new accent with the theme's
 `bloomMotif` drifting up through it for under two seconds. Baby Pink's motif is
-flowers; Lagoon's is the jellyfish, beating as it rises with the same
+flowers. Lagoon's is the jellyfish, beating as it rises with the same
 `JellyfishGeometry` as the sign-in screens. A new theme names its motif in
 `AppTheme.bloomMotif`. Reduce Motion makes it a plain fade. It plays for a
 viewer's choice and when switching to another profile, in that profile's
-theme (`ThemeStore.bloomCount`); never at launch, and never on returning to
+theme (`ThemeStore.bloomCount`), but never at launch and never on returning to
 the same profile. An in-app switch waits until the picker has closed
 (`MainTabView.finishProfilePicker`): switching under the closing picker
 repainted it in the new theme on its way out, which looked like a clipped
 bloom.
 
 **The season.** `ThemeStore` resolves a profile's theme with
-`ThemeStore.theme(for:in:on:)`: a saved Baby Pink or Spooky wins;
-otherwise `AppTheme.seasonal(on:)` (Spooky when the viewer's calendar says
+`ThemeStore.theme(for:in:on:)`: a saved Baby Pink or Spooky wins.
+Otherwise it is `AppTheme.seasonal(on:)` (Spooky when the viewer's calendar says
 October) unless `appearance.seasonDeclined.<accountID>` holds this year,
 which `select(.lagoon)` writes during the season. Nothing is saved when the
 season applies itself, so November finds the default again. `RootView` calls
@@ -438,7 +439,7 @@ behind content:
   legs do not show through each other. One sits on the left web and one
   hangs head-down from the right, both on the web's steepest radial
   (`Metrics.cobwebSitterShare`, `cobwebHangerShare`), clear of the controls
-  near each corner; the phone's sit high, because the Home hero covers
+  near each corner. The phone's sit high, because the Home hero covers
   everything below the status bar. The hanging spider lowers itself and
   climbs back over `Motion.spiderDrop` (`SpiderDrop`), swaying a little. It is
   the only part of the webs that redraws, in its own small canvas at 30 fps.
@@ -448,8 +449,8 @@ behind content:
   starts when a page appears, so a page left sooner never shows one. A ghost
   enters and leaves wholly off the page over `Motion.ghostCrossing`, mostly
   high up, where a Home hero leaves the backdrop open, and slips behind
-  artwork elsewhere. It is a soft glow with a body fading toward its hem;
-  a flat fill read as a grey sticker. The layer redraws only while one is in
+  artwork elsewhere. It is a soft glow with a body fading toward its hem.
+  A flat fill read as a grey sticker. The layer redraws only while one is in
   the air.
 
 Nothing moves under Reduce Motion or while the player is up. The iOS player
@@ -458,8 +459,9 @@ is presented `.overFullScreen`, so the pages stay live under it and
 player's `fullScreenCover` hides the pages without stopping their timelines:
 on the Apple TV the hanging spider kept redrawing at the display's 24 Hz
 under a film. So the cover's content counts itself on and off screen in
-`PlayerPresence`, and the decoration rests while `isPlayerUp`; measured on
-the TV, no spider frames during playback and back as soon as it closed.
+`PlayerPresence`, and the decoration rests while `isPlayerUp`. On
+the TV it measured no spider frames during playback, and they were back as soon
+as it closed.
 
 A small `GhostGeometry` ghost also bobs above `LoadingView` and
 `ErrorStateView`'s glyph (`ThemeStateGhost`, still under Reduce Motion).
@@ -468,11 +470,11 @@ they read over anything. Spooky's bloom motif is `.ghosts`. None of this
 covers text or artwork, and none of it reaches the player or Top Shelf.
 
 The tvOS player panel uses regular material for content with separate glass
-tabs and actions; iOS uses a native resizable options sheet.
+tabs and actions. iOS uses a native resizable options sheet.
 
 ## Detail pages
 
-How the shared scaffolding lays out per platform; the
+How the shared scaffolding lays out per platform. The
 [guide](../design-system.md#components) has the rules.
 
 **Phone or compact-width iPad:** the landscape key art is the hero in both
@@ -482,13 +484,13 @@ orientations.
   art's middle, cropped at the sides. Title, facts, a wide Play (capped at
   `detailPlayButtonMaxWidth`) and circular actions sit over its lower part,
   with the full synopsis below. The circles keep one centred row and wrap
-  only when they cannot fit; a series page's season picker takes its own
+  only when they cannot fit. A series page's season picker takes its own
   line beneath them.
-- Landscape: the art fills the window, centred; a window wider than 16:9 trims
+- Landscape: the art fills the window, centred. A window wider than 16:9 trims
   top and bottom rather than padding the sides. Title art, actions and a
-  smaller Play share one row along the lower part; facts and synopsis follow
+  smaller Play share one row along the lower part. Facts and synopsis follow
   below the fold.
-- No backdrop: the poster stands in. Top-anchored in portrait; in landscape
+- No backdrop: the poster stands in. Top-anchored in portrait. In landscape,
   shown whole over a blurred, dimmed copy (`detailPosterAmbientBlur`,
   `detailPosterAmbientDecodeSize`).
 - Every secondary control is a glass circle, including From Beginning, so the
@@ -506,7 +508,7 @@ and the leading column. **tvOS** keeps its own order.
   show still offers Play.
 - The watched toggle acts on the whole show, since on a finished show it
   clears everything, not episode one.
-- The page opens on the up-next episode's season; a finished show opens on
+- The page opens on the up-next episode's season. A finished show opens on
   its first regular season, not Specials.
 - The rail's position is a `scrollPosition(id:)` binding, set only on load, a
   season pick or after playback, never while browsing. Its gutter is a scroll
@@ -522,7 +524,7 @@ and the leading column. **tvOS** keeps its own order.
 
 ## Image loading
 
-The loader's shape; the [guide](../design-system.md#image-loading) lists the
+The loader's shape. The [guide](../design-system.md#image-loading) lists the
 limits.
 
 - The cache probe in `CachedAsyncImage.init` is synchronous, so cached art
@@ -530,13 +532,13 @@ limits.
 - The CGImageSource thumbnail decode runs off-main with an explicit
   `maxPixelSize` and `ShouldCacheImmediately`, so the render thread never
   decompresses a JPEG.
-- Coalesced callers cancel independently; the transfer stops when the last
+- Coalesced callers cancel independently. The transfer stops when the last
   waiter leaves.
 - Failed images are never cached, so a broken URL cannot poison the cache.
 
-Always pass a sensible `maxPixelSize`; full-size art on a rail card is the
+Always pass a sensible `maxPixelSize`. Full-size art on a rail card is the
 difference between smooth and stuttering focus scrolling. Card budgets follow
-layout size and display scale through `ArtworkSizing`; heroes and backdrops
+layout size and display scale through `ArtworkSizing`. Heroes and backdrops
 use 1920, palette sampling 120.
 
 ## App artwork
@@ -557,14 +559,14 @@ scripts/import-artwork.swift --back art/back.png --middle art/mid.png \
 
 | asset | size | notes |
 | --- | --- | --- |
-| iOS icon | 1024x1024 square | opaque; the system masks it, so no rounded corners |
+| iOS icon | 1024x1024 square | opaque. The system masks it, so no rounded corners |
 | tvOS icon | **2560x1536 (5:3)** | not square. A square source is fitted on the palette background and leaves a visible edge |
-| tvOS parallax layers | 2560x1536 each, **alpha** | optional. Back is the opaque scene; Middle and Front are transparent except what should lift on focus |
+| tvOS parallax layers | 2560x1536 each, **alpha** | optional. Back is the opaque scene. Middle and Front are transparent except what should lift on focus |
 | Top Shelf | 3840x1440 | wide banner, aspect-filled |
 | Top Shelf Wide | 4640x1440 | wider still |
 
 Everything is aspect-filled or fitted, never squashed. Only layers give the
-tvOS focus parallax; a flat image makes a valid but static icon.
+tvOS focus parallax. A flat image makes a valid but static icon.
 
 Keep sources under `art/` (gitignored) and commit only the generated
 catalogue.

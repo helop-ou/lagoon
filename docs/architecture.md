@@ -17,7 +17,7 @@ code.
 | `Lagoon/Features/Accounts/` | Connection, sign-in, account selection and session ownership |
 | `Lagoon/Features/{Home,Library,Discovery,Detail,Search,Settings}/` | Feature screens, models and local helpers |
 | `Lagoon/Features/Playback/` | The controller, and the audio session the player owns |
-| `Lagoon/Features/Playback/{Session,Automation,Tracks}/` | The delivery ladder, server reporting, the play queue and successor negotiation; what happens when a title ends; per-attempt track selection and remembered choices |
+| `Lagoon/Features/Playback/{Session,Automation,Tracks}/` | The delivery ladder, server reporting, the play queue and successor negotiation, what happens when a title ends, and per-attempt track selection and remembered choices |
 | `Lagoon/Features/Playback/{Views,Subtitles,Diagnostics}/` | Player presentation, subtitle search and preferences, optional sampling |
 | `Lagoon/Features/Downloads/` | Offline downloads: the store, its background session, and the Downloads screens (iOS only) |
 | `Lagoon/Features/SyncPlay/` | Watch Together: group membership, the pure session reducer, and the driver that runs playback from a group |
@@ -41,7 +41,7 @@ injects the active `JellyfinClient`, the Downloads store as
 environment, and Downloads sets `ImageCache.localArtworkURL` at launch.
 
 Home's row order is data. `HomeSectionPreferenceResolver` owns the default
-order, the viewer's arrangement and which rows are hidden; `HomeView` draws
+order, the viewer's arrangement and which rows are hidden. `HomeView` draws
 one row per resolved identifier. A new row needs both an entry in the
 resolver's list and a branch to draw it, and the unit suite fails if either is
 missing. Server plugin rows join the same arrangement: see [Home Screen
@@ -50,7 +50,7 @@ Sections](jellyfin-api.md#home-screen-sections-plugin).
 ## State and ownership
 
 - `@Observable` stores are owned with `@State` where their lifetime begins.
-  The default isolation is `MainActor`; DTOs and other off-actor values are
+  The default isolation is `MainActor`, and DTOs and other off-actor values are
   `nonisolated`.
 - Async loading runs from stable `.task(id:)` roots, so a loading-state change
   never cancels its own work. Late results are dropped on account, query or
@@ -68,13 +68,13 @@ needsServer → needsSignIn → signedIn
 Accounts:
 
 - An account is a server/user pair, keyed `{serverURL}|{userId}`.
-  UserDefaults holds account metadata and the active account ID; Keychain
+  UserDefaults holds account metadata and the active account ID, and Keychain
   holds each token and the install's device ID.
 - Launch restores the last usable account. Keep the idempotent legacy token
   migration.
 - Add Account uses a separate draft session seeded with the current server
   but no credentials. A successful, current verification commits and
-  activates it; cancel leaves the active Jellyfin and Seerr sessions intact.
+  activates it. Cancel leaves the active Jellyfin and Seerr sessions intact.
 - "Who's watching?" is the `choosingAccount` phase at launch and after
   sign-out. The tvOS profile button, Settings' Switch Profile and, on iOS,
   the row under the profile at the top of Settings open the same
@@ -83,7 +83,7 @@ Accounts:
   the active account in place: Back or choosing it again closes the picker,
   and Add Profile or choosing another profile closes it before the draft
   session opens or the switch happens. Profiles group by server
-  (`ProfileGrouping`), most recently activated first; activation stamps
+  (`ProfileGrouping`), most recently activated first. Activation stamps
   `lastUsedAt`, so compare accounts by `id`, never whole. Under each name the
   picker shows what that profile is watching: one `Items/Resume` per profile
   with its own token (`SessionStore.latestResume(for:)`), sent only once its
@@ -97,7 +97,7 @@ the active account through `synchronizeAccountContext()`. A group belongs to
 the account that joined it, so switching accounts or signing out leaves it.
 `RootView` injects the store, and the iOS UIKit player host injects it again
 because that presentation rebuilds the environment. The store owns membership
-(socket, clock, group, queue); `GroupPlaybackDriver` owns playback and holds
+(socket, clock, group, queue), and `GroupPlaybackDriver` owns playback and holds
 `PlaybackController` weakly, never an engine. See [Watch
 Together](playback.md#watch-together-syncplay).
 
@@ -120,7 +120,7 @@ the per-account manifest, the background `URLSession` and each file's artwork.
   `ServerSyncState.generation`, and each screen reconciles its own data.
 - `ServerRefreshModifier` adds manual refresh and a five-minute cadence to the
   visible, active root browse destination. `MainTabView` gates it by selected
-  tab and navigation path; Home also suspends it while playback is presented.
+  tab and navigation path, and Home also suspends it while playback is presented.
   Hidden tabs and content behind details never poll.
 - A failed refresh keeps existing content, focus, loaded page depth and the
   last good snapshot.
@@ -150,7 +150,7 @@ the per-account manifest, the background `URLSession` and each file's artwork.
   title's card gets the list's label and continues the list, the next title
   joins Next Up by when it was last watched, and a finished list is
   forgotten. Top Shelf stays the server's Continue Watching, where a
-  part-watched list title already appears; it carries no list context.
+  part-watched list title already appears, but it carries no list context.
 
 ## Reusable components
 
@@ -159,7 +159,7 @@ Use these before writing a screen-specific copy:
 | Need | Existing implementation |
 | --- | --- |
 | Poster and landscape cards, horizontal browsing | `MediaCards.swift`, `MediaRail.swift` |
-| Item, series, collection, and Seerr detail composition | `DetailPageScaffold`, `DetailHeader` and `DetailMetadataHeader`, `DetailActionLayout` with `DetailLayout`, `DetailCircleButton`, `TitleArtView`, `CastStrip` (Jellyfin people or Seerr `CastCredit`s, each opening their person page), each in its own file in `Shared/UI/`; `DetailPlayActions` in `Features/Detail/` (Play or Resume, From Beginning and a caption) for the film and collection pages |
+| Item, series, collection, and Seerr detail composition | `DetailPageScaffold`, `DetailHeader` and `DetailMetadataHeader`, `DetailActionLayout` with `DetailLayout`, `DetailCircleButton`, `TitleArtView`, `CastStrip` (Jellyfin people or Seerr `CastCredit`s, each opening their person page), each in its own file in `Shared/UI/`, and `DetailPlayActions` in `Features/Detail/` (Play or Resume, From Beginning and a caption) for the film and collection pages |
 | Adaptive actions, metadata wrapping, poster sizing | `AdaptiveActionStack`, `MetadataFlowLayout`, `PosterLayout` |
 | Loading, retry, and failure presentation | `LoadingView`, `InlineRetryView`, `ErrorStateView` |
 | Artwork and palette loading | `CachedAsyncImage`, `ImageCache`, `ArtworkPalette` |
@@ -176,7 +176,7 @@ wrapper. [Design system](design-system.md) owns the visual rules.
 - Every screen needs a focusable element, or Menu can exit the app.
 - The collection and playlist page claims focus back for its actions when
   the player closes. There the shared `restoresFocusAfterPlayer` reset left
-  focus on the tab bar with the remote dead; film and series pages do not
+  focus on the tab bar with the remote dead. Film and series pages do not
   need it.
 - Keep `.scrollClipDisabled()` and rail focus padding. Episode rails stay
   mounted while seasons switch, so focus and layout survive loading.
@@ -198,7 +198,7 @@ wrapper. [Design system](design-system.md) owns the visual rules.
   tab, so from Home every tab lay in between. Refresh's slot stays mounted
   where Refresh is hidden, so the button keeps its place. It shows over
   every content tab's root and every Settings page
-  (`MainTabView.showsProfileButton`); like Refresh, a pushed detail hides it
+  (`MainTabView.showsProfileButton`), and like Refresh, a pushed detail hides it
   and swaps its identifier to `profile.button.inactive`. Focusing a tab
   selects it, so it is reached only from Home, and Down goes to Home's hero,
   never sideways to the tab bar. tvOS does not restore focus after a cover

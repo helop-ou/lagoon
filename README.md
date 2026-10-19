@@ -72,7 +72,7 @@ standards](docs/standards.md). The guides cover architecture, design, the
 Jellyfin API, playback and release.
 
 [Contributing](CONTRIBUTING.md) has the prerequisites, build and test
-commands, and repository conventions; [security reports](SECURITY.md) go
+commands, and repository conventions. [Security reports](SECURITY.md) go
 privately by email rather than into an issue. Taking part here means keeping
 to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
