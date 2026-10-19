@@ -94,14 +94,14 @@ enum CodecSupportDocument {
         for kind in ["Video", "Audio"] {
             let matching = profile.directPlayProfiles.filter { $0.type == kind }
             guard !matching.isEmpty else { continue }
-            out += "**\(kind)** — "
+            out += "**\(kind)**\n\n"
             out += matching.map { entry in
                 let containers = list(entry.container)
                 if let audio = entry.audioCodec, kind == "Audio" {
-                    return "\(containers) (\(list(audio)))"
+                    return "- \(containers) (\(list(audio)))"
                 }
-                return containers
-            }.joined(separator: "; ")
+                return "- \(containers)"
+            }.joined(separator: "\n")
             out += "\n\n"
         }
         return out
@@ -164,7 +164,7 @@ enum CodecSupportDocument {
         for (codec, conditions) in rows {
             let text = conditions.isEmpty
                 ? "None beyond the container"
-                : conditions.map(describe).joined(separator: "; ")
+                : conditions.map(describe).joined(separator: "<br>")
             out += "| `\(codec)` | \(text) |\n"
         }
         return out + "\n"
@@ -194,7 +194,7 @@ enum CodecSupportDocument {
         let byMethod = Dictionary(grouping: profile.subtitleProfiles, by: \.method)
         for method in byMethod.keys.sorted() {
             let formats = byMethod[method, default: []].map { "`\($0.format)`" }
-            out += "- **\(methodName(method))** — \(formats.joined(separator: ", "))\n"
+            out += "- **\(methodName(method))**: \(formats.joined(separator: ", "))\n"
         }
         return out + "\n"
     }
@@ -210,7 +210,7 @@ enum CodecSupportDocument {
         where the table suggests it might not.
 
         Video level is the codec's own `level_idc` rather than the number people
-        quote. Divide by 30 for HEVC, so `183` is level 6.1; divide by 10 for
+        quote. Divide by 30 for HEVC, so `183` is level 6.1. Divide by 10 for
         H.264, so `52` is level 5.2.
 
         """
