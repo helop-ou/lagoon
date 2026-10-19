@@ -216,6 +216,28 @@ struct HomeRowPreferenceTests {
         #expect(selected.first?.displayText == "My List")
     }
 
+    @Test func aSectionKindIsOneRowWhoseSwitchCoversEveryInstance() throws {
+        let data = Data(#"{"Items":[{"Section":"BecauseYouWatched","DisplayText":"Because You Watched Alien","AdditionalData":"a"},{"Section":"MyList","DisplayText":"My List"},{"Section":"BecauseYouWatched","DisplayText":"Because You Watched Heat","AdditionalData":"b"}]}"#.utf8)
+        struct Page: Decodable { let items: [JellyfinClient.HomeSection] }
+        let catalog = try JellyfinClient.decoder.decode(Page.self, from: data).items
+
+        let kinds = HomeSectionPreferenceResolver.orderedUniqueCatalog(catalog)
+        #expect(kinds.map(HomeSectionPreferenceResolver.title(for:)) == ["Because You Watched", "My List"])
+
+        let shown = HomeSectionPreferenceResolver.sections(
+            from: catalog, preferences: HomeSectionPreferenceValues(), nativelyCovered: []
+        )
+        #expect(shown.map(\.id) == ["BecauseYouWatched|a", "BecauseYouWatched|b", "MyList"])
+
+        var layout = HomeSectionPreferenceResolver.defaultLayout
+        layout.append(HomeSectionPreferenceRow(id: "BecauseYouWatched", isEnabled: false))
+        layout.append(HomeSectionPreferenceRow(id: "MyList", isEnabled: true))
+        let hidden = HomeSectionPreferenceResolver.sections(
+            from: catalog, preferences: HomeSectionPreferenceValues(layout: layout), nativelyCovered: []
+        )
+        #expect(hidden.map(\.id) == ["MyList"])
+    }
+
     // MARK: Layouts saved beforehand
 
     @Test func anUntouchedLegacyLayoutAdoptsTheNewDefaultOrder() throws {
