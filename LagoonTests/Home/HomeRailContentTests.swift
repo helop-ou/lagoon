@@ -314,6 +314,37 @@ struct HomeRailContentTests {
         #expect(model.pluginRails.map(\.pluginSection) == ["MyList"])
     }
 
+    /// A live server's catalogue names three actors under one `Starring`
+    /// and repeats a genre; each instance fetches empty without its data.
+    @Test func everyInstanceOfASectionFetchesWithItsOwnDataAndDrawsItsOwnRail() async throws {
+        let client = makeClient()
+        let model = HomeViewModel()
+        HomeRailURLProtocol.set(
+            homeSections: #"""
+            [
+                {"Section":"Starring","DisplayText":"Starring Mark Hamill","AdditionalData":"hamill"},
+                {"Section":"Genre","DisplayText":"Drama Movies","AdditionalData":"Drama"},
+                {"Section":"Starring","DisplayText":"Starring Marlene Forte","AdditionalData":"forte"},
+                {"Section":"Genre","DisplayText":"Drama Movies","AdditionalData":"Drama"},
+                {"Section":"RecentlyAddedInLibrary","DisplayText":"Recently Added in Shows","AdditionalData":"shows"}
+            ]
+            """#,
+            homeSectionItems: #"[{"Id":"listed","Type":"Movie"}]"#
+        )
+
+        await model.load(client: client, accountID: "account")
+
+        #expect(model.pluginRails.map(\.title) == [
+            "Starring Mark Hamill", "Starring Marlene Forte", "Drama Movies",
+        ])
+        #expect(model.pluginRails.map(\.pluginSection) == ["Starring", "Starring", "Genre"])
+        #expect(Set(model.pluginRails.map(\.id)).count == 3)
+        let fetched = HomeRailURLProtocol.urls
+            .filter { $0.path.hasPrefix("/HomeScreen/Section/") }
+            .map { "\($0.lastPathComponent)|\(query($0, "additionalData") ?? "")" }
+        #expect(fetched.sorted() == ["Genre|Drama", "Starring|forte", "Starring|hamill"])
+    }
+
     /// Shapes as a live server returned them: Sonarr and Radarr titles carry
     /// a random `Id`, Seerr's all zeros. None is in the library.
     @Test func pluginTitlesFromSonarrRadarrAndSeerrStayOutOfTheLibraryRail() async throws {
