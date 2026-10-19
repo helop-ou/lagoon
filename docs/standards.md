@@ -128,7 +128,8 @@ Changes:
 
 One plain line per change. Something the reviewer must act on, such as
 "Stacked on #2" or "Needs a device check", is one more line. Rationale goes in
-the guide that owns the area, not the description.
+the guide that owns the area, not the description. No Sentry issue ids or
+Jira keys, in the title or the description.
 
 ### Continuous integration
 
