@@ -200,6 +200,18 @@ struct SeerrClientTests {
         #expect(query.contains("requestedBy=7"))
     }
 
+    /// Seerr 400s on a raw `:` or `'`, which Foundation leaves unencoded.
+    @Test func searchTermsEncodeEveryReservedCharacter() async throws {
+        let client = makeClient()
+        client.configure(serverURL: URL(string: "https://seerr.test")!)
+        client.setSessionCookie("session")
+
+        _ = try? await client.search(query: "Law & Order: Georgie's +1/2?")
+
+        let query = try #require(SeerrMockURLProtocol.requests.first?.url.query(percentEncoded: true))
+        #expect(query == "query=Law%20%26%20Order%3A%20Georgie%27s%20%2B1%2F2%3F&page=1")
+    }
+
     @Test func requestDeadlineEndsAStalledSearch() async throws {
         // Far longer than the dribble's gaps, far shorter than its total.
         let client = makeClient(requestTimeout: 0.3)
