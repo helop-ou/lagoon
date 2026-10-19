@@ -314,6 +314,47 @@ struct HomeRailContentTests {
         #expect(model.pluginRails.map(\.pluginSection) == ["MyList"])
     }
 
+    /// Discover's titles come from Seerr's list, or its details when the list
+    /// moved on; Sonarr's and Radarr's are found by name, a movie's by year.
+    @Test func pluginTitlesAreFoundInSeerrOnceForTheirPageAndBackdrop() async throws {
+        let client = makeClient()
+        let model = HomeViewModel()
+        HomeRailURLProtocol.set(
+            homeSections: #"[{"Section":"DiscoverMovies","DisplayText":"Discover Movies"}]"#,
+            homeSectionItems: #"""
+            [
+                {"Name":"Listed","Id":"0","SourceType":"movie","ProviderIds":{"Jellyseerr":"4","JellyseerrPoster":"/p"}},
+                {"Name":"Unlisted","Id":"0","SourceType":"movie","ProviderIds":{"Jellyseerr":"99","JellyseerrPoster":"/p"}},
+                {"Name":"Law & Order: Special Victims Unit","Id":"r1","Type":"Episode","ProviderIds":{"SonarrEpisodeId":"7","SonarrPoster":"/p"}},
+                {"Name":"Verity","Id":"r2","Type":"Movie","ProductionYear":2026,"ProviderIds":{"RadarrMovieId":"973","RadarrPoster":"/p"}},
+                {"Name":"Nowhere","Id":"r3","Type":"Movie","ProviderIds":{"RadarrMovieId":"974","RadarrPoster":"/p"}}
+            ]
+            """#
+        )
+        HomeRailURLProtocol.setSeerrSearch([
+            "Law & Order: Special Victims Unit": #"[{"id":1,"mediaType":"movie","title":"Law & Order: Special Victims Unit"},{"id":2734,"mediaType":"tv","name":"Law & Order: Special Victims Unit","backdropPath":"/svu.jpg"}]"#,
+            "Verity": #"[{"id":748763,"mediaType":"movie","title":"Verity","releaseDate":"2020-01-01"},{"id":1283515,"mediaType":"movie","title":"Verity","releaseDate":"2026-10-02"}]"#,
+        ])
+        let seerr = try makeSeerr()
+        await model.load(client: client, accountID: "account", seerr: seerr)
+
+        await model.matchExternalTitles(seerr: seerr)
+
+        let found = model.externalSeerrTitles.mapValues { "\($0.mediaType.rawValue):\($0.id):\($0.backdropPath ?? "")" }
+        #expect(found == [
+            "Jellyseerr:movie:4": "movie:4:/list-4.jpg",
+            "Jellyseerr:movie:99": "movie:99:/details-99.jpg",
+            "Sonarr:7": "tv:2734:/svu.jpg",
+            "Radarr:973": "movie:1283515:",
+        ])
+        let lookups = { HomeRailURLProtocol.urls.filter { $0.path == "/api/v1/search" || $0.path.hasPrefix("/api/v1/movie/") } }
+        #expect(lookups().count == 4)
+
+        await model.matchExternalTitles(seerr: seerr)
+
+        #expect(lookups().count == 4)
+    }
+
     /// A live server's catalogue names three actors under one `Starring`
     /// and repeats a genre; each instance fetches empty without its data.
     @Test func everyInstanceOfASectionFetchesWithItsOwnDataAndDrawsItsOwnRail() async throws {
@@ -378,7 +419,7 @@ struct HomeRailContentTests {
             "/HomeScreen/CachedImage/s", "https://image.example/v.jpg",
             "/HomeScreen/CachedImage/m", "/HomeScreen/CachedImage/t",
         ])
-        #expect(rail.externalItems.map(\.seerrType) == [nil, nil, .movie, .tv])
+        #expect(rail.externalItems.map(\.seerrType) == [.tv, .movie, .movie, .tv])
         #expect(rail.externalItems.last?.seerrID == 1148365)
         // Its artwork and page are a Jellyfin id that 404s.
         #expect(model.heroItems.isEmpty)
@@ -508,6 +549,8 @@ private nonisolated final class HomeRailURLProtocol: URLProtocol, @unchecked Sen
         var played = "[]"
         var similarCounts: [String: Int] = [:]
         var seerrTotalPages = 1
+        /// Seerr search results by term.
+        var seerrSearch: [String: String] = [:]
         var heldStage: String?
         var pending: [HomeRailURLProtocol] = []
     }
@@ -552,6 +595,10 @@ private nonisolated final class HomeRailURLProtocol: URLProtocol, @unchecked Sen
             state.played = played
             state.similarCounts = similarCounts
         }
+    }
+
+    static func setSeerrSearch(_ results: [String: String]) {
+        lock.withLock { state.seerrSearch = results }
     }
 
     static func setSeerrTotalPages(_ pages: Int) {
@@ -644,7 +691,12 @@ private nonisolated final class HomeRailURLProtocol: URLProtocol, @unchecked Sen
                 let items = (0..<count).map { #"{"Id":"\#(seed)-similar-\#($0)","Type":"Movie"}"# }
                 return (#"{"Items":[\#(items.joined(separator: ","))]}"#, 200)
             case "/api/v1/discover/trending", "/api/v1/discover/movies", "/api/v1/discover/tv":
-                return (#"{"page":1,"totalPages":\#(Self.state.seerrTotalPages),"totalResults":4,"results":[{"id":4,"mediaType":"movie"},{"id":3,"mediaType":"movie"},{"id":2,"mediaType":"movie"},{"id":1,"mediaType":"movie"}]}"#, 200)
+                return (#"{"page":1,"totalPages":\#(Self.state.seerrTotalPages),"totalResults":4,"results":[{"id":4,"mediaType":"movie","backdropPath":"/list-4.jpg"},{"id":3,"mediaType":"movie"},{"id":2,"mediaType":"movie"},{"id":1,"mediaType":"movie"}]}"#, 200)
+            case "/api/v1/search":
+                let results = Self.state.seerrSearch[Self.query(url, "query") ?? ""] ?? "[]"
+                return (#"{"page":1,"totalPages":1,"results":\#(results)}"#, 200)
+            case let path where path.hasPrefix("/api/v1/movie/") || path.hasPrefix("/api/v1/tv/"):
+                return (#"{"id":\#(url.lastPathComponent),"backdropPath":"/details-\#(url.lastPathComponent).jpg"}"#, 200)
             default: return (#"{"Items":[]}"#, 200)
             }
         }
