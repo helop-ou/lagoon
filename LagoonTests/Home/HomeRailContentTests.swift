@@ -314,8 +314,6 @@ struct HomeRailContentTests {
         #expect(model.pluginRails.map(\.pluginSection) == ["MyList"])
     }
 
-    /// Discover's titles come from Seerr's list, or its details when the list
-    /// moved on; Sonarr's and Radarr's are found by name, a movie's by year.
     @Test func pluginTitlesAreFoundInSeerrOnceForTheirPageAndBackdrop() async throws {
         let client = makeClient()
         let model = HomeViewModel()
@@ -355,8 +353,7 @@ struct HomeRailContentTests {
         #expect(lookups().count == 4)
     }
 
-    /// A live server's catalogue names three actors under one `Starring`
-    /// and repeats a genre; each instance fetches empty without its data.
+    /// The live catalogue repeats a genre and has three `Starring` instances.
     @Test func everyInstanceOfASectionFetchesWithItsOwnDataAndDrawsItsOwnRail() async throws {
         let client = makeClient()
         let model = HomeViewModel()
@@ -386,8 +383,7 @@ struct HomeRailContentTests {
         #expect(fetched.sorted() == ["Genre|Drama", "Starring|forte", "Starring|hamill"])
     }
 
-    /// Shapes as a live server returned them: Sonarr and Radarr titles carry
-    /// a random `Id`, Seerr's all zeros. None is in the library.
+    /// Shapes as a live server returned them.
     @Test func pluginTitlesFromSonarrRadarrAndSeerrStayOutOfTheLibraryRail() async throws {
         let client = makeClient()
         let model = HomeViewModel()
@@ -422,7 +418,6 @@ struct HomeRailContentTests {
         #expect(rail.externalItems.map(\.seerrType) == [.tv, .movie, .movie, .tv])
         #expect(rail.externalItems.last?.seerrID == 1148365)
         #expect(rail.externalItems.map(\.seerrAddress) == [nil, nil, "https://seerr.example", nil])
-        // Its artwork and page are a Jellyfin id that 404s.
         #expect(model.heroItems.isEmpty)
         #expect(client.serverRelativeURL("/HomeScreen/CachedImage/s")?.absoluteString
             == "https://home-rails.test/HomeScreen/CachedImage/s")
@@ -550,7 +545,6 @@ private nonisolated final class HomeRailURLProtocol: URLProtocol, @unchecked Sen
         var played = "[]"
         var similarCounts: [String: Int] = [:]
         var seerrTotalPages = 1
-        /// Seerr search results by term.
         var seerrSearch: [String: String] = [:]
         var heldStage: String?
         var pending: [HomeRailURLProtocol] = []

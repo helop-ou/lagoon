@@ -250,8 +250,7 @@ nonisolated enum HomeSectionPreferenceResolver {
     }
 
     /// Keeps the first of any duplicate sections the server returns, so
-    /// dictionaries and identified SwiftUI rows cannot trap on them. One per
-    /// kind: the viewer arranges `Starring`, not each actor it names.
+    /// dictionaries and identified SwiftUI rows cannot trap on them.
     static func orderedUniqueCatalog(
         _ catalog: [JellyfinClient.HomeSection]
     ) -> [JellyfinClient.HomeSection] {
@@ -259,7 +258,6 @@ nonisolated enum HomeSectionPreferenceResolver {
         return ordered(catalog).filter { seen.insert($0.section).inserted }
     }
 
-    /// Every distinct instance, in the server's order.
     static func orderedInstances(
         _ catalog: [JellyfinClient.HomeSection]
     ) -> [JellyfinClient.HomeSection] {
@@ -277,10 +275,7 @@ nonisolated enum HomeSectionPreferenceResolver {
         }.map(\.element)
     }
 
-    /// A kind's name in Settings. An instance's own text names one actor or
-    /// genre, and which one the server picks changes, so a kind with
-    /// instances is named from its key: `BecauseYouWatched` reads
-    /// "Because You Watched".
+    /// An instance's own text names one actor, and the server's pick changes.
     static func title(for section: JellyfinClient.HomeSection) -> String {
         guard section.additionalData != nil else { return section.displayText ?? section.section }
         var title = ""
@@ -335,8 +330,7 @@ nonisolated enum HomeSectionPreferenceResolver {
         )
     }
 
-    /// The plugin section instances worth fetching, in the order they will
-    /// be drawn. A kind's instances share its place and its switch.
+    /// The plugin sections worth fetching, in the order they will be drawn.
     static func sections(
         from catalog: [JellyfinClient.HomeSection],
         preferences: HomeSectionPreferenceValues,

@@ -9,18 +9,14 @@ final class HomeViewModel {
         let items: [MediaItem]
         /// Files the rail under movies or shows. Nil for curated and plugin rails.
         var collectionType: String?
-        /// A plugin rail's titles from Sonarr, Radarr or Seerr. Never in
-        /// `items`: they have no Jellyfin page, so the hero must not pick them.
+        /// Not in `items`: the hero must never pick a title with no Jellyfin page.
         var externalItems: [JellyfinClient.ExternalSectionItem] = []
-        /// A plugin rail's section kind, its row in the arrangement. Several
-        /// rails can share one (`Starring`, once per actor).
         var pluginSection: String?
     }
 
     /// Plugin sections Lagoon already draws natively. Servers offer several
     /// overlapping ones at once, so showing them would repeat the same titles.
-    /// `MyMedia` is the tab bar here; `RecentlyAddedInLibrary` is one row per
-    /// library, as Lagoon's own Recently Added rows are.
+    /// `MyMedia` is the tab bar here.
     static let nativelyCoveredSections: Set<String> = [
         "ContinueWatching", "NextUp", "ContinueWatchingNextUp", "MyMedia",
         "LatestMovies", "LatestShows", "RecentlyAddedMovies", "RecentlyAddedShows",
@@ -32,11 +28,7 @@ final class HomeViewModel {
     var favorites: [MediaItem] = []
     /// Rails from the Home Screen Sections plugin, deduped, empties removed.
     var pluginRails: [LibraryRail] = []
-    /// Seerr's record of each plugin title from Sonarr, Radarr or Seerr, by
-    /// item id. A title missing here has nothing to open.
     var externalSeerrTitles: [String: ExternalSeerrTitle] = [:]
-    /// Titles already looked up for `externalLookupCookie`'s Seerr session,
-    /// found or not, so a refresh does not search for them again.
     private var externalLookups: Set<String> = []
     private var externalLookupCookie: String?
     var latestRails: [LibraryRail] = []
@@ -880,9 +872,6 @@ final class HomeViewModel {
         }
     }
 
-    /// Looks the plugin's Sonarr, Radarr and Seerr titles up in Seerr, for a
-    /// backdrop and a page to open. Without a Seerr session they stay cards
-    /// with nothing to open.
     func matchExternalTitles(seerr: SeerrClient?) async {
         guard let seerr, seerr.serverURL != nil, let cookie = seerr.sessionCookie else { return }
         if cookie != externalLookupCookie {
@@ -906,8 +895,7 @@ final class HomeViewModel {
     ) async -> [String: ExternalSeerrTitle] {
         var found: [String: ExternalSeerrTitle] = [:]
 
-        // Seerr's own titles: the list the plugin read carries backdrops for
-        // twenty at a time. A title it no longer holds costs one request.
+        // One list page has twenty backdrops; details cost a request each.
         var unlisted = items.filter { $0.seerrID != nil }
         if let list = ExternalSeerrMatcher.list(forSection: section) {
             for page in 1...3 where !unlisted.isEmpty {
@@ -937,7 +925,6 @@ final class HomeViewModel {
             }
         }
 
-        // Sonarr and Radarr name a title; Seerr's search finds its id.
         let searched = items.filter { $0.seerrID == nil && $0.seerrType != nil }
         await withTaskGroup(of: (String, ExternalSeerrTitle?).self) { group in
             for item in unlisted + searched {

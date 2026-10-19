@@ -58,7 +58,6 @@ struct HomeView: View {
                 seerr: session.seerr.client
             )
         }
-        // Again once Seerr signs in, or when the plugin's titles change.
         .task(id: externalLookupKey) {
             await viewModel.matchExternalTitles(seerr: session.seerr.client)
         }
@@ -206,11 +205,9 @@ struct HomeView: View {
         }
     }
 
-    /// Every rail of one section kind, such as one per `Starring` actor.
     @ViewBuilder
     private func pluginRail(_ section: String) -> some View {
         ForEach(viewModel.pluginRails.filter { $0.pluginSection == section }) { rail in
-            // A section holds one kind or the other; library titles win.
             if rail.items.isEmpty {
                 ExternalSectionRail(
                     title: rail.title,

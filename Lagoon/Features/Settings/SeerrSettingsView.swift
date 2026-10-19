@@ -17,7 +17,6 @@ struct SeerrSettingsView: View {
     @State private var pollTask: Task<Void, Never>?
     @State private var pendingConfirmation: Confirmation?
 
-    /// Fills the address field when this account has no Seerr server yet.
     private let suggestedAddress: String?
 
     init(suggestedAddress: String? = nil) {

@@ -1,14 +1,11 @@
 import Foundation
 
-/// A Home Screen Sections title from Sonarr, Radarr or Seerr as Seerr knows
-/// it: the page its card opens and the backdrop it shows.
 nonisolated struct ExternalSeerrTitle: Equatable, Sendable {
     let id: Int
     let mediaType: SeerrMediaType
     let backdropPath: String?
 
-    /// Nil for a person or a result of no known kind. Seerr's per-kind lists
-    /// leave `mediaType` out, so the caller says which list it read.
+    /// Seerr's per-kind lists leave `mediaType` out.
     init?(_ result: SeerrDiscoverResult, listType: SeerrMediaType? = nil) {
         guard let mediaType = result.mediaType ?? listType, mediaType != .person else { return nil }
         id = result.id
@@ -28,7 +25,6 @@ nonisolated struct ExternalSeerrTitle: Equatable, Sendable {
 }
 
 nonisolated enum ExternalSeerrMatcher {
-    /// The list a Seerr-backed section was read from, as the plugin reads it.
     enum SeerrList: Equatable {
         case trending
         case discover(SeerrMediaType)
@@ -43,9 +39,6 @@ nonisolated enum ExternalSeerrMatcher {
         }
     }
 
-    /// Where a card leads: the title's Seerr page once it is found, Seerr's
-    /// sign-in while signed out, since Seerr shows nothing before it, and
-    /// nowhere for a title Seerr cannot hold or did not find.
     static func route(
         for item: JellyfinClient.ExternalSectionItem,
         seerrTitle: ExternalSeerrTitle?,
@@ -58,8 +51,6 @@ nonisolated enum ExternalSeerrMatcher {
         return .signIn(then: item)
     }
 
-    /// Seerr's record of one title: by id for Seerr's own, by search for
-    /// Sonarr's and Radarr's. Nil when Seerr has none or cannot be reached.
     @MainActor
     static func find(
         _ item: JellyfinClient.ExternalSectionItem,
@@ -74,10 +65,7 @@ nonisolated enum ExternalSeerrMatcher {
         return match(item, in: results)
     }
 
-    /// A Sonarr or Radarr title among Seerr's search results: the same kind
-    /// and the same title once case, accents and punctuation are set aside,
-    /// and for a movie with a year, that year, which tells remakes apart.
-    /// Seerr ranks by popularity, so the first such result wins.
+    /// Seerr ranks by popularity, so the first match wins.
     static func match(
         _ item: JellyfinClient.ExternalSectionItem,
         in results: [SeerrDiscoverResult]
