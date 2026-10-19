@@ -248,10 +248,11 @@ platform's first build, and later ones usually pass without review. iOS and
 tvOS are separate binaries under one record and are reviewed separately.
 
 **A build exported through the internal flow can never reach external
-testing.** `testFlightInternalTestingOnly=true` is a property of the upload.
-External testing needs the [public export
-configuration](#public-export-procedure) and a fresh archive; no existing
-build can be promoted.
+testing.** `testFlightInternalTestingOnly=true` is a property of the upload,
+and no existing build can be promoted. `scripts/upload-testflight.sh
+--external` uploads a build that can go to an external group, and [the
+release workflow](#releasing-from-ci) always does. Adding it to a group, and
+so to Beta App Review, stays a manual step in App Store Connect.
 
 Required before submitting:
 
@@ -278,6 +279,34 @@ review looks like a broken app. Review notes should:
 Distributing to testers outside the team counts as distribution for licence
 purposes. See the native-component gate under [Public
 release](#public-release).
+
+## Releasing from CI
+
+`.github/workflows/release.yml` runs only when started by hand (Actions,
+Release, Run workflow), and only from `main`. It has three actions:
+
+- **trial** archives and signs both platforms with `--export-only` and keeps
+  the signed apps as an artifact for three days. Nothing is uploaded. Run it
+  after a signing or Xcode change.
+- **upload** runs `scripts/upload-testflight.sh both --external`, then pushes
+  `refs/archived/<build>` to record the revision it archived. The upload
+  script's checks all apply, including the [release guard](#release-tags).
+- **publish**, with a build number, runs `scripts/publish-release.sh`, which
+  tags the recorded revision. Run it once the build is accepted.
+
+Signing goes through the App Store Connect API key, so the runner needs no
+certificates. Repository secrets (Settings, Secrets and variables, Actions):
+
+| Secret | Value |
+| --- | --- |
+| `ASC_KEY_ID` | The API key's id |
+| `ASC_ISSUER_ID` | The issuer id from the same page |
+| `ASC_KEY_P8` | The full contents of the `.p8` file |
+| `LAGOON_SENTRY_DSN` | As in `.env` |
+
+The key needs the App Manager role or higher, as uploading and creating
+profiles do. The workflow runs on the same `xcode-27` image and Xcode as the
+[tests](standards.md#continuous-integration), so move both together.
 
 ## Project declarations and native inputs
 
@@ -384,9 +413,9 @@ final signed candidate, not an earlier audit revision.
 
 ### Public export procedure
 
-Keep `ExportOptions.plist` and `scripts/upload-testflight.sh` internal-only.
-After the decisions above, create a **separate** public export configuration
-with:
+`ExportOptions.plist` stays internal-only, and `--external` lifts that for one
+run. For an App Store candidate, after the decisions above, create a
+**separate** public export configuration with:
 
 - `method=app-store-connect`
 - `destination=export`
