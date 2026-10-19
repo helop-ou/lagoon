@@ -33,10 +33,6 @@ nonisolated enum HomeRowID {
     static func pluginRailID(forSection section: String) -> String {
         pluginRailPrefix + section
     }
-
-    static func section(forPluginRailID id: String) -> String {
-        String(id.dropFirst(pluginRailPrefix.count))
-    }
 }
 
 nonisolated struct HomeSectionPreferenceValues: Codable, Equatable {
@@ -254,18 +250,45 @@ nonisolated enum HomeSectionPreferenceResolver {
     }
 
     /// Keeps the first of any duplicate sections the server returns, so
-    /// dictionaries and identified SwiftUI rows cannot trap on them.
+    /// dictionaries and identified SwiftUI rows cannot trap on them. One per
+    /// kind: the viewer arranges `Starring`, not each actor it names.
     static func orderedUniqueCatalog(
         _ catalog: [JellyfinClient.HomeSection]
     ) -> [JellyfinClient.HomeSection] {
-        let ordered = catalog.enumerated().sorted { lhs, rhs in
+        var seen = Set<String>()
+        return ordered(catalog).filter { seen.insert($0.section).inserted }
+    }
+
+    /// Every distinct instance, in the server's order.
+    static func orderedInstances(
+        _ catalog: [JellyfinClient.HomeSection]
+    ) -> [JellyfinClient.HomeSection] {
+        var seen = Set<String>()
+        return ordered(catalog).filter { seen.insert($0.id).inserted }
+    }
+
+    private static func ordered(
+        _ catalog: [JellyfinClient.HomeSection]
+    ) -> [JellyfinClient.HomeSection] {
+        catalog.enumerated().sorted { lhs, rhs in
             let lhsOrder = lhs.element.orderIndex ?? lhs.offset
             let rhsOrder = rhs.element.orderIndex ?? rhs.offset
             return lhsOrder == rhsOrder ? lhs.offset < rhs.offset : lhsOrder < rhsOrder
         }.map(\.element)
+    }
 
-        var seen = Set<String>()
-        return ordered.filter { seen.insert($0.section).inserted }
+    /// A kind's name in Settings. An instance's own text names one actor or
+    /// genre, and which one the server picks changes, so a kind with
+    /// instances is named from its key: `BecauseYouWatched` reads
+    /// "Because You Watched".
+    static func title(for section: JellyfinClient.HomeSection) -> String {
+        guard section.additionalData != nil else { return section.displayText ?? section.section }
+        var title = ""
+        for character in section.section {
+            if character.isUppercase, !title.isEmpty { title.append(" ") }
+            title.append(character)
+        }
+        return title
     }
 
     /// Brings an arrangement up to date. Plugin rows are only ever added: a
@@ -312,19 +335,19 @@ nonisolated enum HomeSectionPreferenceResolver {
         )
     }
 
-    /// The plugin sections worth fetching, in the order they will be drawn.
+    /// The plugin section instances worth fetching, in the order they will
+    /// be drawn. A kind's instances share its place and its switch.
     static func sections(
         from catalog: [JellyfinClient.HomeSection],
         preferences: HomeSectionPreferenceValues,
         nativelyCovered: Set<String>
     ) -> [JellyfinClient.HomeSection] {
-        let offerable = orderedUniqueCatalog(catalog).filter { !nativelyCovered.contains($0.section) }
-        let byID = Dictionary(
-            offerable.map { ($0.section, $0) },
-            uniquingKeysWith: { current, _ in current }
-        )
-        return arrangement(preferences: preferences, pluginSections: offerable.map(\.section))
-            .compactMap { $0.isEnabled ? byID[$0.id] : nil }
+        let offerable = orderedInstances(catalog).filter { !nativelyCovered.contains($0.section) }
+        let byKind = Dictionary(grouping: offerable, by: \.section)
+        var seen = Set<String>()
+        let kinds = offerable.map(\.section).filter { seen.insert($0).inserted }
+        return arrangement(preferences: preferences, pluginSections: kinds)
+            .flatMap { $0.isEnabled ? byKind[$0.id] ?? [] : [] }
     }
 
     /// The ids Home draws, in order. `pluginSections` are those that resolved
@@ -391,7 +414,7 @@ final class HomeSectionPreferencesStore {
             uniquingKeysWith: { current, _ in current }
         )
         let pluginTitles = Dictionary(
-            catalog.map { ($0.section, $0.displayText ?? $0.section) },
+            catalog.map { ($0.section, HomeSectionPreferenceResolver.title(for: $0)) },
             uniquingKeysWith: { current, _ in current }
         )
         return arrangement.compactMap { row in

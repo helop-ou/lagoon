@@ -311,7 +311,7 @@ struct HomeRailContentTests {
         await model.load(client: client, accountID: "account")
 
         #expect(model.pluginRails.map(\.title) == ["My List"])
-        #expect(model.pluginRails.map { HomeRowID.section(forPluginRailID: $0.id) } == ["MyList"])
+        #expect(model.pluginRails.map(\.pluginSection) == ["MyList"])
     }
 
     /// Shapes as a live server returned them: Sonarr and Radarr titles carry

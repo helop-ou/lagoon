@@ -11,8 +11,15 @@ extension JellyfinClient {
         /// `Landscape`, `Portrait` or `Square` (drawn as a poster rail).
         let viewMode: String?
         let orderIndex: Int?
+        /// What one instance of the section is about: a person's or a
+        /// library's id, a genre, a decade. One section can have several
+        /// instances (three `Starring` rows), and each fetches empty without it.
+        let additionalData: String?
 
-        var id: String { section }
+        /// One instance; `section` alone names the kind.
+        var id: String {
+            additionalData.map { "\(section)|\($0)" } ?? section
+        }
 
         init(from decoder: Decoder) throws {
             let c = try decoder.container(keyedBy: AnyCodingKey.self)
@@ -20,6 +27,8 @@ extension JellyfinClient {
             displayText = try c.decodeIfPresent(String.self, forKey: "displayText")
             viewMode = try c.decodeIfPresent(String.self, forKey: "viewMode")
             orderIndex = try c.decodeIfPresent(Int.self, forKey: "orderIndex")
+            additionalData = (try? c.decodeIfPresent(String.self, forKey: "additionalData"))
+                .flatMap { $0.isEmpty ? nil : $0 }
         }
     }
 
@@ -43,7 +52,7 @@ extension JellyfinClient {
         ], probe: true)
         let legacy = page?.items ?? []
         var seen = Set<String>()
-        return legacy.filter { seen.insert($0.section).inserted }
+        return legacy.filter { seen.insert($0.id).inserted }
     }
 
     /// A title the plugin fetched from Sonarr, Radarr, Lidarr, Readarr or
@@ -156,11 +165,15 @@ extension JellyfinClient {
 
     /// A section's contents. Empty on failure, so one bad section costs
     /// nothing else.
-    func homeSectionContents(_ section: String) async -> HomeSectionContents {
+    func homeSectionContents(_ section: HomeSection) async -> HomeSectionContents {
         guard let userId else { return HomeSectionContents() }
-        let page: HomeSectionEntriesPage? = try? await get("HomeScreen/Section/\(section)", query: [
-            URLQueryItem(name: "userId", value: userId),
-        ], probe: true)
+        var query = [URLQueryItem(name: "userId", value: userId)]
+        if let additionalData = section.additionalData {
+            query.append(URLQueryItem(name: "additionalData", value: additionalData))
+        }
+        let page: HomeSectionEntriesPage? = try? await get(
+            "HomeScreen/Section/\(section.section)", query: query, probe: true
+        )
         var contents = HomeSectionContents()
         var seen = Set<String>()
         for entry in page?.items ?? [] {

@@ -12,6 +12,9 @@ final class HomeViewModel {
         /// A plugin rail's titles from Sonarr, Radarr or Seerr. Never in
         /// `items`: they have no Jellyfin page, so the hero must not pick them.
         var externalItems: [JellyfinClient.ExternalSectionItem] = []
+        /// A plugin rail's section kind, its row in the arrangement. Several
+        /// rails can share one (`Starring`, once per actor).
+        var pluginSection: String?
     }
 
     /// Plugin sections Lagoon already draws natively. Servers offer several
@@ -846,15 +849,16 @@ final class HomeViewModel {
         return await withTaskGroup(of: (index: Int, rail: LibraryRail)?.self) { group in
             for (index, section) in sections.enumerated() {
                 group.addTask {
-                    let contents = await client.homeSectionContents(section.section)
+                    let contents = await client.homeSectionContents(section)
                     guard !contents.isEmpty else { return nil }
                     return (
                         index: index,
                         rail: LibraryRail(
-                            id: HomeRowID.pluginRailID(forSection: section.section),
+                            id: HomeRowID.pluginRailID(forSection: section.id),
                             title: section.displayText ?? section.section,
                             items: contents.items,
-                            externalItems: contents.externalItems
+                            externalItems: contents.externalItems,
+                            pluginSection: section.section
                         )
                     )
                 }
