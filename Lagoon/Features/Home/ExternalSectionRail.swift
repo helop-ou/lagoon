@@ -1,13 +1,8 @@
 import SwiftUI
 
-/// A Home Screen Sections row of titles from Sonarr, Radarr or Seerr. None
-/// is in the library, so a card opens the title's Seerr page, as Discover's
-/// do, once `HomeViewModel` has found it in Seerr. Signed out of Seerr, it
-/// opens Seerr's sign-in first.
 struct ExternalSectionRail: View {
     let title: String
     let items: [JellyfinClient.ExternalSectionItem]
-    /// Seerr's record of each title, by item id.
     let seerrTitles: [String: ExternalSeerrTitle]
 
     var body: some View {
@@ -21,8 +16,6 @@ struct ExternalSectionRail: View {
     }
 }
 
-/// 16:9 like Home's other rails: Seerr's backdrop, or the plugin's poster
-/// cropped when Seerr has no record of the title.
 private struct ExternalSectionCard: View {
     let item: JellyfinClient.ExternalSectionItem
     let seerrTitle: ExternalSeerrTitle?
@@ -66,9 +59,7 @@ private struct ExternalSectionCard: View {
             ?? item.posterPath.flatMap { client?.serverRelativeURL($0) }
     }
 
-    /// A button that does nothing when there is no page, such as music or
-    /// a title Seerr does not have: tvOS can only scroll a rail through
-    /// focusable cards.
+    /// tvOS can only scroll a rail through focusable cards.
     @ViewBuilder
     private func link(@ViewBuilder label: () -> some View) -> some View {
         if let route {

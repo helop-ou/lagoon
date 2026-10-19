@@ -200,7 +200,6 @@ struct SeerrClientTests {
         #expect(query.contains("requestedBy=7"))
     }
 
-    /// Seerr 400s on a raw `:` or `'`, which Foundation leaves unencoded.
     @Test func searchTermsEncodeEveryReservedCharacter() async throws {
         let client = makeClient()
         client.configure(serverURL: URL(string: "https://seerr.test")!)

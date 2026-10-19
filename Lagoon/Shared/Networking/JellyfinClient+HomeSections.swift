@@ -11,12 +11,9 @@ extension JellyfinClient {
         /// `Landscape`, `Portrait` or `Square` (drawn as a poster rail).
         let viewMode: String?
         let orderIndex: Int?
-        /// What one instance of the section is about: a person's or a
-        /// library's id, a genre, a decade. One section can have several
-        /// instances (three `Starring` rows), and each fetches empty without it.
+        /// Which person, genre or library; the section fetches empty without it.
         let additionalData: String?
 
-        /// One instance; `section` alone names the kind.
         var id: String {
             additionalData.map { "\(section)|\($0)" } ?? section
         }
@@ -55,30 +52,19 @@ extension JellyfinClient {
         return legacy.filter { seen.insert($0.id).inserted }
     }
 
-    /// A title the plugin fetched from Sonarr, Radarr, Lidarr, Readarr or
-    /// Seerr. It is not in the library: its `Id` is random on every request,
-    /// or all zeros, so it has no Jellyfin artwork or page, and fetching
-    /// either 404s. What there is sits in `ProviderIds`.
+    /// Not in the library: the plugin gives it a random or all-zero `Id`, so
+    /// Jellyfin artwork and item pages for it 404.
     nonisolated struct ExternalSectionItem: Decodable, Identifiable, Hashable, Sendable {
-        /// The source and its own id, stable across requests.
+        /// Stable across requests, unlike the plugin's `Id`.
         let id: String
         let title: String
         let subtitle: String?
-        /// `/HomeScreen/CachedImage/…` from the server, or an absolute URL.
         let posterPath: String?
-        /// Seerr's TMDB id, set for Seerr's own titles. Sonarr's and Radarr's
-        /// are looked up in Seerr by `title`, `seerrType` and `year`.
         let seerrID: Int?
-        /// What Seerr would call it: Seerr's own kind, a show for Sonarr, a
-        /// movie for Radarr. Nil for music and books, which Seerr lacks.
         let seerrType: SeerrMediaType?
-        /// A Radarr movie's year, which tells remakes apart.
         let year: Int?
-        /// The Seerr server the plugin reads, which Seerr's titles name and
-        /// Sonarr's and Radarr's do not. Offered when Lagoon has none yet.
         let seerrAddress: String?
 
-        /// Each source's id key. The plugin names the poster `<source>Poster`.
         private static let sources = [
             (name: "Sonarr", idKey: "SonarrEpisodeId"),
             (name: "Radarr", idKey: "RadarrMovieId"),
@@ -119,8 +105,7 @@ extension JellyfinClient {
                 )
                 subtitle = [episode, formattedDate].compactMap { $0 }.joined(separator: " · ")
             case "Jellyseerr":
-                // A date string, read for its year only. The plugin writes
-                // 1970-01-01 when Seerr has no date.
+                // The plugin writes 1970-01-01 when Seerr has no date.
                 let premiere = (try? c.decodeIfPresent(String.self, forKey: "premiereDate")) ?? ""
                 let year = String(premiere.prefix(4))
                 subtitle = year.count == 4 && year != "1970" ? year : nil
@@ -147,8 +132,6 @@ extension JellyfinClient {
         }
     }
 
-    /// What one section holds. The plugin returns either kind of title in
-    /// the same `BaseItemDto` shape.
     nonisolated struct HomeSectionContents: Sendable {
         var items: [MediaItem] = []
         var externalItems: [ExternalSectionItem] = []

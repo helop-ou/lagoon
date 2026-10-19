@@ -10,8 +10,6 @@ nonisolated enum SeerrNavigationRoute: Hashable {
     case search(String)
     /// A TMDB person's page, from Seerr's cast or search.
     case person(SeerrPerson)
-    /// Seerr's sign-in, then the page of a Home title from the Home Screen
-    /// Sections plugin.
     case signIn(then: JellyfinClient.ExternalSectionItem)
 }
 

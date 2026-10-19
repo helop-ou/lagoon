@@ -1,9 +1,7 @@
 import SwiftUI
 
-/// Where a Home title from Sonarr, Radarr or Seerr leads while Lagoon is not
-/// signed in to Seerr. Seerr shows its titles only to a signed-in user, so
-/// this is Seerr's sign-in until there is one, then the title's own page in
-/// its place, so Back returns to Home.
+/// Seerr shows titles only to a signed-in user, so this is the sign-in until
+/// there is one, then the title's page in its place.
 struct SeerrSignInGate: View {
     let item: JellyfinClient.ExternalSectionItem
     @Environment(SeerrSessionStore.self) private var seerr
@@ -42,7 +40,6 @@ struct SeerrSignInGate: View {
         }
     }
 
-    /// Seerr's own titles carry their id; the page fetches the rest.
     private func find() async -> ExternalSeerrTitle? {
         if let id = item.seerrID, let type = item.seerrType {
             return ExternalSeerrTitle(id: id, mediaType: type, backdropPath: nil)
