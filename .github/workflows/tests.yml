@@ -1,12 +1,10 @@
-# Unit tests on both platforms for every pull request and every push to main.
+# Unit tests on both platforms for every pull request. Nothing reaches main
+# without one, so a push to main would only test the same code again.
 # See docs/standards.md, "Continuous integration".
 name: Tests
 
 on:
   pull_request:
-  push:
-    branches: [main]
-  workflow_dispatch:
 
 # A newer push to the same branch or pull request supersedes the older run.
 concurrency:
