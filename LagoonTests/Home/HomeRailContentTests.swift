@@ -391,7 +391,7 @@ struct HomeRailContentTests {
     @Test func pluginTitlesFromSonarrRadarrAndSeerrStayOutOfTheLibraryRail() async throws {
         let client = makeClient()
         let model = HomeViewModel()
-        let seerrMovie = #"{"Name":"Matchbox","Id":"00000000000000000000000000000000","SourceType":"movie","PremiereDate":"2026-10-05T00:00:00.0000000Z","Type":"AggregateFolder","ProviderIds":{"Jellyseerr":"1148365","JellyseerrPoster":"/HomeScreen/CachedImage/m"}}"#
+        let seerrMovie = #"{"Name":"Matchbox","Id":"00000000000000000000000000000000","SourceType":"movie","PremiereDate":"2026-10-05T00:00:00.0000000Z","Type":"AggregateFolder","ProviderIds":{"Jellyseerr":"1148365","JellyseerrRoot":"https://seerr.example","JellyseerrPoster":"/HomeScreen/CachedImage/m"}}"#
         HomeRailURLProtocol.set(
             homeSections: #"[{"Section":"Upcoming","DisplayText":"Upcoming"}]"#,
             homeSectionItems: #"""
@@ -421,6 +421,7 @@ struct HomeRailContentTests {
         ])
         #expect(rail.externalItems.map(\.seerrType) == [.tv, .movie, .movie, .tv])
         #expect(rail.externalItems.last?.seerrID == 1148365)
+        #expect(rail.externalItems.map(\.seerrAddress) == [nil, nil, "https://seerr.example", nil])
         // Its artwork and page are a Jellyfin id that 404s.
         #expect(model.heroItems.isEmpty)
         #expect(client.serverRelativeURL("/HomeScreen/CachedImage/s")?.absoluteString
