@@ -1,10 +1,14 @@
 import Foundation
 
 /// Shared poll-until-true loop for async test conditions. Every caller keeps
-/// its own timeout, poll interval and on-timeout behavior (silent return,
-/// `Issue.record`, or `#require`); this owns only the waiting loop, so those
+/// its own poll interval and on-timeout behavior (silent return,
+/// `Issue.record`, or `#require`). This owns only the waiting loop, so those
 /// behaviors stay exactly where each test expects them.
 enum Polling {
+    /// Every caller waits for something that should happen, and a loaded CI
+    /// runner can take many times longer than a Mac.
+    static let minimumTimeout: Duration = .seconds(30)
+
     /// Polls a main-actor condition, for the common case of watching
     /// `@MainActor` model state. A `nil` `pollInterval` yields between checks
     /// instead of sleeping, for tests that don't drive a clock of their own.
@@ -14,7 +18,7 @@ enum Polling {
         pollInterval: Duration? = nil,
         condition: @MainActor () -> Bool
     ) async throws {
-        let deadline = ContinuousClock.now.advanced(by: timeout)
+        let deadline = ContinuousClock.now.advanced(by: max(timeout, minimumTimeout))
         while !condition(), ContinuousClock.now < deadline {
             if let pollInterval {
                 try await Task.sleep(for: pollInterval)
@@ -31,7 +35,7 @@ enum Polling {
         pollInterval: Duration? = nil,
         condition: () -> Bool
     ) async throws {
-        let deadline = ContinuousClock.now.advanced(by: timeout)
+        let deadline = ContinuousClock.now.advanced(by: max(timeout, minimumTimeout))
         while !condition(), ContinuousClock.now < deadline {
             if let pollInterval {
                 try await Task.sleep(for: pollInterval)
