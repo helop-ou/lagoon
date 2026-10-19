@@ -25,7 +25,7 @@ if ! [[ "$title" =~ ^($types):\ [^A-Z\ ] ]]; then
     problem "Title \"$title\" should start with \"<type>: \" and a lowercase word, like a commit subject"
 fi
 if (( ${#title} > 72 )); then
-    problem "Title is ${#title} characters; keep it to 72"
+    problem "Title is ${#title} characters, over the 72 allowed"
 fi
 if [[ "$title" == *. ]]; then
     problem "Title ends with a full stop"
@@ -59,7 +59,7 @@ if [[ -n "${BASE:-}" && -n "${HEAD:-}" ]]; then
             problem "Commit $short \"$subject\" should be \"<type>: <lowercase start>\""
         fi
         if [[ -n "$rest" ]]; then
-            problem "Commit $short has a body or trailer; commits are a subject line only"
+            problem "Commit $short has a body or trailer, but commits are a subject line only"
         fi
         if printf '%s\n%s\n' "$subject" "$rest" | grep -qE "$references"; then
             problem "Commit $short mentions a Sentry issue or Jira ticket"
