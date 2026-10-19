@@ -1,4 +1,4 @@
-# Lagoon — session notes
+# Lagoon session notes
 
 Jellyfin client for tvOS 26 and iOS 26: one multiplatform SwiftUI app target
 and a Top Shelf extension, with unit and multiplatform UI test targets.
@@ -43,8 +43,8 @@ clean" in docs/README.md.
   xcodebuild -scheme Lagoon -destination 'generic/platform=iOS Simulator' build
   ```
 
-- Test. `LagoonTests` covers the app's logic; the engine's tests live in its
-  repository. Keep it green on both platforms, one after the other, and add
+- Test. `LagoonTests` covers the app's logic, and the engine's tests live in
+  its repository. Keep it green on both platforms, one after the other, and add
   tests there when new logic is pure enough to pin down:
 
   ```
@@ -59,12 +59,12 @@ clean" in docs/README.md.
   `-only-testing:LagoonTests/<Suite>` and keep the full runs for the final
   check. A new test earns its place by failing when the behaviour it names
   breaks: break the code once and watch it fail. UI journeys run under the
-  `LagoonHardwareRegression` scheme; see the [regression
+  `LagoonHardwareRegression` scheme. See the [regression
   lane](docs/reference/regression-lane.md). CI runs the same unit suites on
   every pull request, and `main` takes only pull requests that passed
   ([standards](docs/standards.md#continuous-integration)). It reports after
   the push, so it never replaces a local run.
-- Build numbers belong to the repo. Never let Xcode manage them at upload; see
+- Build numbers belong to the repo. Never let Xcode manage them at upload. See
   [Release](docs/release.md). A change a viewer would notice gets a line in
   `Lagoon/Features/Settings/Changelog.swift`, then
   `scripts/generate-changelog.sh` to regenerate `CHANGELOG.md`. An invisible
@@ -114,7 +114,7 @@ longer than doing it. Never claim an agent's result before it has come back.
 Each one is explained, with its evidence, in the guide named. This list exists
 so you know to read that guide before touching the area.
 
-- **Playback** — [Playback](docs/playback.md). All playback goes through the
+- **Playback**: [Playback](docs/playback.md). All playback goes through the
   engine package behind the `PlayerEngine` protocol, and the player UI only
   talks to the protocol. Player views hold the engine through
   `@PlayerEngineRef`, never a strong reference, and closures handed to SwiftUI
@@ -123,34 +123,34 @@ so you know to read that guide before touching the area.
   press are different inputs and never share a path. The delivery ladder
   descends only on the engine's verdict about the samples, and a `.delivery`
   verdict never skips remux to reach the re-encode.
-- **The engine package** — its own repository, and its own
+- **The engine package**: its own repository, and its own
   [guide](https://github.com/helop-ou/lagoon-engine/blob/main/docs/engine.md)
   and [standards](https://github.com/helop-ou/lagoon-engine/blob/main/docs/standards.md).
   Demux, decode, render, queues, the byte-source cache and the vendored FFmpeg
   build all live there, along with the rules that keep them working. Change
   them there, not by reaching around the package.
-- **Measurement** — [Playback](docs/playback.md), "Regression checks", and
+- **Measurement**: [Playback](docs/playback.md), "Regression checks", and
   `docs/reference/playback/frame-loss-bench.md` for the harness. Never trust a
   casual frame-loss comparison. Same scene, same media-time window, simulator
   untouched, three or more runs, using the Frame-Loss Bench and
   `scripts/framedrop-bench.sh`. Two fixes that skipped this were later
   retracted.
-- **Models and API** — [Jellyfin API](docs/jellyfin-api.md) and
+- **Models and API**: [Jellyfin API](docs/jellyfin-api.md) and
   [Architecture](docs/architecture.md). `@Observable` with `@MainActor`
-  default isolation; DTOs are `nonisolated struct`s with defensive decoding.
+  default isolation. DTOs are `nonisolated struct`s with defensive decoding.
   Jellyfin JSON is PascalCase and the client's key strategy handles it, so
   never add `CodingKeys` for casing. Never decode `Date`. Positions are ticks.
   `MediaItem` compares by value and no DTO gets an id-only `==`, because
   SwiftUI drops a state write whose new value compares equal. API calls bypass
   the URL cache for the same reason.
-- **tvOS and refresh** — [Architecture](docs/architecture.md), "tvOS
+- **tvOS and refresh**: [Architecture](docs/architecture.md), "tvOS
   invariants". Every screen needs a focusable element. Keep
   `.scrollClipDisabled()` and rail focus-lift padding intact, and keep the
   Refresh chrome rules. Foreground invalidation happens only from `RootView`
   advancing `ServerSyncState`, with `ServerRefreshModifier` gated to the
   visible root destination. Seerr's detail-only live refresh stays separate
   from browse invalidation.
-- **Design** — [Design system](docs/design-system.md). Design tokens
+- **Design**: [Design system](docs/design-system.md). Design tokens
   (`Metrics`/`Motion`), never literals. Brand colors only for branding, system
   semantics everywhere else. Native controls over hand-rolled focus visuals.
   Images through `CachedAsyncImage` with an explicit `maxPixelSize`, never
