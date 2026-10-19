@@ -6,14 +6,15 @@ import Testing
 /// Drives the production reporting paths with synthetic sensitive values and
 /// asserts none reach the outgoing bytes. The token charset is only a
 /// backstop (`nas.local` passes it); the guarantee is that these paths hand
-/// the schema identifiers only.
+/// the schema identifiers only. Ids are Jellyfin's 32 hex characters: a short
+/// one turns up by chance in an envelope's random `event_id`.
 @MainActor
 @Suite("Diagnostic privacy")
 struct DiagnosticPrivacyTests {
     static let sensitive = [
         "lagoonfix.example.eu", "secret-token-9f8e7d", "demo-user", "The Film Nobody Should See",
         "api_key", "connect.sid", "sessionCookieValue", "Bearer", "It was the best of times",
-        "/media/secret", "12c4", "8f3a1c2e", "MediaBrowser",
+        "/media/secret", "12c4e7b9a0d34f61b8c2d5e6f7a8b9c0", "8f3a1c2e5d7b4a69b0c1d2e3f4a5b6c7", "MediaBrowser",
     ]
 
     final class CapturingSink: DiagnosticSink, @unchecked Sendable {
@@ -29,7 +30,7 @@ struct DiagnosticPrivacyTests {
     )
 
     static func request() -> URLRequest {
-        var request = URLRequest(url: URL(string: "https://lagoonfix.example.eu/jf/Users/8f3a1c2e/Items/12c4/PlaybackInfo?api_key=secret-token-9f8e7d")!)
+        var request = URLRequest(url: URL(string: "https://lagoonfix.example.eu/jf/Users/8f3a1c2e5d7b4a69b0c1d2e3f4a5b6c7/Items/12c4e7b9a0d34f61b8c2d5e6f7a8b9c0/PlaybackInfo?api_key=secret-token-9f8e7d")!)
         request.httpMethod = "POST"
         request.setValue("MediaBrowser Token=\"secret-token-9f8e7d\"", forHTTPHeaderField: "Authorization")
         request.setValue("connect.sid=sessionCookieValue", forHTTPHeaderField: "Cookie")
@@ -57,17 +58,17 @@ struct DiagnosticPrivacyTests {
         // The playback monitor, fed names, paths and server sentences.
         let monitor = PlaybackIncidentMonitor(hub: hub)
         let source = try JellyfinClient.decoder.decode(MediaSource.self, from: Data(#"""
-        {"Id":"12c4","Name":"The Film Nobody Should See","Path":"/media/secret/The Film.mkv","Container":"mkv",
-         "TranscodingUrl":"/Videos/12c4/master.m3u8?api_key=secret-token-9f8e7d",
+        {"Id":"12c4e7b9a0d34f61b8c2d5e6f7a8b9c0","Name":"The Film Nobody Should See","Path":"/media/secret/The Film.mkv","Container":"mkv",
+         "TranscodingUrl":"/Videos/12c4e7b9a0d34f61b8c2d5e6f7a8b9c0/master.m3u8?api_key=secret-token-9f8e7d",
          "MediaStreams":[{"Type":"Video","Codec":"hevc","Profile":"Main 10","VideoRangeType":"HDR10","Width":3840,"Height":2160,"DisplayTitle":"The Film Nobody Should See"},
                          {"Type":"Audio","Codec":"eac3","Channels":6,"IsDefault":true,"Title":"demo-user commentary"},
-                         {"Type":"Subtitle","Codec":"subrip","DeliveryUrl":"/Videos/12c4/Subtitles?api_key=secret-token-9f8e7d"}]}
+                         {"Type":"Subtitle","Codec":"subrip","DeliveryUrl":"/Videos/12c4e7b9a0d34f61b8c2d5e6f7a8b9c0/Subtitles?api_key=secret-token-9f8e7d"}]}
         """#.utf8))
         monitor.beginAttempt(delivery: .negotiated, method: .directPlay, source: source, cached: true, disc: false, resumeSeconds: 12)
         monitor.engineFailed(
             PlaybackEngineFailure(
                 cause: .delivery,
-                message: "The stream could not be opened (https://lagoonfix.example.eu/Videos/12c4/stream?api_key=secret-token-9f8e7d: It was the best of times).",
+                message: "The stream could not be opened (https://lagoonfix.example.eu/Videos/12c4e7b9a0d34f61b8c2d5e6f7a8b9c0/stream?api_key=secret-token-9f8e7d: It was the best of times).",
                 detail: PlaybackFailureDetail(stage: .open, error: NSError(
                     domain: "LagoonEngine.Demux", code: -1094995529,
                     userInfo: [NSLocalizedDescriptionKey:
