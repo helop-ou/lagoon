@@ -7,6 +7,12 @@
 #   scripts/upload-testflight.sh both --archive-only # archive, upload in Xcode
 #   scripts/upload-testflight.sh tvos
 #   scripts/upload-testflight.sh both
+#   scripts/upload-testflight.sh both --external     # can go to external groups
+#   scripts/upload-testflight.sh both --export-only  # sign an .ipa, no upload
+#
+# An internal-only build can never be added to an external group later.
+# --external uploads one that can, and adding it to a group stays a manual step
+# in App Store Connect.
 #
 # --archive-only needs no App Store Connect key. It archives with the Sentry
 # DSN and leaves the archives in the Organizer to upload by hand. Archive here,
@@ -64,11 +70,15 @@ shift || true
 
 dry_run=""
 archive_only=false
+external=false
+export_only=false
 # Read every argument, in any order, so a misplaced --dry-run is never ignored.
 while [ $# -gt 0 ]; do
     case "$1" in
         --dry-run) dry_run="--dry-run" ;;
         --archive-only) archive_only=true ;;
+        --external) external=true ;;
+        --export-only) export_only=true ;;
         *) echo "error: unknown option $1" >&2; usage ;;
     esac
     shift
@@ -133,6 +143,22 @@ if [ "$dry_run" != "--dry-run" ]; then
     : "${LAGOON_SENTRY_DSN:?set LAGOON_SENTRY_DSN (see the header of this script)}"
 fi
 
+if [ "$external" = true ] || [ "$export_only" = true ]; then
+    mkdir -p "$build_dir"
+    run_options="$build_dir/ExportOptions-run.plist"
+    cp "$options" "$run_options"
+    [ "$external" = true ] && /usr/libexec/PlistBuddy -c "Set :testFlightInternalTestingOnly false" "$run_options"
+    [ "$export_only" = true ] && /usr/libexec/PlistBuddy -c "Set :destination export" "$run_options"
+    options="$run_options"
+fi
+
+# With a key, the archive signs through App Store Connect too, so a machine
+# with no certificates of its own can sign.
+auth=()
+if [ -n "${ASC_KEY_ID:-}" ] && [ "$archive_only" = false ]; then
+    auth=(-authenticationKeyID "$ASC_KEY_ID" -authenticationKeyIssuerID "$ASC_ISSUER_ID" -authenticationKeyPath "$ASC_KEY_PATH")
+fi
+
 run() {
     if [ "$dry_run" = "--dry-run" ]; then
         printf '  %q' "$@"; printf '\n'
@@ -166,6 +192,7 @@ for platform in $targets; do
         -destination "generic/platform=${platform}" \
         -archivePath "$archive" \
         -allowProvisioningUpdates \
+        ${auth[@]+"${auth[@]}"} \
         LAGOON_SENTRY_DSN="${LAGOON_SENTRY_DSN:-SENTRY_DSN}"
 
     if [ "$archive_only" = true ]; then
@@ -188,6 +215,8 @@ done
 
 if [ "$dry_run" = "--dry-run" ]; then
     echo "(dry run — nothing was built or uploaded)"
+elif [ "$export_only" = true ]; then
+    echo "Signed ${version} (${build}) into ${build_dir}/export-<platform>, and nothing was uploaded."
 elif [ "$archive_only" = true ]; then
     cat <<EOF
 Archived ${version} (${build}) with the Sentry DSN, and nothing was uploaded.
