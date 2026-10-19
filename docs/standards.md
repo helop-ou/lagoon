@@ -138,8 +138,10 @@ are the commit types: `feat`, `fix`, `docs`, `test`, `refactor`, `perf`,
   "Needs a device check", is one more line. Rationale goes in the guide that
   owns the area, not the description.
 - **No Sentry issue ids or Jira keys** in any of them.
-- **Dependent changes** go in a GitHub stack (`gh stack`), one pull request
-  per theme, merged from the bottom up.
+- **Related changes that build on each other** go in a GitHub stack
+  (`gh stack`), one pull request per theme, merged from the bottom up, such
+  as a feature and then its snapshot tests. Unrelated changes are separate
+  pull requests, never one stack.
 
 `.github/workflows/conventions.yml` runs `scripts/check-pull-request.sh` on
 every pull request and again when its title or description is edited, and
