@@ -115,6 +115,21 @@ here.
   replay, PiP and hardware performance checks.
 - No new compiler warnings, and no blanket suppression.
 
+### Pull requests
+
+Work reaches `main` through a pull request from a feature branch. Its
+description is a short list and nothing more:
+
+```
+Changes:
+- Run the unit tests on tvOS and iOS for every pull request
+- Install the Metal toolchain the runner lacks
+```
+
+One plain line per change. Something the reviewer must act on, such as
+"Stacked on #2" or "Needs a device check", is one more line. Rationale goes in
+the guide that owns the area, not the description.
+
 ### Continuous integration
 
 `.github/workflows/tests.yml` runs the unit suite on tvOS and iOS for every
