@@ -279,6 +279,11 @@ final class SeerrClient {
 
     // MARK: - HTTP
 
+    /// RFC 3986 unreserved characters; everything else is percent-encoded.
+    private nonisolated static let queryValueAllowed = CharacterSet(
+        charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
+    )
+
     private func get<T: Decodable>(
         _ path: String,
         query: [URLQueryItem] = [],
@@ -382,7 +387,14 @@ final class SeerrClient {
             url: serverURL.appending(path: "api/v1").appending(path: path),
             resolvingAgainstBaseURL: false
         )
-        components?.queryItems = query.isEmpty ? nil : query
+        // Seerr answers 400 to a query value holding any reserved character
+        // (`:` or `'` in a title), which Foundation leaves unencoded.
+        components?.percentEncodedQueryItems = query.isEmpty ? nil : query.map {
+            URLQueryItem(
+                name: $0.name,
+                value: $0.value?.addingPercentEncoding(withAllowedCharacters: Self.queryValueAllowed)
+            )
+        }
         guard let url = components?.url else { throw SeerrError.invalidServerURL }
 
         var request = URLRequest(url: url)
