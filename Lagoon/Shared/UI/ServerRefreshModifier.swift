@@ -103,9 +103,9 @@ private struct ServerRefreshModifier: ViewModifier {
 struct ServerRefreshButton: View {
     let target: ServerSyncTarget?
     /// Nonisolated storage for an immutable value passed to the UIKit
-    /// control; the action itself runs on the main actor.
+    /// control. The action itself runs on the main actor.
     nonisolated let moveDownAction: (@MainActor @Sendable () -> Void)?
-    /// Right, to the profile button beside it; see
+    /// Right, to the profile button beside it. See
     /// `TopChromeButton.moveRightAction`.
     nonisolated let moveRightAction: (@MainActor @Sendable () -> Void)?
     @Binding var topChromeOffset: CGFloat

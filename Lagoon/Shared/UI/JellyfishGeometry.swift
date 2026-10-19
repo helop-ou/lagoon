@@ -5,7 +5,7 @@ struct Swimmer {
     let home: CGPoint
     /// Half-extent of that drift, in unit coordinates.
     let wander: CGSize
-    /// Seconds per drift on each axis; long and roughly coprime so it never retraces.
+    /// Seconds per drift on each axis. Long and roughly coprime so it never retraces.
     let wanderPeriod: CGSize
     /// Seconds per bell beat.
     let period: Double
@@ -35,7 +35,7 @@ struct Swimmer {
         let drawn = side * 0.115 * scale
 
         // Lift follows the contraction and cancels over a beat, so it treads
-        // water; the slow drift is where it actually goes.
+        // water. The slow drift is where it actually goes.
         let lift = drawn * liftShare * Self.contraction(of: beat - liftLag, squeeze: Self.squeeze)
 
         let sway = seconds / wanderPeriod.width * .pi * 2 + phase * .pi * 2

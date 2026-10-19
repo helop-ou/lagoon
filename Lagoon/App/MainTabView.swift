@@ -18,7 +18,7 @@ struct MainTabView: View {
     @State private var librariesLoaded = false
     @State private var playerItem: PlayerItem?
     #if os(iOS)
-    /// The one iOS player host; every screen's `playerPresentation` goes through it.
+    /// The one iOS player host. Every screen's `playerPresentation` goes through it.
     @State private var playerHub = PlayerPresentationHub()
     /// The offline-launch tab switch happens once per session, not on every retry.
     @State private var hasSwitchedToLibraryForOfflineDownloads = false
@@ -51,7 +51,7 @@ struct MainTabView: View {
     /// The active profile's portrait for the chrome: the top-left button on
     /// tvOS, the Settings tab icon on iOS.
     @State private var profileImage: UIImage?
-    /// Tab roots on screen; a pushed page takes its tab's root away.
+    /// Tab roots on screen. A pushed page takes its tab's root away.
     @State private var visibleTabRoots: Set<MainTabSelection> = []
     @Environment(\.displayScale) private var displayScale
 
@@ -128,7 +128,7 @@ struct MainTabView: View {
         #if DEBUG
         .overlay(alignment: .topLeading) { regressionProbes }
         #endif
-        // On a cold launch the link arrives before the client exists; it
+        // On a cold launch the link arrives before the client exists. It
         // waits here instead of being dropped.
         .task(id: "\(deepLinks.pendingItemID ?? ""):\(deepLinkRetry)") {
             await resolveDeepLinkItem(pendingID: \.pendingItemID) { item in
@@ -199,7 +199,7 @@ struct MainTabView: View {
             }
         }
             // Aligns Refresh's circle with the hero and rails. The focus
-            // frame overhangs the glass slightly; the alignment UI test
+            // frame overhangs the glass slightly. The alignment UI test
             // allows for it.
             .padding(.leading, Metrics.screenGutter)
             .offset(y: -Metrics.Space.m)
@@ -224,7 +224,7 @@ struct MainTabView: View {
     #endif
 
     private func resetForAccountChange() {
-        // Content belongs to the account that fetched it; drop the old
+        // Content belongs to the account that fetched it. Drop the old
         // user's stacks even if MainTabView is not rebuilt.
         homeNavigationPath = NavigationPath()
         libraryNavigationPath = NavigationPath()
@@ -405,7 +405,7 @@ struct MainTabView: View {
     }
 
     /// On iOS the gear gives way to the active profile's portrait, drawn
-    /// untinted; Settings is where the profile is switched.
+    /// untinted. Settings is where the profile is switched.
     @ViewBuilder
     private var settingsTabLabel: some View {
         #if os(iOS)
@@ -464,7 +464,7 @@ struct MainTabView: View {
 
     /// Both wait until the picker is gone. Two covers cannot overlap, so
     /// RootView's add-profile cover has to. A switch done under the closing
-    /// picker repaints it in the new profile's theme on its way out; after
+    /// picker repaints it in the new profile's theme on its way out. After
     /// it, the new profile arrives whole, under its theme's bloom.
     private func finishProfilePicker() {
         if let account = profileAfterPicker {
@@ -476,7 +476,7 @@ struct MainTabView: View {
         }
     }
 
-    /// Retries with backoff; the cached list stands in until a fetch succeeds.
+    /// Retries with backoff. The cached list stands in until a fetch succeeds.
     private func loadLibraries() async {
         let accountID = session.activeAccount?.id
         if libraries.isEmpty {
@@ -549,7 +549,7 @@ struct MainTabView: View {
     #if os(iOS)
     /// `-debug.downloadItemID <id>` starts a download headlessly.
     /// `-debug.downloadQuality` is `original`, `high` (default) or
-    /// `standard`; `-debug.downloadRestart YES` deletes an existing entry first.
+    /// `standard`. `-debug.downloadRestart YES` deletes an existing entry first.
     private func downloadItemIfRequested() async {
         guard let itemID = UserDefaults.standard.string(forKey: "debug.downloadItemID"), !itemID.isEmpty else { return }
         let store = DownloadStore.shared

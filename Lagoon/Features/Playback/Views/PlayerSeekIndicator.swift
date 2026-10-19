@@ -2,7 +2,7 @@ import SwiftUI
 
 struct PlayerSeekIndicator: View {
     let forward: Bool
-    /// Stacked iOS double-tap total; tvOS stays at 10.
+    /// Stacked iOS double-tap total. tvOS stays at 10.
     var seconds: Int = 10
     var accessibilityIdentifier = "player.seekFeedback"
 

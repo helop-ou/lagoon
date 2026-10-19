@@ -73,7 +73,7 @@ values="$(grep -o 'CURRENT_PROJECT_VERSION = [0-9]*' "$project" | grep -o '[0-9]
     || die "the project declares build ${values}, not ${want_build}"
 ok "project declares ${version} (${want_build})"
 
-# 4. Same rule as the upload script and ChangelogTests; last chance before public.
+# 4. Same rule as the upload script and ChangelogTests. Last chance before public.
 grep -A 2 "version: \"${version}\"" "$changelog" | grep -q "build: \"${want_build}\"" \
     || die "no Changelog entry for ${version} (${want_build})"
 ok "changelog entry exists for ${version} (${want_build})"

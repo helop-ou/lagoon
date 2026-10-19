@@ -5,7 +5,7 @@ import Observation
 final class LibraryGenreViewModel {
     typealias FetchGenres = @MainActor () async throws -> [MediaGenre]
 
-    /// nil means no successful response yet; [] means an empty catalogue.
+    /// nil means no successful response yet, and [] means an empty catalogue.
     private(set) var genres: [MediaGenre]?
     private(set) var isLoading = false
     private(set) var loadFailed = false

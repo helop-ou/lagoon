@@ -30,7 +30,7 @@ enum SeerrError: LocalizedError, Equatable {
     }
 }
 
-/// HTTP client for Seerr. Holds only a per-user session cookie; Jellyfin
+/// HTTP client for Seerr. Holds only a per-user session cookie. Jellyfin
 /// credentials and Seerr's global API key never enter it.
 final class SeerrClient {
     private(set) var serverURL: URL?
@@ -183,7 +183,7 @@ final class SeerrClient {
     }
 
     /// The owner's Discover rows. Built-ins come back as type and order
-    /// only; the client supplies their titles.
+    /// only. The client supplies their titles.
     func discoverSliders() async throws -> [SeerrDiscoverSlider] {
         try await get("settings/discover")
     }
@@ -329,7 +329,7 @@ final class SeerrClient {
     }
 
     /// Unblocks a title, making it requestable again. `mediaType` is
-    /// required; the route 400s without it.
+    /// required. The route 400s without it.
     func removeFromBlocklist(tmdbID: Int, mediaType: SeerrMediaType) async throws {
         _ = try await data(
             path: "blocklist/\(tmdbID)",
@@ -434,7 +434,7 @@ final class SeerrClient {
         captureSessionCookie(from: http, url: url)
         // A forward-auth proxy (Cloudflare Access, Authelia) redirects to
         // its login page, so the call returns a 200 with HTML. Only 2xx is
-        // checked; HTML on 4xx/5xx is a normal gateway error page. An empty
+        // checked. HTML on 4xx/5xx is a normal gateway error page. An empty
         // body is no login page: Seerr's deletes answer a bare 204, which
         // URLSession reports as text/plain.
         if (200..<300).contains(http.statusCode), !data.isEmpty,

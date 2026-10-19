@@ -45,7 +45,7 @@ enum QRCode {
         guard let output = filter.outputImage else { return nil }
 
         // Brand Ink on Mist, about 16:1 contrast. The pair must stay
-        // extreme; never tint the light half toward the accent.
+        // extreme. Never tint the light half toward the accent.
         let tint = CIFilter.falseColor()
         tint.inputImage = output
         tint.color0 = CIColor(color: UIColor(.lagoonInk))

@@ -143,8 +143,8 @@ struct DownloadManifestTests {
     }
 
     @Test func reconcilePromotesAFinishedFileToComplete() {
-        // A transfer that finished while the process was dead left its file;
-        // the file proves it finished.
+        // A transfer that finished while the process was dead left its file.
+        // The file proves it finished.
         var manifest = DownloadManifest()
         manifest.insert(Self.makeEntry(id: "finishedOffline"))
         manifest.markStarted("finishedOffline", taskIdentifier: 1, attemptToken: "token1")
@@ -189,7 +189,7 @@ struct DownloadManifestTests {
     }
 
     @Test func anEntryDecodesWithoutTheFieldsNothingReads() throws {
-        // A later build stops writing these; this one must still open its manifest.
+        // A later build stops writing these. This one must still open its manifest.
         let json = """
         {"entries":[{"itemID":"item1","type":"Movie","title":"Lean Entry","quality":"original",
         "fileName":"item1.mp4","mediaSourceID":"source1","receivedBytes":0,"state":"complete",

@@ -320,7 +320,7 @@ struct LibraryBrowseTests {
         #expect(requests.map { $0.2 } == [60, 60, 120])
     }
 
-    /// The grid's task reruns on every appearance; the same selection must
+    /// The grid's task reruns on every appearance. The same selection must
     /// not throw away the pages already scrolled through.
     @Test func reloadingTheSameSelectionKeepsTheLoadedDepth() async throws {
         let model = LibraryViewModel()

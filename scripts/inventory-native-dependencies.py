@@ -39,7 +39,7 @@ def sha256(path):
 def output(*args):
     # nm exits 1 on a few members of Rust-built libdovi.a (newer LLVM than
     # Xcode's nm: "Unknown attribute kind") but still prints the rest. Fail
-    # only when stdout is empty; otherwise keep the partial output and warn.
+    # only when stdout is empty. Otherwise keep the partial output and warn.
     result = subprocess.run(args, capture_output=True, text=True)
     if result.returncode != 0:
         if not result.stdout.strip():
@@ -67,7 +67,7 @@ def main():
         target = {"name": name}
         path = re.search(r'\bpath:\s*"([^"]+)"', declaration)
         if not path:
-            # Every native library is built or vendored inside the engine; a
+            # Every native library is built or vendored inside the engine. A
             # fetched one would need its resolved artifact found and hashed.
             raise ValueError(f"{name} is not a path: binary target; teach this script where SwiftPM put it")
         target["path"] = path.group(1)

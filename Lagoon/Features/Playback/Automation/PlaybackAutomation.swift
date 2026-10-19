@@ -8,7 +8,7 @@ import Observation
 /// in Picture.
 ///
 /// The overlays only draw this, so the pill and Select cannot disagree.
-/// `SkipSegmentPolicy` and `NextUpPolicy` decide where; this decides when,
+/// `SkipSegmentPolicy` and `NextUpPolicy` decide where. This decides when,
 /// and remembers what the viewer already answered.
 @Observable
 @MainActor
@@ -23,7 +23,7 @@ final class PlaybackAutomation {
     /// Timing shared by the pending handoff and the card's visible progress.
     private(set) var nextUpTiming: PlaybackCountdown?
     private(set) var nextUpCardStart: Double?
-    /// The panel and an open scrub own the remote; a prompt must not change
+    /// The panel and an open scrub own the remote. A prompt must not change
     /// what Select does underneath them. Set by the player view.
     var isSuppressed = false {
         didSet { if oldValue != isSuppressed { evaluate() } }
@@ -74,7 +74,7 @@ final class PlaybackAutomation {
     private let defaults: UserDefaults
     private let countdown: Duration
 
-    /// `countdown` is how long both fills run; tests shorten it.
+    /// `countdown` is how long both fills run. Tests shorten it.
     init(
         defaults: UserDefaults = .standard,
         countdown: Duration = .seconds(SkipMode.autoDelaySeconds)
@@ -191,7 +191,7 @@ final class PlaybackAutomation {
     }
 
     /// Back on the card. In Automatic mode the first one means "not yet",
-    /// unless the final countdown is already running; after that, and in card
+    /// unless the final countdown is already running. After that, and in card
     /// mode, it means "stay". Returns whether the card was up.
     @discardableResult
     func dismissNextUp() -> Bool {

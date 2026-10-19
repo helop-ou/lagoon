@@ -5,7 +5,7 @@ import SwiftUI
 /// Select/Menu handling so they never disagree.
 ///
 /// Intros and recaps always skip. An outro skips only when a scene follows
-/// it; credits that run to the end hand off to Up Next instead.
+/// it. Credits that run to the end hand off to Up Next instead.
 nonisolated enum SkipSegmentPolicy {
     /// Less content than this after the credits is a run-out, not a scene.
     /// Matches Up Next's run-out, so the card never shares the corner with

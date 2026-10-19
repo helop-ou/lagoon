@@ -105,7 +105,7 @@ struct SearchResultsView: View {
                         .buttonStyle(.glass)
                         .accessibilityIdentifier("search.results.more")
                 } else if model.items.isEmpty {
-                    // The only focusable element when empty; without it Menu
+                    // The only focusable element when empty. Without it Menu
                     // quits the app. The cursor is spent, so retry rewinds it.
                     InlineRetryView(message: "No matching movies or shows.") {
                         model.restart()

@@ -58,7 +58,7 @@ struct SeerrLiveRefreshTests {
         )
     }
 
-    /// Jellyseerr can leave old queue rows after import; availability wins.
+    /// Jellyseerr can leave old queue rows after import. Availability wins.
     @Test func terminalMediaStopsEvenWithAStaleQueueRow() throws {
         let loaded = try JSONDecoder().decode(
             SeerrMediaDetails.self,
@@ -277,7 +277,7 @@ private nonisolated struct RecordedDetailRequest: Sendable {
 /// Fixture state for `SeerrRequestDetailRefreshTests`, spanning both the
 /// Seerr and Jellyfin hosts so `paths` reflects call order across both,
 /// matching the original single-recorder behavior. Serves one Seerr
-/// request, its TMDB details and Jellyfin item; can go dark on command to
+/// request, its TMDB details and Jellyfin item. Can go dark on command to
 /// simulate an outage.
 private enum SeerrDetailFixture {
     private static let lock = NSLock()

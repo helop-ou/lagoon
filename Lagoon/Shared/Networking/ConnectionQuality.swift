@@ -1,7 +1,7 @@
 import Foundation
 
 /// Settings → Playback → Maximum Quality. Auto measures a remote server's
-/// link before the first playback and caps below it; a server on this
+/// link before the first playback and caps below it. A server on this
 /// network keeps the full envelope.
 nonisolated enum MaximumQuality: String, CaseIterable, Identifiable, Sendable {
     case auto
@@ -24,7 +24,7 @@ nonisolated enum MaximumQuality: String, CaseIterable, Identifiable, Sendable {
         defaults.string(forKey: defaultsKey).flatMap(MaximumQuality.init(rawValue:)) ?? .auto
     }
 
-    /// A fixed ceiling in bit/s; nil for Auto and No Limit.
+    /// A fixed ceiling in bit/s, nil for Auto and No Limit.
     var fixedBitrate: Int? {
         Int(rawValue).map { $0 * 1_000_000 }
     }
@@ -57,7 +57,7 @@ nonisolated enum PlaybackQualityLimit {
     /// Share of the measured rate offered to playback. A title's bitrate is
     /// an average, peaks run well above it, and the link is shared.
     static let headroom = 0.7
-    /// Below this a transcode is not worth watching; the cap stops here.
+    /// Below this a transcode is not worth watching. The cap stops here.
     static let minimumBitrate = 1_000_000
 
     static func maxBitrate(setting: MaximumQuality, connection: ConnectionMeasurement?) -> Int? {
@@ -107,7 +107,7 @@ nonisolated enum ConnectionBitrateProbe {
         Step(bytes: 1_000_000, continueAbove: 4_000_000),
         Step(bytes: 8_000_000, continueAbove: .max),
     ]
-    /// Per request; a request that times out leaves the last step's figure.
+    /// Per request. A request that times out leaves the last step's figure.
     static let timeout: TimeInterval = 8
     /// How long a measurement stands. A path change (another Wi-Fi network,
     /// cellular) discards it sooner.

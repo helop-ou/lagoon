@@ -19,7 +19,7 @@ nonisolated enum SyncPlayLeaveReason: Equatable, Sendable {
     case groupDoesNotExist
 }
 
-/// Carries display names, never ids, and never reaches diagnostics; see
+/// Carries display names, never ids, and never reaches diagnostics. See
 /// `DiagnosticSchema`.
 nonisolated enum SyncPlayNotice: Equatable, Sendable {
     case joined(group: String)
@@ -46,7 +46,7 @@ nonisolated struct SyncPlayGroupSession: Equatable, Sendable {
     private(set) var queue: SyncPlayQueueUpdate?
     /// Server time of joining. Earlier commands are dropped, as jellyfin-web does.
     private(set) var joinedAtServerSeconds: Double?
-    /// Recognises re-sent commands; drift correction measures against it.
+    /// Recognises re-sent commands. Drift correction measures against it.
     private(set) var lastCommand: SyncPlayCommand?
 
     /// So a late, older queue update cannot rewind the queue.

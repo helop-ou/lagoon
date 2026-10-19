@@ -61,7 +61,7 @@ final class TopShelfPublisher {
     }
 
     /// The operation must return only fully written images beneath `stage`.
-    /// A successful empty result clears; throwing retains the last snapshot.
+    /// A successful empty result clears. Throwing retains the last snapshot.
     @discardableResult
     func publish(owner requestedOwner: String,
                  operation: @escaping (URL, Snapshot?) async throws -> [TopShelfStore.Item]) -> Task<Void, Never>? {

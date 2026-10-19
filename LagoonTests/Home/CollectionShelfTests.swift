@@ -58,7 +58,7 @@ struct CollectionShelfTests {
     // MARK: - Which collections earn a card
 
     @Test func theFranchiseStubsAServerInventsAreNotCollections() throws {
-        // A scrape creates a collection off one owned film; most hold nothing.
+        // A scrape creates a collection off one owned film. Most hold nothing.
         let all = try [
             collection(id: "empty", name: "The Dark Knight Collection", childCount: 0),
             collection(id: "unknown", name: "Alien Collection", childCount: nil),
@@ -110,7 +110,7 @@ struct CollectionShelfTests {
     }
 
     @Test func aBackdropCountsAsArtworkAndAPosterDoesNot() throws {
-        // Home's rows are 16:9; a collection's Primary is a poster and would
+        // Home's rows are 16:9. A collection's Primary is a poster and would
         // crop to a strip.
         let poster = try JellyfinClient.decoder.decode(
             MediaItem.self,

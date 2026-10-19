@@ -121,7 +121,7 @@ final class PlaybackReportingSession {
     }
 
     /// Claims the stop report synchronously and returns the network work. Call
-    /// after local teardown; dismissal never awaits it.
+    /// after local teardown. Dismissal never awaits it.
     func stop(at seconds: Double) -> Task<Void, Never>? {
         cancelProgress()
         guard isActive else { return nil }

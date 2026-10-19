@@ -4,7 +4,7 @@
 #
 # Generated so the table matches the profile Lagoon sends Jellyfin
 # (docs/release.md forbids overstating supported formats). The renderer is a
-# test (CodecSupportDocTests); it writes to its own tmp and prints the path,
+# test (CodecSupportDocTests). It writes to its own tmp and prints the path,
 # and this copies it.
 #
 #   scripts/generate-codec-support.sh           # regenerate the document

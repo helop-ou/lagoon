@@ -12,7 +12,7 @@ final class CollectionDetailViewModel {
         guard !isLoading else { return }
         isLoading = true
         errorMessage = nil
-        // The list's own record adds overview and artwork; its failure
+        // The list's own record adds overview and artwork. Its failure
         // never fails the page.
         async let detailTask = try? await client.item(id: collection.id)
         do {
@@ -35,7 +35,7 @@ final class CollectionDetailViewModel {
         items = refreshed
     }
 
-    /// A playlist in the order its owner arranged it; a collection in the
+    /// A playlist in the order its owner arranged it. A collection in the
     /// order it is set to.
     private func contents(of list: MediaItem, client: JellyfinClient) async throws -> [MediaItem] {
         if list.type == .playlist {
@@ -56,7 +56,7 @@ private struct ListEntry: Identifiable {
 }
 
 /// A collection's or playlist's page, in the list's own order. Play runs the
-/// whole list as a queue; a poster in the grid opens just that title.
+/// whole list as a queue. A poster in the grid opens just that title.
 struct CollectionDetailView: View {
     let item: MediaItem
 
@@ -66,7 +66,7 @@ struct CollectionDetailView: View {
     @State private var playerItem: PlayerItem?
     #if os(tvOS)
     /// tvOS left focus on the tab bar after the player closed from this
-    /// page, where the shared reset does not reach the actions; the film
+    /// page, where the shared reset does not reach the actions. The film
     /// page does not need it. Claimed back explicitly.
     @FocusState private var actionsFocused: Bool
     #endif
@@ -94,7 +94,7 @@ struct CollectionDetailView: View {
         }
         #if os(iOS)
         .navigationTitle(displayed.name ?? (item.type == .playlist ? "Playlist" : "Collection"))
-        // The page draws its own title; a large one inherited from Library or
+        // The page draws its own title. A large one inherited from Library or
         // Playlists would repeat it.
         .navigationBarTitleDisplayMode(.inline)
         #endif
@@ -126,7 +126,7 @@ struct CollectionDetailView: View {
         if viewModel.items.isEmpty, viewModel.isLoading {
             LoadingView()
         } else if viewModel.items.isEmpty {
-            // The only focusable element when empty; without it Menu quits the app.
+            // The only focusable element when empty. Without it Menu quits the app.
             InlineRetryView(message: viewModel.errorMessage ?? emptyMessage) {
                 Task { await viewModel.load(client: session.client, collection: item) }
             }
@@ -172,7 +172,7 @@ struct CollectionDetailView: View {
         }
     }
 
-    /// Falls back to the first title's backdrop; most collections have none.
+    /// Falls back to the first title's backdrop. Most collections have none.
     private var backdropURL: URL? {
         let source = displayed.backdropImageTags?.isEmpty == false
             ? displayed
@@ -182,7 +182,7 @@ struct CollectionDetailView: View {
         }
     }
 
-    /// Counted from the contents; the collection record carries neither.
+    /// Counted from the contents. The collection record carries neither.
     private var factTokens: [String] {
         var parts: [String] = []
         if !viewModel.items.isEmpty {

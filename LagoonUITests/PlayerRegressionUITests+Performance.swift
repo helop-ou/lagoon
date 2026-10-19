@@ -10,7 +10,7 @@ extension PlayerRegressionUITests {
     /// No assertions inside the measured block: focus asserts over live
     /// playback flake. The result is checked once afterwards.
     ///
-    /// The tvOS simulator reports no hitch figures; read the CPU counters.
+    /// The tvOS simulator reports no hitch figures. Read the CPU counters.
     func testLivePlayerPanelSweepPerformance() throws {
         let app = launchPlayer(
             title: "live-panel-sweep-regression",
@@ -138,11 +138,11 @@ extension PlayerRegressionUITests {
 
         // Lazy track rows must still navigate: walk the 30-track fixture.
         for _ in 0..<3 { remote.press(.right) }
-        // The gallery opens on the search results; Done brings back the
+        // The gallery opens on the search results. Done brings back the
         // track chooser, or the walk below counts result rows.
         let doneButton = app.buttons["player.subtitleSearch.close"]
         if doneButton.waitForExistence(timeout: 3) {
-            // Down may land on the language menu beside Done; walk left, then up.
+            // Down may land on the language menu beside Done. Walk left, then up.
             remote.press(.down)
             for direction in [XCUIRemote.Button.left, .up] {
                 for _ in 0..<3 where !doneButton.hasFocus {
@@ -249,7 +249,7 @@ extension PlayerRegressionUITests {
         let requestedReplayCount = Int(
             ProcessInfo.processInfo.environment["LAGOON_LIFECYCLE_REPLAYS"] ?? ""
         ) ?? 3
-        // Three cycles show a small per-replay leak; cap it at ten.
+        // Three cycles show a small per-replay leak. Cap it at ten.
         let replayCount = min(max(requestedReplayCount, 1), 10)
         var resolverArguments: [String]
         if let requestedVC1Series, !requestedVC1Series.isEmpty {
@@ -354,7 +354,7 @@ extension PlayerRegressionUITests {
             extraArguments: [
                 "-debug.regressionFindPlayable", "YES",
                 "-debug.lifecycleReplayBenchmark", "YES",
-                // Mounts the lifecycle probe; the replay comes too late to overlap.
+                // Mounts the lifecycle probe. The replay comes too late to overlap.
                 "-debug.lifecycleReplayDelaySeconds", "60",
                 "-debug.regressionPlaybackStartDelaySeconds", "5",
             ]

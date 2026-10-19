@@ -66,7 +66,7 @@ nonisolated struct DiagnosticContext: Equatable, Sendable {
         #endif
     }
 
-    /// `AppleTV14,1`; the simulator reports its model via the environment,
+    /// `AppleTV14,1`. The simulator reports its model via the environment,
     /// not `hw.machine`.
     private static var deviceModel: String {
         if let simulated = ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"],
@@ -112,8 +112,8 @@ nonisolated enum DiagnosticsPreference {
         isReportingEnabled(storedValue: UserDefaults.standard.object(forKey: reportingEnabledKey))
     }
 
-    /// The toggle stores a Bool, a launch argument a string. Both count;
-    /// anything else means "not set".
+    /// The toggle stores a Bool, a launch argument a string. Both count.
+    /// Anything else means "not set".
     static func isReportingEnabled(storedValue: Any?) -> Bool {
         switch storedValue {
         case let flag as Bool:

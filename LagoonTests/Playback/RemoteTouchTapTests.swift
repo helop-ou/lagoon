@@ -27,8 +27,8 @@ struct RemoteTouchTapTests {
             .applyHandlers(to: controller)
         controller.remoteTouchTapRecognized()
 
-        // A state change renders the representable again with fresh closures;
-        // the recognizer must not keep the first render's handler.
+        // A state change renders the representable again with fresh closures.
+        // The recognizer must not keep the first render's handler.
         MenuPressGate(onMenu: {}, onRemoteTouchTap: { taps.append("second") }) { EmptyView() }
             .applyHandlers(to: controller)
         controller.remoteTouchTapRecognized()

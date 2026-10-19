@@ -209,7 +209,7 @@ struct SyncPlaySessionTests {
     }
 
     /// A `Ready` more than 0.5 s off makes the server resend the group's `Seek`
-    /// with only `EmittedAt` moved; ignoring it stalls the group.
+    /// with only `EmittedAt` moved. Ignoring it stalls the group.
     @Test func aResentSeekIsACorrectionAndIsTakenAgain() throws {
         var session = try Self.joinedWithQueue()
         let seek = try Self.command(kind: "Seek", positionTicks: 1_200_000_000)

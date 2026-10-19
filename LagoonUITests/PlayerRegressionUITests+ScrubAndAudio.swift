@@ -40,8 +40,8 @@ extension PlayerRegressionUITests {
         }
         waitForState(in: app, timeout: 8) { $0.int("trickplayFrame") == 1 }
         remote.press(.select)
-        // The server may still be generating the simulator's HLS rendition;
-        // wait for the re-prime rather than treating it as a bad seek.
+        // The server may still be generating the simulator's HLS rendition.
+        // Wait for the re-prime rather than treating it as a bad seek.
         waitForState(in: app, timeout: 30) {
             $0.int("scrubbing") == 0
                 && $0.int("buffering") == 0
@@ -386,7 +386,7 @@ extension PlayerRegressionUITests {
                 "A stall of \(confirmedStallSeconds)s should have refilled in place rather than falling back to a seek: \(recovered.raw)"
             )
         }
-        // A longer stall may take the seek fallback; that is not pinned.
+        // A longer stall may take the seek fallback. That is not pinned.
     }
 
     /// A demux outage longer than the video cushion buffers, then resumes
@@ -454,7 +454,7 @@ extension PlayerRegressionUITests {
     /// audio. Forces the remux rung, then checks 40 s of playback stays
     /// inside both bounds with no new dry episode, stall or reprime.
     func testForcedRemuxKeepsAudioFedWithinTheIntakeBound() throws {
-        // Mirrors `DemuxBackpressurePolicy.videoIntakeHardLimit`; the UI
+        // Mirrors `DemuxBackpressurePolicy.videoIntakeHardLimit`. The UI
         // test target cannot import the app, so keep the two in sync.
         let videoIntakeHardLimit = 600
 

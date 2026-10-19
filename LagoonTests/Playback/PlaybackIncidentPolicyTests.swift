@@ -19,9 +19,9 @@ struct PlaybackFreezeDetectorTests {
         #expect(detector.observe(Self.playing(position: 12), at: 4) == .watching(seconds: 2))
         #expect(detector.observe(Self.playing(position: 12.02), at: 8) == .watching(seconds: 6))
         #expect(detector.observe(Self.playing(position: 12), at: 10) == .frozen(seconds: 8, kind: .playhead))
-        // Reported once; a still-stuck playhead keeps watching.
+        // Reported once. A still-stuck playhead keeps watching.
         #expect(detector.observe(Self.playing(position: 12), at: 12) == .watching(seconds: 10))
-        // Progress resets; a second freeze reports again.
+        // Progress resets. A second freeze reports again.
         #expect(detector.observe(Self.playing(position: 13), at: 14) == .idle)
         #expect(detector.observe(Self.playing(position: 13), at: 23) == .frozen(seconds: 9, kind: .playhead))
     }

@@ -125,7 +125,7 @@ struct DiscoverView: View {
             await viewModel.load(client: seerr.client)
         }
         // Signs in to Seerr with the Jellyfin session, no password. Silent
-        // when there is nothing to do; one attempt per activation.
+        // when there is nothing to do. One attempt per activation.
         .task(id: "seerr-auto-signin:\(seerr.configuredURL?.absoluteString ?? "")") {
             await seerr.signInUsingJellyfinIfNeeded(session.client)
         }
@@ -186,7 +186,7 @@ struct DiscoverView: View {
     }
 
     /// Movies, Shows and Requests, above the rails. Always one row: on a
-    /// phone it scrolls and drops the glyphs; the TV keeps a fixed row.
+    /// phone it scrolls and drops the glyphs. The TV keeps a fixed row.
     private var chips: some View {
         #if os(tvOS)
         HStack(spacing: Metrics.Space.m) {

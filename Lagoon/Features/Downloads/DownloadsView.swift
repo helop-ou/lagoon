@@ -2,7 +2,7 @@ import SwiftUI
 
 #if os(iOS)
 /// Downloads grouped by series. Row text comes from the entry, so the
-/// screen renders with no server; only thumbs and taps need the snapshot.
+/// screen renders with no server. Only thumbs and taps need the snapshot.
 struct DownloadsView: View {
     private var store: DownloadStore { .shared }
     @Environment(SessionStore.self) private var session

@@ -5,14 +5,14 @@ import SwiftUI
 
 /// The 2:3 poster shape shared by every poster card: artwork, clip, focus
 /// and caption. `badge` draws over the artwork and positions itself (see
-/// `ItemProgressBar` and `StatusCapsule`); a corner mark is the caller's
+/// `ItemProgressBar` and `StatusCapsule`). A corner mark is the caller's
 /// `.downloadedBadge`.
 struct PosterCardShell<Route: Hashable, Badge: View>: View {
     let route: Route
     let imageURL: URL?
     let maxPixelSize: Int
     let title: String
-    /// Shown in the placeholder while artwork loads; defaults to `title`.
+    /// Shown in the placeholder while artwork loads. Defaults to `title`.
     let placeholderTitle: String?
     let subtitle: String?
     let accessibilityLabel: String
@@ -110,7 +110,7 @@ struct PosterCardShell<Route: Hashable, Badge: View>: View {
 }
 
 private extension View {
-    /// SwiftUI's `accessibilityValue` always sets a value; this skips it
+    /// SwiftUI's `accessibilityValue` always sets a value. This skips it
     /// when there is none, instead of announcing an empty one.
     @ViewBuilder
     func accessibilityValueIfPresent(_ value: String?) -> some View {
@@ -163,7 +163,7 @@ struct PosterCard: View {
     }
 }
 
-/// 16:9 card for landscape rails. Resume rails play directly; others open
+/// 16:9 card for landscape rails. Resume rails play directly. Others open
 /// the detail page.
 struct LandscapeCard: View {
     let item: MediaItem
@@ -230,7 +230,7 @@ struct LandscapeCard: View {
 }
 
 /// 16:9 artwork with a clip, an optional bottom-gradient metadata wash and a
-/// playback-progress bar. Shared by landscape rail cards and episode tiles;
+/// playback-progress bar. Shared by landscape rail cards and episode tiles.
 /// `metadata` draws the caller's own title block inside the wash, and a
 /// corner mark is the caller's `.downloadedBadge`.
 struct LandscapeArtwork<Metadata: View>: View {
@@ -287,7 +287,7 @@ struct LandscapeArtwork<Metadata: View>: View {
 #if os(tvOS)
 /// An ambient halo behind a focused card, sampled from its artwork.
 ///
-/// Strictly additive to the system `.card` focus; nothing here scales. Rails
+/// Strictly additive to the system `.card` focus. Nothing here scales. Rails
 /// carry extra padding for it on top of the lift.
 private struct ArtworkFocusHue: ViewModifier {
     let url: URL?
@@ -300,7 +300,7 @@ private struct ArtworkFocusHue: ViewModifier {
         content
             .focused($isFocused)
             .background { halo }
-            // Wait for focus to settle; a held direction outruns sampling.
+            // Wait for focus to settle. A held direction outruns sampling.
             .task(id: "\(url?.absoluteString ?? "")|\(isFocused)") {
                 guard isFocused, let url else { return }
                 try? await Task.sleep(for: .milliseconds(180))
@@ -474,7 +474,7 @@ struct GenreCardLabel: View {
 
     private var titleWash: [Color] {
         #if os(tvOS)
-        // The name is centred; the bottom still darkens toward the rail.
+        // The name is centred. The bottom still darkens toward the rail.
         [.clear, .black.opacity(0.2), .black.opacity(0.5)]
         #else
         [.clear, .black.opacity(0.6)]
@@ -492,7 +492,7 @@ extension View {
 }
 
 extension MediaItem {
-    /// Fractional watch progress; nil when zero or at 95% and above.
+    /// Fractional watch progress, nil when zero or at 95% and above.
     var playbackProgress: Double? {
         guard let percentage = userData?.playedPercentage, percentage > 0, percentage < 95 else { return nil }
         return percentage / 100
@@ -522,7 +522,7 @@ extension MediaItem {
         return Self.runtimeLabel(minutes: Int(Ticks.seconds(runTimeTicks) / 60))
     }
 
-    /// "45 min", "1 h 30 min"; nil for a runtime of zero or less.
+    /// "45 min", "1 h 30 min", nil for a runtime of zero or less.
     static func runtimeLabel(minutes: Int) -> String? {
         guard minutes > 0 else { return nil }
         if minutes >= 60 {

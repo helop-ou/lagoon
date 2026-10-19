@@ -142,7 +142,7 @@ struct PlaybackAutomationTests {
         #expect(automation.activeSegment == nil)
     }
 
-    /// Select and a tap act now; only the clock waits.
+    /// Select and a tap act now. Only the clock waits.
     @Test func theViewerSkipsWhileBufferingAllTheSame() {
         let automation = automation(skip: .button)
         var landed: Double?

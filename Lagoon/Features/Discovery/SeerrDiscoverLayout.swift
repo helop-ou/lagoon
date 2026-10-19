@@ -19,7 +19,7 @@ nonisolated enum SeerrCatalogSource: Hashable {
         }
     }
 
-    /// Stable across launches; keys rail identity and accessibility ids.
+    /// Stable across launches. Keys rail identity and accessibility ids.
     var id: String {
         switch self {
         case .trending: "trending"
@@ -31,7 +31,7 @@ nonisolated enum SeerrCatalogSource: Hashable {
     }
 }
 
-/// A row on Discover. Media rows are posters; genre rows are the browse
+/// A row on Discover. Media rows are posters. Genre rows are the browse
 /// shelves Jellyseerr draws from `discover/genreslider/*`.
 nonisolated enum SeerrDiscoverRow: Hashable, Identifiable {
     case media(SeerrCatalogSource)
@@ -78,7 +78,7 @@ nonisolated enum SeerrDiscoverLayout {
 
     /// Unknown types return nil, so newer Jellyseerr additions are harmless.
     /// Skipped on purpose: `recentlyAdded` and `recentRequests` duplicate Home
-    /// and the Requests chip; `studios`/`networks` are web-client-only logos.
+    /// and the Requests chip. `studios`/`networks` are web-client-only logos.
     private static func row(for slider: SeerrDiscoverSlider) -> SeerrDiscoverRow? {
         switch slider.type {
         case .watchlist: .media(.watchlist)

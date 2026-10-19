@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// `LagoonTopShelf/ContentProvider.swift` cannot import this target; these
+/// `LagoonTopShelf/ContentProvider.swift` cannot import this target. These
 /// tests are all that keep the two halves of `lagoon://` in step.
 @Suite("Deep links")
 struct DeepLinkRouterTests {
@@ -38,7 +38,7 @@ struct DeepLinkRouterTests {
         #expect(router.pendingDetailItemID == nil)
     }
 
-    /// Play resumes; More Info opens the detail page.
+    /// Play resumes. More Info opens the detail page.
     @Test @MainActor func itemOpensTheDetailPage() {
         let router = DeepLinkRouter()
         router.handle(link("lagoon://item/abc123"))

@@ -68,7 +68,7 @@ final class PlaybackDiagnosticsSampler {
                 let performance = engine.videoPerformance
                 let memory = MemorySnapshot.current()
                 let depths = engine.queueDepths
-                // Last tick's pump-queue ping; the one fired below is read next tick.
+                // Last tick's pump-queue ping. The one fired below is read next tick.
                 let lastPumpMs = pumpPing.lastMs
                 let thermalName: String
                 switch ProcessInfo.processInfo.thermalState {
@@ -162,7 +162,7 @@ final class PlaybackDiagnosticsSampler {
         }
     }
 
-    // MARK: Playback HUD (Settings → Debug → Playback HUD; ships in all
+    // MARK: Playback HUD (Settings → Debug → Playback HUD, ships in all
     // builds so TestFlight sessions can diagnose playback too)
 
     func startHUD(
@@ -291,7 +291,7 @@ final class PlaybackDiagnosticsSampler {
         if let drops = engine.audioPacketDropInfo {
             lines.append("AudDrop: \(drops)")
         }
-        // Only once something was rebuilt; a replaced renderer leaves no other
+        // Only once something was rebuilt. A replaced renderer leaves no other
         // trace.
         if engine.audioRendererRecoveryCount > 0 || engine.mediaServicesResetRecoveryCount > 0 {
             lines.append(
@@ -331,7 +331,7 @@ final class PlaybackDiagnosticsSampler {
             lines.append("Vtime:   \(videoTiming)")
         }
         // The software path's frame budget, split three ways. Each is a share of
-        // one core on its own queue; they overlap and do not sum.
+        // one core on its own queue. They overlap and do not sum.
         if let software = engine.softwareDecodeDiagnostic {
             lines.append("SWdec:   \(software)")
         }
@@ -339,7 +339,7 @@ final class PlaybackDiagnosticsSampler {
             lines.append("DoVi P7: \(dovi)")
         }
         #if os(tvOS)
-        // Every gate between the request and the glass. Lagoon always asks; the
+        // Every gate between the request and the glass. Lagoon always asks. The
         // system's Match Content setting decides.
         if let request = engine.displayMatchRequest {
             lines.append(String(

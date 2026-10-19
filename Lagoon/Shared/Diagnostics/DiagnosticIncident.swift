@@ -18,7 +18,7 @@ nonisolated enum DiagnosticIncidentCode: String, Sendable, CaseIterable {
     case playbackFrozen = "playback.frozen"
     /// Ended without error but with counters over the thresholds.
     case playbackDegraded = "playback.degraded"
-    /// A server-side subtitle could not be loaded; playback continued.
+    /// A server-side subtitle could not be loaded. Playback continued.
     case playbackSubtitleLoadFailed = "playback.subtitleLoadFailed"
     /// The next episode did not take over.
     case playbackHandoffFailed = "playback.handoffFailed"

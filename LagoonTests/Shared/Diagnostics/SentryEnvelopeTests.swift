@@ -102,7 +102,7 @@ struct SentryTransportPolicyTests {
     @Test func responsesAreClassified() {
         let policy = SentryTransportPolicy.standard
         #expect(policy.outcome(status: 200, headers: [:]) == .accepted(pauseFor: nil))
-        // Sentry can ask for a pause on a success; the next envelope waits.
+        // Sentry can ask for a pause on a success. The next envelope waits.
         #expect(policy.outcome(status: 200, headers: ["X-Sentry-Rate-Limits": "60:error:organization"]) == .accepted(pauseFor: 60))
         #expect(policy.outcome(status: 200, headers: ["X-Sentry-Rate-Limits": "60:transaction:organization"]) == .accepted(pauseFor: nil))
         #expect(policy.outcome(status: 429, headers: ["Retry-After": "120"]) == .retryAfter(120))

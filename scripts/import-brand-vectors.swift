@@ -3,7 +3,7 @@
 //
 //   scripts/import-brand-vectors.swift ../lagoon-branding
 //
-// Covers the in-app vectors (onboarding lockup, jellyfish accent);
+// Covers the in-app vectors (onboarding lockup, jellyfish accent).
 // import-artwork.swift does the raster icon and Top Shelf assets.
 //
 // Each PDF is cropped to its ink, still as vector. The package pages have

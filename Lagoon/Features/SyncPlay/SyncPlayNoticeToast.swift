@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// The viewer-facing text of a notice; nil when the picture already says it.
+/// The viewer-facing text of a notice, nil when the picture already says it.
 extension SyncPlayNotice {
     var message: String? {
         switch self {

@@ -40,7 +40,7 @@ nonisolated struct ServerRefreshGate {
     }
 
     /// The shared clock advanced. True, and the generation is taken, when
-    /// this destination may refresh now; otherwise it waits to be replayed.
+    /// this destination may refresh now. Otherwise it waits to be replayed.
     mutating func takesGeneration(_ generation: Int, _ conditions: Conditions) -> Bool {
         guard canRefresh(conditions) else { return false }
         handledGeneration = generation

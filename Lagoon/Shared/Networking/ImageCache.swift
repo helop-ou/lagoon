@@ -26,7 +26,7 @@ final class ImageCache {
     private let downloader: BoundedDownload
     #if os(iOS)
     /// Where a downloaded title keeps a server image on disk, if it does.
-    /// Set by the Downloads feature at launch; nil reads everything from the
+    /// Set by the Downloads feature at launch, nil reads everything from the
     /// network.
     var localArtworkURL: (@Sendable (URL) -> URL?)?
     #endif

@@ -33,7 +33,7 @@ nonisolated enum JellyfinError: LocalizedError {
 
 /// Thin async HTTP client for a single Jellyfin server.
 ///
-/// Jellyfin JSON is PascalCase; the decoder and encoder convert key casing,
+/// Jellyfin JSON is PascalCase. The decoder and encoder convert key casing,
 /// so models never add CodingKeys for casing.
 final class JellyfinClient {
     static let clientName = "Lagoon"
@@ -72,14 +72,14 @@ final class JellyfinClient {
     private var policyFetch: PolicyFetch?
 
     /// For view code that must answer synchronously, e.g. a menu body. `nil`
-    /// until resolved; a `.task` should call `canDownloadContent()` to warm it.
+    /// until resolved. A `.task` should call `canDownloadContent()` to warm it.
     var cachedContentDownloadingAllowed: Bool? { contentDownloadingAllowed }
     var cachedVideoTranscodingAllowed: Bool? { videoTranscodingAllowed }
 
     /// Internal so tests can check its cache and redirect configuration.
     let session: URLSession
     private let downloads: BoundedDownload
-    /// The proxy headers this client sends; see `ServerHeaderStore`.
+    /// The proxy headers this client sends. See `ServerHeaderStore`.
     let headerStore: ServerHeaderStore
     /// Where failed requests are recorded and reported.
     let diagnostics: DiagnosticsHub
@@ -113,7 +113,7 @@ final class JellyfinClient {
         self.diagnostics = diagnostics
         let config = sessionConfiguration
         config.timeoutIntervalForRequest = 30
-        // API calls bypass the URL cache; see `request(for:)`.
+        // API calls bypass the URL cache. See `request(for:)`.
         config.urlCache = nil
         session = URLSession(
             configuration: config,
@@ -169,10 +169,10 @@ final class JellyfinClient {
     /// Returns the fetched user, or nil when the server didn't answer (the
     /// caller falls back to whatever it has cached). Throws
     /// `CancellationError` when this session stopped being current while
-    /// the request was in flight; a caller must not apply that answer.
+    /// the request was in flight. A caller must not apply that answer.
     private func refreshPolicy() async throws -> UserDto? {
         let fetch: PolicyFetch
-        // Only join a fetch started for the still-current session; one
+        // Only join a fetch started for the still-current session. One
         // left over from an account switch answers the wrong account.
         if let policyFetch, policyFetch.identity == sessionIdentity {
             fetch = policyFetch
@@ -242,7 +242,7 @@ final class JellyfinClient {
     }
 
     /// Whether the server will build a High/Standard transcoded download.
-    /// Unknown means no; administrators always pass.
+    /// Unknown means no. Administrators always pass.
     func canTranscodeForDownload() async -> Bool {
         if let videoTranscodingAllowed { return videoTranscodingAllowed }
         return await refreshVideoTranscodingPermission() ?? false
@@ -475,7 +475,7 @@ final class JellyfinClient {
     private struct PreparedRequest {
         let request: URLRequest
         let session: SessionIdentity?
-        /// Failures are expected and go unreported; see `get(_:query:probe:)`.
+        /// Failures are expected and go unreported. See `get(_:query:probe:)`.
         var probe = false
     }
 

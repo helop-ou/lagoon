@@ -47,7 +47,7 @@ extension PlayerRegressionUITests {
         expectation(for: NSPredicate(format: "value != '0 items'"), evaluatedWith: library)
         waitForExpectations(timeout: 20)
 
-        // Library may restore All or Shows from an earlier visit; pick Movies.
+        // Library may restore All or Shows from an earlier visit. Pick Movies.
         let picker = app.descendants(matching: .any)["library.kind"]
         func pickerOwnsFocus() -> Bool {
             picker.hasFocus || picker.descendants(matching: .any)
@@ -265,7 +265,7 @@ extension PlayerRegressionUITests {
             XCTFail("Could not focus a card in the native Genres shelf")
             return
         }
-        // Prefer Action when the demo has it; any genre takes the same path.
+        // Prefer Action when the demo has it. Any genre takes the same path.
         let actionGenre = genreButtons.matching(
             NSPredicate(format: "label ==[c] %@", "Action genre")
         ).firstMatch
@@ -311,7 +311,7 @@ extension PlayerRegressionUITests {
 
         let detail = app.descendants(matching: .any)["detail.item.\(selectedPosterID)"]
         XCTAssertTrue(detail.waitForExistence(timeout: 8), "Did not open \(selectedPosterName)")
-        // Detail could flash and pop back to the genre; wait to prove it stays.
+        // Detail could flash and pop back to the genre. Wait to prove it stays.
         Thread.sleep(forTimeInterval: 2)
         XCTAssertTrue(detail.exists, "Detail popped behind the genre library")
 
@@ -331,7 +331,7 @@ extension PlayerRegressionUITests {
         remote.press(.select)
         XCTAssertTrue(library.waitForExistence(timeout: 8))
 
-        // The demo catalogue changes; only assert scrolling when there are enough rows.
+        // The demo catalogue changes. Only assert scrolling when there are enough rows.
         if posterButtons.count > 8 {
             for _ in 0..<6 {
                 remote.press(.down)

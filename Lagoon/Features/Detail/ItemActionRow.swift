@@ -1,14 +1,14 @@
 import SwiftUI
 
-/// Watched and favourite toggles above the play buttons. State is optimistic;
-/// see `OptimisticToggleState`.
+/// Watched and favourite toggles above the play buttons. State is optimistic.
+/// See `OptimisticToggleState`.
 struct ItemActionRow: View {
     /// What the checkmark acts on: on a series page, the episode Play starts.
     let playedItem: MediaItem
     /// What the star acts on: on a series page, the show.
     let favoriteItem: MediaItem
     /// Re-fetches after the server accepts a change. Returns whether the
-    /// re-fetch reached the screen; only then does the server's flag replace
+    /// re-fetch reached the screen. Only then does the server's flag replace
     /// the viewer's choice.
     let onChange: () async -> Bool
 

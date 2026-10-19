@@ -6,10 +6,10 @@ import SwiftUI
 struct PlayerTransportOverlay: View {
     @PlayerEngineRef var engine: any PlayerEngine
     let info: PlayerItemInfo
-    /// The view stays mounted at zero opacity; this tells the tick-rate
+    /// The view stays mounted at zero opacity. This tells the tick-rate
     /// leaves to stop following the playhead while hidden.
     let isVisible: Bool
-    /// The virtual playhead while scrubbing; nil otherwise.
+    /// The virtual playhead while scrubbing, nil otherwise.
     let scrubTarget: Double?
     /// Swaps the remaining time for the clock time the item will finish at.
     let showsEndTime: Bool
@@ -119,13 +119,13 @@ struct PlayerTransportOverlay: View {
             endPoint: .bottom
         )
         .ignoresSafeArea()
-        // Taps here belong to the surface; only the iOS bar takes
+        // Taps here belong to the surface. Only the iOS bar takes
         // touch.
         .allowsHitTesting(false)
     }
 }
 
-/// Clear glass rail with played and buffered ranges; a marker shows while
+/// Clear glass rail with played and buffered ranges. A marker shows while
 /// scrubbing. One of the two tick-rate leaves, so keep it a separate view.
 struct PlayerScrubber: View {
     @PlayerEngineRef var engine: any PlayerEngine
@@ -252,7 +252,7 @@ struct PlayerScrubber: View {
         }
     }
 
-    /// Trickplay above the rail; the timestamp is in `PlayerTimelineLabels`.
+    /// Trickplay above the rail. The timestamp is in `PlayerTimelineLabels`.
     @ViewBuilder
     private func scrubPreview(in width: CGFloat) -> some View {
         Group {
@@ -311,7 +311,7 @@ struct PlayerScrubber: View {
         return chapters.last { $0.start <= target }
     }
 
-    /// In the tiles' own aspect ratio; not every library is 16:9.
+    /// In the tiles' own aspect ratio. Not every library is 16:9.
     private var previewSize: CGSize? {
         guard trickplay?.isUnavailable != true,
               let source = trickplaySource, source.tileSize.width > 0, source.tileSize.height > 0 else { return nil }
@@ -356,7 +356,7 @@ struct PlayerScrubber: View {
     #endif
 }
 
-/// Elapsed time follows the rail; remaining time is pinned trailing and
+/// Elapsed time follows the rail. Remaining time is pinned trailing and
 /// hides on overlap. The second tick-rate leaf.
 struct PlayerTimelineLabels: View {
     @PlayerEngineRef var engine: any PlayerEngine
@@ -499,7 +499,7 @@ enum ScrubMetrics {
     static let markerHeight: CGFloat = 26
     static let timeLabelWidth: CGFloat = 150
     static let timeLabelHeight: CGFloat = 36
-    /// Smaller than the 320 px tile on purpose; 320 pt dominates the TV.
+    /// Smaller than the 320 px tile on purpose: 320 pt dominates the TV.
     static let previewWidth: CGFloat = 240
     #else
     static let markerWidth: CGFloat = 3

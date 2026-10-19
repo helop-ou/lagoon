@@ -18,7 +18,7 @@ nonisolated enum LibraryMediaKind: String, Codable, CaseIterable, Identifiable {
         case .shows: [.series]
         }
     }
-    /// Movie and show libraries; Lagoon browses no other collection type.
+    /// Movie and show libraries. Lagoon browses no other collection type.
     static func isBrowsable(collectionType: String?) -> Bool {
         ["movies", "tvshows"].contains(collectionType ?? "")
     }
@@ -173,7 +173,7 @@ nonisolated struct LibrarySelection: Codable, Equatable, Hashable {
         if let decade, !available.contains(decade) { self.decade = nil }
     }
 
-    /// Per account; `AccountLocalData` removes it with the account.
+    /// Per account. `AccountLocalData` removes it with the account.
     static let keyPrefix = "library.selection."
 
     static func restore(accountID: String, defaults: UserDefaults = .standard) -> Self {

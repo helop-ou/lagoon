@@ -7,7 +7,7 @@ struct ListPlayback {
     /// The starting title is part-watched, so Play reads Resume.
     let resumes: Bool
 
-    /// Movies and episodes in the list's order; a series inside a collection
+    /// Movies and episodes in the list's order. A series inside a collection
     /// is skipped rather than expanded. Nil when nothing in it can play.
     ///
     /// Play resumes the part-watched title furthest along, else starts the

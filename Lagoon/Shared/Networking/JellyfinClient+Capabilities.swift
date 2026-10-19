@@ -13,7 +13,7 @@ extension JellyfinClient {
     /// Registers this session's capabilities.
     ///
     /// `SupportedCommands` stays empty until the player handles
-    /// `GeneralCommand`; otherwise other clients offer controls that do
+    /// `GeneralCommand`. Otherwise other clients offer controls that do
     /// nothing. SyncPlay works without this call.
     func reportCapabilities() async throws {
         try await postVoid("Sessions/Capabilities/Full", body: ClientCapabilities(

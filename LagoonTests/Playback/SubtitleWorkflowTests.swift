@@ -71,7 +71,7 @@ struct SubtitleWorkflowTests {
         #expect(SubtitleDownloadError.classify(
             JellyfinError.server(status: 401, message: "Unauthorized")) == .sessionExpired)
 
-        // A reported 5xx is still transient; a reported 4xx is not.
+        // A reported 5xx is still transient. A reported 4xx is not.
         #expect(SubtitleDownloadError.reported(status: 503, message: "busy").isRetryable)
         #expect(!SubtitleDownloadError.reported(status: 400, message: "bad request").isRetryable)
     }
@@ -94,7 +94,7 @@ struct SubtitleWorkflowTests {
         let plain = Data("  Download limit reached\n".utf8)
         #expect(JellyfinClient.serverMessage(from: plain) == "Download limit reached")
 
-        // A real Jellyfin 403 is an HTML page; never show it.
+        // A real Jellyfin 403 is an HTML page. Never show it.
         #expect(JellyfinClient.serverMessage(from: Data("<html><body>no</body></html>".utf8)) == nil)
         #expect(JellyfinClient.serverMessage(from: Data()) == nil)
 
@@ -121,7 +121,7 @@ struct SubtitleWorkflowTests {
     }
 
     @Test @MainActor func aPermissionFailureOutranksWhicheverLanguageFailedFirst() {
-        // Concurrent language searches complete out of order; a 403 explains
+        // Concurrent language searches complete out of order. A 403 explains
         // every sibling failure, so it must not be masked by a stray timeout.
         #expect(SubtitleSearchCoordinator.mostActionable([.timedOut, .notPermitted]) == .notPermitted)
         #expect(SubtitleSearchCoordinator.mostActionable([.server(500), .sessionExpired]) == .sessionExpired)
@@ -144,7 +144,7 @@ struct SubtitleWorkflowTests {
         #expect(try decode(#"{"IsAdministrator": true, "EnableSubtitleManagement": false}"#).allowsSubtitleManagement)
         #expect(try decode(#"{"IsAdministrator": true}"#).allowsSubtitleManagement)
 
-        // Unknown is not a denial; the server answers 403 if it disagrees.
+        // Unknown is not a denial. The server answers 403 if it disagrees.
         #expect(try decode(#"{}"#).allowsSubtitleManagement)
         #expect(try decode(#"{"IsAdministrator": false}"#).allowsSubtitleManagement)
     }
@@ -402,7 +402,7 @@ struct SubtitleWorkflowTests {
         coordinator.startDownload(SubtitleCandidate(forbidden))
         try await waitUntil { coordinator.phase == .notPermitted }
 
-        // Jellyfin's save path refetches from the provider; after a 403 that
+        // Jellyfin's save path refetches from the provider. After a 403 that
         // only spends quota.
         #expect(!SubtitleDownloadFixture.requests.contains {
             $0.method == "POST" && $0.path.contains("RemoteSearch")
@@ -567,7 +567,7 @@ private enum SubtitleDownloadFixture {
             status = 200
         case ("POST", "/Items/item-1/RemoteSearch/Subtitles/missing-provider-file"):
             // Jellyfin 10.11 returns 204 even when its internal provider
-            // operation throws; PlaybackInfo remains stale below.
+            // operation throws. PlaybackInfo remains stale below.
             payload = Data()
             status = 204
         case ("POST", "/Videos/item-1/Subtitles"):

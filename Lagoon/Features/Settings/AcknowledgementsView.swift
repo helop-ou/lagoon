@@ -24,7 +24,7 @@ struct AcknowledgementsView: View {
 
     #if os(tvOS)
     private var tvBody: some View {
-        // Menu leaves the licence text first; one press never skips a level.
+        // Menu leaves the licence text first. One press never skips a level.
         TVModalPanel(
             title: Text(panelTitle),
             scrollIdentity: readingLicense?.id,

@@ -2,7 +2,7 @@ import LagoonEngine
 import SwiftUI
 
 /// Observation boundary between the playback clock and the panel. Observes
-/// only what the panel shows; `Equatable` stops parent updates walking the
+/// only what the panel shows, and `Equatable` stops parent updates walking the
 /// tabs and rows. Keep both.
 struct PlayerControlPanelHost: View, Equatable {
     @PlayerEngineRef var engine: any PlayerEngine

@@ -57,7 +57,7 @@ nonisolated struct SeerrPersonCredits: Decodable, Hashable {
         case cast, crew
     }
 
-    /// A career runs to hundreds of credits; one without an id costs that
+    /// A career runs to hundreds of credits. One without an id costs that
     /// credit, not the rail.
     private struct LossyCredit: Decodable {
         let credit: SeerrPersonCredit?
@@ -118,7 +118,7 @@ nonisolated struct SeerrPersonCredits: Decodable, Hashable {
 /// cards, and the role.
 nonisolated struct SeerrPersonCredit: Decodable, Hashable {
     let media: SeerrDiscoverResult
-    /// The character for cast; crew has a job instead.
+    /// The character for cast. Crew has a job instead.
     let character: String?
     let genreIDs: [Int]
     let voteCount: Int

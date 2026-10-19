@@ -6,15 +6,15 @@ final class LibraryDecadeViewModel {
     typealias FetchYears = @MainActor (LibraryYearScope) async throws -> [Int]
 
     private(set) var scope: LibraryYearScope?
-    /// nil means no successful response yet; [] means no dated titles.
+    /// nil means no successful response yet, and [] means no dated titles.
     private(set) var decades: [LibraryDecade]?
     private(set) var isLoading = false
     private(set) var loadFailed = false
     private var revision = 0
 
     func load(scope: LibraryYearScope, fetch: FetchYears) async {
-        // A cancelled task may still be unwinding when its replacement starts;
-        // supersede it even for the same scope rather than skip on isLoading.
+        // A cancelled task may still be unwinding when its replacement starts.
+        // Supersede it even for the same scope rather than skip on isLoading.
         guard !Task.isCancelled else { return }
         revision &+= 1
         let revision = revision
@@ -29,7 +29,7 @@ final class LibraryDecadeViewModel {
             decades = LibraryDecade.choices(years: years)
         } catch {
             guard self.revision == revision, !Task.isCancelled else { return }
-            // Keep this scope's last good list; never another library's years.
+            // Keep this scope's last good list. Never another library's years.
             loadFailed = true
         }
     }

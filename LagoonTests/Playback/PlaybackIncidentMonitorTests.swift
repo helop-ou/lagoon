@@ -108,7 +108,7 @@ struct PlaybackIncidentMonitorTests {
         let failed = sink.incidents[1]
         #expect(failed.fields["outcome"] == .string("exhausted"))
         #expect(failed.fingerprint == ["playback.failed", "delivery", "read", "ffmpeg", "-1094995529"])
-        // The attempt's facts ride along as tags; the title and path do not.
+        // The attempt's facts ride along as tags. The title and path do not.
         #expect(failed.fields["videoCodec"] == .string("hevc"))
         #expect(failed.fields["videoRange"] == .string("HDR10"))
         #expect(failed.fields["audioCodec"] == .string("eac3"))
@@ -300,7 +300,7 @@ struct PlaybackIncidentMonitorTests {
         enabled.withLock { $0 = true }
         notifications.post(name: UserDefaults.didChangeNotification, object: nil)
         try await Self.waitUntil { clock.requests == 4 }
-        // The cancelled timer returns after opt-in; it must not write a tick
+        // The cancelled timer returns after opt-in. It must not write a tick
         // or cancel the new timer.
         clock.advance()
         clock.advance()
@@ -391,7 +391,7 @@ struct PlaybackIncidentMonitorTests {
         monitor.playbackReady(engine: outgoing)
         try await Self.waitUntil { clock.requests == 1 }
 
-        // The preference callback is queued on MainActor; opt back in before
+        // The preference callback is queued on MainActor. Opt back in before
         // it runs.
         enabled.withLock { $0 = false }
         notifications.post(name: UserDefaults.didChangeNotification, object: nil)

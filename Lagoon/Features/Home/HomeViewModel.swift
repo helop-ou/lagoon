@@ -38,7 +38,7 @@ final class HomeViewModel {
     var showGenreShelf: [GenreShelfItem] = []
     var heroItems: [MediaItem] = []
     /// Random library sample, fetched only when every other hero source is
-    /// empty; kept so a refresh does not reshuffle the hero.
+    /// empty. Kept so a refresh does not reshuffle the hero.
     private var librarySample: [MediaItem] = []
     var curatedRails: [String: LibraryRail] = [:]
     var collections: [CollectionShelfItem] = []
@@ -61,7 +61,7 @@ final class HomeViewModel {
     private var loadedAccountID: String?
     private var loadGeneration = 0
     private var isRefreshing = false
-    /// Discovery rails load after the primary content; held here so an
+    /// Discovery rails load after the primary content. Held here so an
     /// account switch can cancel them, and readable so tests can await them.
     private(set) var discoveryTasks: [Task<Void, Never>] = []
 
@@ -132,7 +132,7 @@ final class HomeViewModel {
         var finished: Set<String> = []
     }
 
-    /// Throws only when the library list fails; that is the one request
+    /// Throws only when the library list fails. That is the one request
     /// Home cannot draw without.
     private func fetchPrimaryContent(
         client: JellyfinClient,
@@ -377,7 +377,7 @@ final class HomeViewModel {
         let refreshed = await loadLatestRails(libraries: libraries, client: client)
         guard isCurrent(generation, identity: identity, client: client) else { return }
 
-        // A failed request keeps the rail's last value; a successful empty
+        // A failed request keeps the rail's last value. A successful empty
         // one clears it.
         let freshByID = Dictionary(uniqueKeysWithValues: refreshed.map { ($0.id, $0) })
         let previousByID = Dictionary(uniqueKeysWithValues: latestRails.map { ($0.id, $0) })
@@ -387,7 +387,7 @@ final class HomeViewModel {
         heroItems = HeroSelection.refreshed(current: heroItems, tiers: heroTiers)
     }
 
-    /// Hero sources in priority order; see `HeroSelection`. No collections:
+    /// Hero sources in priority order. See `HeroSelection`. No collections:
     /// the hero routes to an item, not a collection page.
     private var heroTiers: [[MediaItem]] {
         [
@@ -535,7 +535,7 @@ final class HomeViewModel {
     }
 
     private func publishCuratedRails(_ resolved: [LibraryRail]) {
-        // Top 10 loads separately so its scan never delays these; keep its rows.
+        // Top 10 loads separately so its scan never delays these. Keep its rows.
         let topTen = curatedRails.filter {
             $0.key == HomeCuratedRows.ID.topMovies || $0.key == HomeCuratedRows.ID.topShows
         }
@@ -605,7 +605,7 @@ final class HomeViewModel {
     }
 
     /// Reads where the viewer is in each stored list. Each list is fetched
-    /// for the server's watch state; one that cannot be fetched is left
+    /// for the server's watch state. One that cannot be fetched is left
     /// alone, one the server no longer has is forgotten.
     private func loadQueueSnapshot(client: JellyfinClient) async -> QueueSnapshot? {
         guard let entries = try? await client.queueProgress() else { return nil }
@@ -672,7 +672,7 @@ final class HomeViewModel {
         )
     }
 
-    /// The Playlists row; see `PlaylistShelf.load`.
+    /// The Playlists row. See `PlaylistShelf.load`.
     private func loadPlaylists(client: JellyfinClient, generation: Int) async {
         let identity = client.sessionIdentity
         guard let shelf = await PlaylistShelf.load(client: client, limit: CollectionShelf.maximumVisible),
@@ -695,7 +695,7 @@ final class HomeViewModel {
         )
     }
 
-    /// Movies only; mixing in television blurs the row.
+    /// Movies only. Mixing in television blurs the row.
     private func spotlightRail(decade year: Int?, client: JellyfinClient) async -> LibraryRail? {
         guard let year else { return nil }
         return await rail(
@@ -709,7 +709,7 @@ final class HomeViewModel {
     }
 
     /// "Because You Watched X". Tries seeds most recent first, skipping ones
-    /// too short to count (see `minimumSeedRuntime`); the first full rail wins.
+    /// too short to count (see `minimumSeedRuntime`). The first full rail wins.
     private func similarRail(seeds: [MediaItem], client: JellyfinClient) async -> LibraryRail? {
         let identity = client.sessionIdentity
         let candidates = seeds

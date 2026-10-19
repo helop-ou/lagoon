@@ -50,7 +50,7 @@ struct ItemDetailView: View {
         })
     }
 
-    /// A failed refresh keeps what is on screen; a successful one replaces
+    /// A failed refresh keeps what is on screen. A successful one replaces
     /// the whole value, including progress from other clients.
     private func loadFromServer() async {
         let generation = serverSync.generation
@@ -69,7 +69,7 @@ struct ItemDetailView: View {
                includeTypes: [.movie],
                limit: 10
            ) {
-            // The demo server's recommendations are sparse; real catalog items
+            // The demo server's recommendations are sparse. Real catalog items
             // let the regression exercise Detail -> Detail -> Back.
             return Array(page.items.filter { $0.id != item.id }.prefix(6))
         }
@@ -78,7 +78,7 @@ struct ItemDetailView: View {
     }
 
     /// A downloaded title's own position outranks the server's, which may be
-    /// stale or unreachable; the controller applies the same order.
+    /// stale or unreachable. The controller applies the same order.
     private var resumeTicks: Int64? {
         #if os(iOS)
         if let local = DownloadStore.shared.entry(for: displayed.id)?.localPositionTicks, local > 0 {
@@ -89,7 +89,7 @@ struct ItemDetailView: View {
         return ticks
     }
 
-    /// Play leads so it takes first focus; otherwise Select on arrival marks
+    /// Play leads so it takes first focus. Otherwise Select on arrival marks
     /// the film watched instead of playing it.
     private var playButtons: some View {
         DetailPlayActions(

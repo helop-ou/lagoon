@@ -4,7 +4,7 @@ import Network
 #endif
 
 /// Diagnoses the endpoint the viewer tried. Only Network's explicit path
-/// reason proves local-network denial; timeouts and DNS failures do not.
+/// reason proves local-network denial. Timeouts and DNS failures do not.
 nonisolated enum LocalNetworkAccess {
     enum Failure: LocalizedError {
         case denied

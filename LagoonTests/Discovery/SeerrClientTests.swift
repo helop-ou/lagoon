@@ -70,7 +70,7 @@ struct SeerrClientTests {
         #expect(SeerrMockURLProtocol.requests.isEmpty)
         #expect(!store.isLoading)
         #expect(store.configuredURL == nil)
-        // The proxy's own path ends in /api/v1; strip the user's suffix once.
+        // The proxy's own path ends in /api/v1. Strip the user's suffix once.
         try await store.connect(to: "seerr.test/proxy%2Fname/api/v1/api/v1/")
         let root = "http://seerr.test:5055/proxy%2Fname/api/v1"
         #expect(store.configuredURL?.absoluteString == root)
@@ -103,8 +103,8 @@ struct SeerrClientTests {
         #expect(SeerrMockURLProtocol.requests.first?.query?.contains("mediaType=movie") == true)
     }
 
-    /// TMDB multi-search also returns `collection` and may add more types;
-    /// an unknown one costs that result its type, not the whole page.
+    /// TMDB multi-search also returns `collection` and may add more types.
+    /// An unknown one costs that result its type, not the whole page.
     @Test func searchSurvivesMediaTypesThisBuildDoesNotKnow() throws {
         let payload = #"""
         {"page":1,"totalPages":1,"totalResults":4,"results":[

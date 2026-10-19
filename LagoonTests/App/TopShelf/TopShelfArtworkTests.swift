@@ -23,7 +23,7 @@ struct TopShelfArtworkTests {
 
     @Test func aComposedCarouselImageEncodesAsJPEG() {
         // `jpegData` returns nil for an extended-range bitmap, which only an
-        // HDR television hands out; the SDR simulator encodes either way, so
+        // HDR television hands out. The SDR simulator encodes either way, so
         // pin the 8-bit standard range the renderer is given.
         let format = TopShelfArtwork.opaqueFormat()
         #expect(format.preferredRange == .standard)
@@ -60,7 +60,7 @@ struct TopShelfArtworkTests {
 
     @Test func artworkLivesSomewhereTvOSWillLetItBeWritten() throws {
         // Apple TV allows 500 KB of persistent storage and the rest must be
-        // purgeable; the container root is refused on device, not in the sim.
+        // purgeable. The container root is refused on device, not in the sim.
         #expect(TopShelfArtwork.containerSubpath.hasPrefix("Library/Caches/"))
 
         // The extension hard-codes the container and directory it reads.

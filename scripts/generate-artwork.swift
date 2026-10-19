@@ -121,7 +121,7 @@ func drawLagoonMark(_ cg: CGContext, _ size: CGSize, center: CGPoint, diameter: 
     let ringRadius = radius * 1.22
     let ringWidth = diameter * 0.15
 
-    // Sandbar first so its shadow lands behind; the gap (~28°–80°) is the inlet.
+    // Sandbar first so its shadow lands behind. The gap (~28°–80°) is the inlet.
     cg.setShadow(offset: CGSize(width: 0, height: -diameter * 0.04), blur: diameter * 0.18, color: NSColor.black.withAlphaComponent(0.35).cgColor)
     cg.setStrokeColor(sand.cgColor)
     cg.setLineWidth(ringWidth)

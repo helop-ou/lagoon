@@ -279,7 +279,7 @@ struct SeerrSettingsView: View {
 
     private func connect() {
         guard !isWorking else { return }
-        // A saved connection may restore after the prefill; retry it when the field is empty.
+        // A saved connection may restore after the prefill. Retry it when the field is empty.
         let input = serverAddress.trimmingCharacters(in: .whitespacesAndNewlines)
         let address = input.isEmpty ? seerr.configuredURL?.absoluteString ?? "" : input
         // Saved before the first request, which the proxy answers too.

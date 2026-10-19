@@ -38,7 +38,7 @@ final class PlaybackAudioSession {
         #if os(iOS)
         try session.setCategory(.playback, mode: .moviePlayback, policy: .longFormVideo, options: [])
         #else
-        // longFormVideo is an iOS route-sharing policy; tvOS already owns the
+        // longFormVideo is an iOS route-sharing policy. tvOS already owns the
         // long-form route.
         try session.setCategory(.playback, mode: .moviePlayback, options: [])
         #endif
@@ -198,7 +198,7 @@ final class PlaybackAudioSession {
 
     /// Apple recommends pausing for old-device-unavailable, but only a
     /// private output disappearing should pause here. tvOS changes HDMI timing
-    /// when matching content; treating HDMI as headphones paused every 24 Hz
+    /// when matching content. Treating HDMI as headphones paused every 24 Hz
     /// movie as it began.
     nonisolated static func shouldPauseAfterRouteLoss(
         reason: AVAudioSession.RouteChangeReason,

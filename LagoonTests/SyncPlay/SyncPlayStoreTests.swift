@@ -102,7 +102,7 @@ struct SyncPlayStoreTests {
 
         await store.rejoinPlayback()
 
-        // 30 s plus the ten that have passed; no server clock, so local time.
+        // 30 s plus the ten that have passed. No server clock, so local time.
         let start = try #require(store.pendingPlayRequest?.startSeconds)
         #expect(start >= 40 && start < 42)
     }

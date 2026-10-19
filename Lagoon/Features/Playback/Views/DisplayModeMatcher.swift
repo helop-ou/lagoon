@@ -51,7 +51,7 @@ enum DisplayModeMatcher {
         // be where expected, and nil silently disables matching.
         let all = windows()
         let window = all.first(where: \.isKeyWindow) ?? all.first
-        // The simulator's UIWindow lacks AVKit's category; calling it
+        // The simulator's UIWindow lacks AVKit's category. Calling it
         // throws doesNotRecognizeSelector.
         guard let window, window.responds(to: #selector(getter: UIWindow.avDisplayManager)) else {
             return nil

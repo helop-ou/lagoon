@@ -194,7 +194,7 @@ struct DiagnosticsHubTests {
     }
 
     @Test func aFullIncidentKeepsEveryFieldUnderTheCap() {
-        // A failure carries about fifty keys; none may fall off the end.
+        // A failure carries about fifty keys. None may fall off the end.
         var fields: [String: DiagnosticValue] = [:]
         for key in ["attempt", "audioChannels", "audioCodec", "audioLead", "audioPath", "audioQueued", "audioStalls",
                     "audioStarvation", "availableMB", "bitDepth", "bitrate", "buffering", "cached", "cause", "container",

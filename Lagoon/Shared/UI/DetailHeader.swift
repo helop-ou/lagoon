@@ -9,7 +9,7 @@ struct DetailHeader<Buttons: View>: View {
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     #endif
     /// On a series page, the episode Play would start. Its label and synopsis
-    /// replace the show's; the title art stays the show's.
+    /// replace the show's. The title art stays the show's.
     var upNext: MediaItem?
     /// Keep the synopsis's height fixed while `upNext` changes.
     var reservesOverviewLines = false
@@ -60,7 +60,7 @@ struct DetailHeader<Buttons: View>: View {
         return parts
     }
 
-    /// Empty until the single-item fetch lands; only it carries MediaSources.
+    /// Empty until the single-item fetch lands. Only it carries MediaSources.
     private var qualityTokens: [String] {
         item.mediaSources?.first?.qualityTokens ?? []
     }

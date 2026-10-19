@@ -3,10 +3,10 @@ import SwiftUI
 /// Watch Together: server groups, starting one, and the joined group.
 ///
 /// Presented from a detail page, so starting a group always queues that
-/// item; an empty queue tells other members nothing.
+/// item. An empty queue tells other members nothing.
 ///
 /// **Nothing here is private.** Every group is listed to every account that
-/// may join; the footer says so.
+/// may join. The footer says so.
 struct WatchTogetherSheet: View {
     let item: MediaItem
     /// The resume point Play would use, so a group doesn't restart the film.

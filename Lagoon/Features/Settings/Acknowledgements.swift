@@ -2,7 +2,7 @@ import Foundation
 import LagoonEngine
 
 /// One third-party component Lagoon ships, curated by hand. A new native
-/// dependency needs an entry here and its licence under `Resources/Licenses`;
+/// dependency needs an entry here and its licence under `Resources/Licenses`.
 /// `AcknowledgementsTests` checks every engine binary target is covered.
 nonisolated struct ThirdPartyComponent: Identifiable, Equatable, Sendable {
     let id: String
@@ -34,7 +34,7 @@ nonisolated enum Acknowledgements {
             summary: "Reads the container and decodes audio and video the hardware cannot.",
             licenseName: "GNU LGPL 2.1 or later",
             copyright: "Copyright (c) 2000-2026 the FFmpeg developers",
-            // Patched, so upstream's tag is not the corresponding source; the
+            // Patched, so upstream's tag is not the corresponding source. The
             // engine release carries upstream's tarball, the patch and the
             // build script together.
             sourceURL: URL(string: "https://github.com/helop-ou/lagoon-engine/releases/tag/\(EngineVersion.current)")!,

@@ -99,7 +99,7 @@ struct TopShelfPayloadTests {
     }
 
     @Test func standardDefinitionEarnsNoResolutionBadgeAtAll() throws {
-        // Apple offers only HD and 4K; a DVD rip claims neither.
+        // Apple offers only HD and 4K. A DVD rip claims neither.
         let movie = try item("""
         {"Id":"m","Type":"Movie","MediaSources":[{"Id":"s","MediaStreams":[
             {"Type":"Video","Width":720,"VideoRangeType":"SDR"}
@@ -179,7 +179,7 @@ struct TopShelfPayloadTests {
 
     @Test func theExtensionsActionLinksAreOnesTheAppFollows() throws {
         // Build each link from the hosts and query names the extension
-        // writes; the app must act on every one.
+        // writes. The app must act on every one.
         let provider = try TopShelfExtensionSource()
         let hosts = provider.captures(of: #"actionURL\("(\w+)""#)
         let queryNames = provider.captures(of: #"URLQueryItem\(name: "(\w+)""#)

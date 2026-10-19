@@ -374,7 +374,7 @@ struct ProfilePortrait: View {
 
     var body: some View {
         let pixels = ArtworkSizing.pixels(for: size, displayScale: displayScale)
-        // Keep the fill under the picture; a transparent PNG would float.
+        // Keep the fill under the picture. A transparent PNG would float.
         ZStack {
             Circle().fill(fill.gradient)
             CachedAsyncImage(url: account.avatarURL(maxWidth: pixels), maxPixelSize: pixels) { image in

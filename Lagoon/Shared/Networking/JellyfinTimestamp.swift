@@ -51,7 +51,7 @@ nonisolated enum JellyfinTimestamp {
         guard time.count == 3,
               let hour = integer(time[0], digits: 2), (0...23).contains(hour),
               let minute = integer(time[1], digits: 2), (0...59).contains(minute),
-              // 60 is a leap second; the calendar rolls it forward.
+              // 60 is a leap second. The calendar rolls it forward.
               let second = integer(time[2], digits: 2), (0...60).contains(second) else { return nil }
 
         var components = DateComponents()

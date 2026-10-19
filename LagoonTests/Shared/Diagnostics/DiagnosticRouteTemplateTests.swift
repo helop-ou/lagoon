@@ -25,7 +25,7 @@ struct DiagnosticRouteTemplateTests {
         #expect(DiagnosticRouteTemplate.template(path: "/media/jellyfinstuff/Items", basePath: "/media/jellyfin") == "media/jellyfinstuff/Items")
     }
 
-    /// Seerr mounts every route under `api/v1`; blanking `v1` to `{id}` merges them.
+    /// Seerr mounts every route under `api/v1`. Blanking `v1` to `{id}` merges them.
     @Test func versionSegmentsSurviveSoSeerrRoutesStayDistinct() {
         #expect(DiagnosticRouteTemplate.template(path: "/api/v1/search") == "api/v1/search")
         #expect(DiagnosticRouteTemplate.template(path: "/api/v1/movie/603") == "api/v1/movie/{id}")

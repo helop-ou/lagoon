@@ -7,7 +7,7 @@ import Testing
 /// overstating formats).
 ///
 /// `scripts/generate-codec-support.sh` runs this and copies the result into
-/// `docs/codec-support.md`; `--check` fails on drift instead, and so does
+/// `docs/codec-support.md`. `--check` fails on drift instead, and so does
 /// `theCommittedDocumentMatchesTheProfile`.
 @Suite("Codec support document")
 struct CodecSupportDocTests {

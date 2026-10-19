@@ -84,7 +84,7 @@ struct PlayerSubtitleOverlay: View {
         }
     }
 
-    /// The first cue keeps `player.subtitle.text`; the rest are suffixed.
+    /// The first cue keeps `player.subtitle.text`. The rest are suffixed.
     static func subtitleIdentifier(_ index: Int) -> String {
         index == 0 ? "player.subtitle.text" : "player.subtitle.text.\(index)"
     }

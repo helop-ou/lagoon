@@ -15,12 +15,12 @@
 #   --udid <udid>    target simulator (default: booted)
 #   --set key=bool   app default to write before each run, for A/B tests
 #   --window <s>     seconds to wait for the window (default 60). The app
-#                    owns the real window; this only sets the wait.
+#                    owns the real window. This only sets the wait.
 #
 # Measurement rules:
-#   * same title, start position and media-time window every run;
+#   * same title, start position and media-time window every run.
 #   * leave the simulator untouched during a window (screenshots force render
-#     captures and corrupt the numbers);
+#     captures and corrupt the numbers).
 #   * 3+ runs, because single runs mean nothing at this effect size.
 #
 # The app does the measuring (10 s warmup + 60 s window on media time) and
@@ -117,7 +117,7 @@ for run in $(seq 1 "$runs"); do
     echo "run $run/$runs: \"$title\"${year:+ ($year)} at ${position}s — hands off the simulator for ${wait_seconds}s"
     sleep "$wait_seconds"
 
-    # The simulator has its own log store; the host's `log show` misses these.
+    # The simulator has its own log store. The host's `log show` misses these.
     line=$(xcrun simctl spawn "$udid" log show --last "$((wait_seconds + 30))s" --signpost \
         --predicate "subsystem == \"$SUBSYSTEM\" AND category == \"PlaybackPerformance\"" 2>/dev/null \
         | grep "Bench Result" \

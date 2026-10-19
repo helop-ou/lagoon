@@ -11,7 +11,7 @@ struct DownloadRedirectCheckTests {
 
     @Test func onlyARedirectOffTheHostOrOffHTTPSLeavesTheServer() {
         #expect(DownloadRedirectCheck.step(from: url, status: 200, location: nil) == .done(.staysOnServer))
-        // A proxy or server error is not a redirect; the transfer reports it.
+        // A proxy or server error is not a redirect. The transfer reports it.
         #expect(DownloadRedirectCheck.step(from: url, status: 403, location: nil) == .done(.staysOnServer))
         #expect(DownloadRedirectCheck.step(from: url, status: 302, location: "https://team.cloudflareaccess.com/login")
             == .done(.leavesServer))
@@ -55,9 +55,9 @@ struct DownloadRedirectCheckTests {
     }
 }
 
-/// Answers by path; an unknown path fails as if offline. A redirect comes
+/// Answers by path. An unknown path fails as if offline. A redirect comes
 /// back as the response itself, which is what refusing it yields from a real
-/// server; a URLProtocol that reports `wasRedirectedTo` never completes once
+/// server. A URLProtocol that reports `wasRedirectedTo` never completes once
 /// the redirect is refused.
 private nonisolated final class RedirectFixtureProtocol: URLProtocol, @unchecked Sendable {
     private static let lock = NSLock()

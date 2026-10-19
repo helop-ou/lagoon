@@ -130,7 +130,7 @@ struct HomeRotationTests {
     }
 
     @Test func anUnknownRuntimeIsGivenTheBenefitOfTheDoubt() throws {
-        // Servers do not always report a runtime; unknown is not short.
+        // Servers do not always report a runtime. Unknown is not short.
         let unknown = try JellyfinClient.decoder.decode(
             MediaItem.self,
             from: Data(#"{"Id":"x","Type":"Movie","Name":"Untimed"}"#.utf8)

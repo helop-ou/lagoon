@@ -8,7 +8,7 @@ import LagoonEngine
 /// `-diagnostics.sentryDSN <dsn>` overrides it for a local capture run.
 nonisolated enum DiagnosticsConfiguration {
     /// From the `LAGOON_SENTRY_DSN` build setting via Info.plist.
-    /// `scripts/upload-testflight.sh` requires it; other builds leave it empty.
+    /// `scripts/upload-testflight.sh` requires it. Other builds leave it empty.
     static let dsnInfoPlistKey = "LagoonSentryDSN"
     static let dsnOverrideKey = "diagnostics.sentryDSN"
 

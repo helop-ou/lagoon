@@ -173,7 +173,7 @@ struct PosterLayout: DynamicProperty {
 /// A paged poster grid: the `LazyVGrid` sized by `PosterLayout`, the
 /// `posterCardWidth` environment injection, and the geometry read that
 /// measures it, shared by every browse screen that pages cards. A screen
-/// keeps its own loading, error and footer chrome around this; it owns only
+/// keeps its own loading, error and footer chrome around this. It owns only
 /// the grid itself.
 struct PosterGridView<Item: Identifiable, Card: View, Trailing: View>: View {
     let items: [Item]
@@ -222,7 +222,7 @@ extension PosterGridView where Trailing == EmptyView {
 #if os(iOS)
 /// How many poster columns fit. Pure, so the Dynamic Type rule is testable.
 enum PosterGridSizing {
-    /// Larger text widens the cards; smaller text must not shrink them, or
+    /// Larger text widens the cards. Smaller text must not shrink them, or
     /// one step below the default squeezes a fourth column onto a phone.
     static func columnCount(
         availableWidth: CGFloat,

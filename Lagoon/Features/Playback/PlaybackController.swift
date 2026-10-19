@@ -16,7 +16,7 @@ private func ms(_ duration: Duration) -> Double {
 @MainActor
 final class PlaybackController {
     private(set) var engine: SampleBufferPlayerEngine?
-    /// Changes when a new engine replaces the old one; resets episode-scoped
+    /// Changes when a new engine replaces the old one. Resets episode-scoped
     /// chrome.
     private(set) var playbackIdentity = ""
     /// Identity of the hosted display layer. UI tests compare it across
@@ -78,7 +78,7 @@ final class PlaybackController {
     #endif
 
     private(set) var hudLines: [String] = []
-    /// Read through to the engine, which owns the cache; nothing here
+    /// Read through to the engine, which owns the cache. Nothing here
     /// mirrors it. HLS has no byte-range model.
     var bufferedFraction: Double? { engine?.bufferState.bufferedFraction }
     var bufferedRanges: [PlaybackBufferedRange] { engine?.bufferState.bufferedRanges ?? [] }
@@ -97,7 +97,7 @@ final class PlaybackController {
     /// A position that outranks every resume rule for one start: a SyncPlay
     /// join, or a fallback retry resuming where the failed rung stopped.
     private var startPositionOverride: Double?
-    /// Load paused at the start position; a group member is started later
+    /// Load paused at the start position. A group member is started later
     /// by `playGroup(atHostTime:)`.
     private var startsPaused = false
     /// Playing a downloaded file. Always false on tvOS.
@@ -117,7 +117,7 @@ final class PlaybackController {
     private var playMethod: PlayMethod = .directPlay
 
     var activePlayMethod: PlayMethod { playMethod }
-    /// `PlayMethod` reports remux and transcode both as `Transcode`; the
+    /// `PlayMethod` reports remux and transcode both as `Transcode`. The
     /// regression probe needs the rung to tell them apart.
     var activeDeliveryRung: PlaybackDelivery { delivery }
 
@@ -153,7 +153,7 @@ final class PlaybackController {
     /// This attempt's track selection, and what recording a choice needs.
     @ObservationIgnored private var trackPlan: PlaybackTrackPlan?
     /// Series-scoped choices that survive closing the player. Set by the
-    /// player view before the first start; nil in tests and previews.
+    /// player view before the first start, nil in tests and previews.
     @ObservationIgnored var audioTrackMemory: AudioTrackMemoryStore?
     @ObservationIgnored var subtitleTrackMemory: SubtitleTrackMemoryStore?
     private var selection = TrackSelectionSettings()
@@ -393,7 +393,7 @@ final class PlaybackController {
     }
 
     /// Per-start state. The start position and paused start are reset every
-    /// time, so a failed group start cannot leak its position; a new item
+    /// time, so a failed group start cannot leak its position. A new item
     /// also negotiates from scratch.
     private func beginStart(
         media: MediaItem,
@@ -571,7 +571,7 @@ final class PlaybackController {
     }
 
     /// Never attach a new engine to the display layer while the outgoing
-    /// synchronizer still owns it; that stalls the autoplayed episode on
+    /// synchronizer still owns it. That stalls the autoplayed episode on
     /// Apple TV.
     private func waitForPreviousEngineToRetire() async throws {
         try checkStartIsWanted()
@@ -1031,7 +1031,7 @@ final class PlaybackController {
             guard let engine, engine.duration > 0,
                   engine.duration - engine.timePosition <= 120 else { return }
         }
-        // Staging suspends the current fill; cached bytes stay readable.
+        // Staging suspends the current fill. Cached bytes stay readable.
         successorPreparation.prepare(
             itemID: next.id,
             client: client,
@@ -1140,7 +1140,7 @@ final class PlaybackController {
         engine?.suspendBufferFill()
     }
 
-    /// The file ran out. Races a running countdown; whichever arrives first
+    /// The file ran out. Races a running countdown. Whichever arrives first
     /// wins, and `playNext` guards against both. Decided here, not in
     /// the view, so a locked phone rolls on too.
     private func playbackDidFinish() {
@@ -1302,7 +1302,7 @@ final class PlaybackController {
 
     func resumeBufferFill() {
         // A successor under negotiation is about to take the link for its
-        // warm-up; the engine only refuses once warm-up has started.
+        // warm-up. The engine only refuses once warm-up has started.
         guard !successorPreparation.isPreparing else { return }
         engine?.resumeBufferFill()
     }
@@ -1365,7 +1365,7 @@ final class PlaybackController {
         lastKnownPosition = seconds
         incidents.endAttempt(engine: engine, outcome: stopOutcome)
 
-        // Keep this main-actor phase tiny; the engine does renderer flushing
+        // Keep this main-actor phase tiny. The engine does renderer flushing
         // and buffer release on its pump queue.
         os_signpost(
             .begin,
@@ -1413,7 +1413,7 @@ final class PlaybackController {
         // After teardown, so a group driver leaves a controller with no engine.
         defer { onClosed?() }
         guard let soakExitRequestedAt else { return beginStop() }
-        // Soak only (the hook is gated). `closeMs` is `beginStop()` alone;
+        // Soak only (the hook is gated). `closeMs` is `beginStop()` alone.
         // `sinceRequestMs` is the whole exit since the request.
         let closeStart = ContinuousClock.now
         let result = beginStop()
@@ -1565,7 +1565,7 @@ final class PlaybackController {
             preservingPreparedNext: true,
             delivery: next,
             startPosition: resumeAt,
-            // In a group, prime and report Ready; the server starts playback.
+            // In a group, prime and report Ready. The server starts playback.
             startPaused: groupTransport != nil
         )
     }
@@ -1719,7 +1719,7 @@ final class PlaybackController {
         )
     }
 
-    /// Why this rung is in force; empty when the ladder never ran.
+    /// Why this rung is in force. Empty when the ladder never ran.
     private var deliveryFallbackHUDLines: [String] {
         guard !deliveryFallbacks.isEmpty else { return [] }
         var lines = ["Rung:    \(delivery.rawValue)"]

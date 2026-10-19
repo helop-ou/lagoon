@@ -25,7 +25,7 @@ final class SessionExpiryUITests: XCTestCase {
             "-debug.playerRegression", "YES", "-debug.regressionBootstrapPublicDemo", "YES",
             "-debug.benchSearchTerm", "Session fixture movie", "-debug.regressionFindPlayable", "YES",
             "-debug.playbackHUD", "YES", "-playback.autoplayMode", "off",
-            // No restored identity; only launch-argument defaults change.
+            // No restored identity. Only launch-argument defaults change.
             "-accounts", "()", "-session.activeAccountId", "",
         ]
         app.launchEnvironment = ["LAGOON_REGRESSION_SERVER": address,

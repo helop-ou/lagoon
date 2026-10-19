@@ -117,7 +117,7 @@ private struct HangingSpider: View {
 }
 
 /// Ghosts crossing the page now and then, on `GhostFlight`'s schedule. Only
-/// redraws while one is in the air; a page left before the wait is over
+/// redraws while one is in the air. A page left before the wait is over
 /// never shows one.
 private struct GhostFlyby: View {
     let isStill: Bool

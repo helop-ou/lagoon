@@ -2,7 +2,7 @@ import LagoonEngine
 import SwiftUI
 
 /// Only the fill redraws as time passes. The automation owns the deadline
-/// and action; hiding or recreating this view cannot restart either one.
+/// and action. Hiding or recreating this view cannot restart either one.
 struct PlayerCountdownFill: View {
     let countdown: PlaybackCountdown?
     /// A stationary sample for the component gallery, or an idle countdown.

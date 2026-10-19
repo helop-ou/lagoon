@@ -32,7 +32,7 @@ def split_envelope(body: bytes):
     while index < len(lines) and lines[index]:
         item_header = json.loads(lines[index])
         length = item_header.get("length")
-        # Payloads are written on their own line; length is authoritative.
+        # Payloads are written on their own line. Length is authoritative.
         payload = lines[index + 1][:length] if length is not None else lines[index + 1]
         items.append((item_header, payload))
         index += 2

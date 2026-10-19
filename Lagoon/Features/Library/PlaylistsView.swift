@@ -48,7 +48,7 @@ struct PlaylistsView: View {
         } else if playlists == nil, isLoading {
             LoadingView()
         } else {
-            // The only focusable element when empty; without it Menu quits the app.
+            // The only focusable element when empty. Without it Menu quits the app.
             InlineRetryView(message: playlists == nil
                 ? String(localized: "Couldn't load your playlists.")
                 : String(localized: "You have no video playlists.")

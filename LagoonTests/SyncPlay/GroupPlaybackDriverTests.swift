@@ -17,7 +17,7 @@ struct GroupPlaybackDriverTests {
         #expect(GroupPlaybackDriver.unpauseTarget(position: 30, when: 1_000, now: 1_000) == 30)
     }
 
-    /// The start anchor absorbs half a second; a seek would re-prime for nothing.
+    /// The start anchor absorbs half a second. A seek would re-prime for nothing.
     @Test func aStartReseeksOnlyBeyondHalfASecond() {
         #expect(!GroupPlaybackDriver.startNeedsSeek(from: 10, to: 10.5))
         #expect(!GroupPlaybackDriver.startNeedsSeek(from: 10.25, to: 10))

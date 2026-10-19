@@ -6,7 +6,7 @@ import LagoonEngine
 nonisolated enum SkipMode: String, CaseIterable, Identifiable {
     /// Show the button with a countdown fill, then skip. Back/Menu cancels.
     case autoDelay
-    /// No button; skip the instant the segment is entered.
+    /// No button. Skip the instant the segment is entered.
     case instant
     /// The button waits for confirmation and never acts alone. Back dismisses.
     case button

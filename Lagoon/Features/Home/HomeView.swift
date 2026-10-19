@@ -119,7 +119,7 @@ struct HomeView: View {
         HomeSectionPreferencesStore.savedValues(accountID: session.activeAccount?.id)
     }
 
-    /// Visible row ids in order; plugin rails can sit between native rows.
+    /// Visible row ids in order. Plugin rails can sit between native rows.
     private var rowOrder: [String] {
         HomeSectionPreferenceResolver.renderOrder(
             preferences: savedHomePreferences,

@@ -67,7 +67,7 @@ struct SubtitleTrackMemoryTests {
             stream(language: "fin", title: "Finnish"),
             stream(language: "eng", title: "English"),
         ]
-        // Stored as the second track; here the languages have swapped over.
+        // Stored as the second track. Here the languages have swapped over.
         let remembered = choice(language: "eng", title: "English", ordinal: 2, layout: layout)
         let swapped = [
             stream(language: "eng", title: "English"),

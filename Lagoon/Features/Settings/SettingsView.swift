@@ -10,7 +10,7 @@ struct SettingsView: View {
     @State private var homePreferences = HomeSectionPreferencesStore()
     @State private var pendingAccountAction: AccountAction?
 
-    /// Over the app when it can be, so Back returns here; otherwise the
+    /// Over the app when it can be, so Back returns here. Otherwise the
     /// session's own picker.
     private func switchProfile() {
         if let openProfilePicker {
@@ -32,7 +32,7 @@ struct SettingsView: View {
         .task(id: session.activeAccount?.id) {
             subtitlePreferences.configure(accountID: session.activeAccount?.id)
             #if DEBUG
-            // The regression test changes this value; reset it so runs stay deterministic.
+            // The regression test changes this value. Reset it so runs stay deterministic.
             if UserDefaults.standard.bool(forKey: "debug.settingsRegression") {
                 subtitlePreferences.resetAppearanceToSystem()
             }
@@ -82,7 +82,7 @@ struct SettingsView: View {
     // MARK: - tvOS: identity | short settings hierarchy
 
     #if os(tvOS)
-    // Read here only for the Playback row's summary; the page owns the writes.
+    // Read here only for the Playback row's summary. The page owns the writes.
     @AppStorage(SkipMode.defaultsKey) private var skipMode: SkipMode = .autoDelay
     @AppStorage(AutoplayMode.defaultsKey) private var autoplayMode: AutoplayMode = .autoDelay
 

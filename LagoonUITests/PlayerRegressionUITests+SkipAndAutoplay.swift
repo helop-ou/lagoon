@@ -57,7 +57,7 @@ extension PlayerRegressionUITests {
         XCTAssertEqual(after.int("paused"), 0)
     }
 
-    /// Select on the pill skips at once and keeps playing; it must not fall
+    /// Select on the pill skips at once and keeps playing. It must not fall
     /// through to play/pause.
     func testSelectOnSkipPillSkipsWithoutPausing() throws {
         let app = launchPlayer(

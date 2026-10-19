@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import Lagoon
 
-/// Expected conditions go to the history only; an incident is a fault worth
+/// Expected conditions go to the history only. An incident is a fault worth
 /// someone's attention, and a stream of 403s or offline errors would bury them.
 @Suite("API diagnostics")
 struct APIDiagnosticsTests {

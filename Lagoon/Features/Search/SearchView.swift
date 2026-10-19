@@ -10,7 +10,7 @@ final class SearchViewModel {
     /// Exposed so tests can wait for a query to settle.
     @ObservationIgnored private(set) var searchTask: Task<Void, Never>?
     @ObservationIgnored private var currentQuery = ""
-    /// Typing pauses this long before a query runs; tests step it by hand.
+    /// Typing pauses this long before a query runs. Tests step it by hand.
     @ObservationIgnored private let debounce: @Sendable () async throws -> Void
 
     init(debounce: @escaping @Sendable () async throws -> Void = { try await Task.sleep(for: .milliseconds(400)) }) {
@@ -93,7 +93,7 @@ final class RecentSearchStore {
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        // Legacy history has no owner; never hand it to whoever launches first.
+        // Legacy history has no owner. Never hand it to whoever launches first.
         defaults.removeObject(forKey: "search.recents")
     }
 
@@ -208,7 +208,7 @@ struct SearchView: View {
                 await librarySearch.loadNavigationRegressionResults(client: session.client)
             }
             // `-debug.searchRegressionQuery <term>` seeds the field for the
-            // empty-results lane; the real search and debounce still run.
+            // empty-results lane. The real search and debounce still run.
             if let seeded = UserDefaults.standard.string(forKey: "debug.searchRegressionQuery"),
                !seeded.isEmpty, searchText.isEmpty {
                 searchText = seeded

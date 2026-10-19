@@ -140,7 +140,7 @@ nonisolated enum SystemCaptionDisplay {
     case forcedOnly
     case automatic
     case alwaysOn
-    /// A display type this build does not know; Jellyfin's default stands.
+    /// A display type this build does not know. Jellyfin's default stands.
     case unrecognized
 }
 

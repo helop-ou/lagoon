@@ -44,8 +44,8 @@ struct PersonPageModelTests {
 
         let rail = credits.filmography(excluding: ["movie:10"])
 
-        // Most voted first; one card per title, with the movie and the show
-        // of the same TMDB id kept apart; a pending request stays requestable.
+        // Most voted first. One card per title, with the movie and the show
+        // of the same TMDB id kept apart. A pending request stays requestable.
         #expect(rail.map { SeerrPersonCredits.key($0) } == ["movie:13", "movie:2", "movie:11", "tv:2", "movie:9"])
     }
 
@@ -197,7 +197,7 @@ struct PersonPageModelTests {
 }
 
 /// Tom Hanks on both servers: the library holds Forrest Gump, TMDB adds Big.
-/// Paths answer from a table that tests can edit; a nil body fails the call.
+/// Paths answer from a table that tests can edit. A nil body fails the call.
 private enum PersonPageFixture {
     private static let lock = NSLock()
     private nonisolated(unsafe) static var bodies: [String: String] = [:]

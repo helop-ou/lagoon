@@ -38,7 +38,7 @@ class Fixtures:
         self.work = work
         self.servers = []
         self.requests = []
-        # Servers reached only via another origin's redirect; see violations().
+        # Servers reached only via another origin's redirect. See violations().
         self.redirect_targets = set()
         self.cases = []
         self.roots()
@@ -171,7 +171,7 @@ class Fixtures:
                     good, child = owner.urls["valid"], owner.urls[cert]
                     # Token only on same-origin children, where the app must
                     # move it into a header (the log guard checks). Other-origin
-                    # children are trust probes; a token there would only reach
+                    # children are trust probes. A token there would only reach
                     # CFNetwork's own failure log, not an app leak.
                     def credential(base, separator="?"):
                         return f"{separator}api_key=synthetic-tls-test-token" if base == good else ""

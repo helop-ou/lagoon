@@ -18,7 +18,7 @@ nonisolated struct CustomHTTPHeader: Codable, Hashable, Identifiable, Sendable {
     var trimmedValue: String { value.trimmingCharacters(in: .whitespacesAndNewlines) }
 
     /// Headers Lagoon sets itself, Jellyfin reads as its own token, or
-    /// URLSession owns; a proxy header may not replace them.
+    /// URLSession owns. A proxy header may not replace them.
     static let reservedNames: Set<String> = [
         "authorization", "cookie", "host", "content-type", "content-length",
         "accept", "connection", "range", "user-agent",
@@ -93,7 +93,7 @@ nonisolated struct CustomHTTPHeader: Codable, Hashable, Identifiable, Sendable {
 ///
 /// Stored per host, in scopes. While connecting, headers sit in the host-wide
 /// scope, because connecting tries several schemes and ports for the host the
-/// viewer typed; once a server answers, `narrow(toServer:)` moves them to that
+/// viewer typed. Once a server answers, `narrow(toServer:)` moves them to that
 /// server's port and path. So a Jellyfin and a Seerr on one host, at different
 /// ports or paths, keep separate headers, and a request gets the most specific
 /// scope that covers it.
@@ -103,7 +103,7 @@ nonisolated struct CustomHTTPHeader: Codable, Hashable, Identifiable, Sendable {
 nonisolated final class ServerHeaderStore: Sendable {
     static let shared = ServerHeaderStore(credentials: SystemAccountCredentials())
 
-    /// A port and a path prefix on one host, as "443/jellyfin"; "" covers the
+    /// A port and a path prefix on one host, as "443/jellyfin", and "" covers the
     /// whole host.
     typealias Scope = String
     static let hostWide: Scope = ""
@@ -184,7 +184,7 @@ nonisolated final class ServerHeaderStore: Sendable {
         return matching.max { $0.key.count < $1.key.count }?.value ?? []
     }
 
-    /// Replaces one scope's headers on the host; an empty list removes them.
+    /// Replaces one scope's headers on the host. An empty list removes them.
     func setHeaders(_ headers: [CustomHTTPHeader], forHost host: String, scope: Scope = hostWide) throws {
         let host = host.lowercased()
         var scopes = scopes(forHost: host)
@@ -240,7 +240,7 @@ nonisolated final class ServerHeaderStore: Sendable {
         ["https", "wss"].contains(url?.scheme?.lowercased())
     }
 
-    /// The headers for `url`, when it is HTTPS or WSS; empty otherwise.
+    /// The headers for `url`, when it is HTTPS or WSS. Empty otherwise.
     func fields(for url: URL?) -> [String: String] {
         guard let url, Self.isSecure(url) else { return [:] }
         return Dictionary(

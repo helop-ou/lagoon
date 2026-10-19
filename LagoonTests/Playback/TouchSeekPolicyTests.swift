@@ -3,7 +3,7 @@ import Testing
 @testable import Lagoon
 
 /// iOS double-tap seek: another double-tap on the same side while the glyph
-/// is up adds a step; the other side starts over.
+/// is up adds a step. The other side starts over.
 @Suite("Touch seek policy")
 struct TouchSeekPolicyTests {
     @Test func firstTapIsOneStep() {

@@ -8,7 +8,7 @@ nonisolated struct PlayerItem: Identifiable {
     var startFromBeginning = false
     /// Overrides every resume rule. Set only by a SyncPlay group.
     var startPosition: Double?
-    /// Hold on the first frame; a group member starts at the agreed instant.
+    /// Hold on the first frame. A group member starts at the agreed instant.
     var startPaused = false
     /// What follows `media`. In a list queue, `media` is the current entry.
     var queue: PlayQueue = .series

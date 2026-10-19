@@ -107,7 +107,7 @@ struct DeviceProfileAlignmentTests {
             #expect(profile?.conditions.contains {
                 $0.property == "IsInterlaced" && $0.condition == "NotEquals" && $0.value == "true"
             } == true)
-            // Software AV1 (multi-core dav1d) reaches 4K; VP9 stays at HD,
+            // Software AV1 (multi-core dav1d) reaches 4K. VP9 stays at HD,
             // since nothing has measured it above that.
             let bound = codec == "av1" ? ("3840", "2160") : ("1920", "1080")
             #expect(profile?.conditions.contains {
@@ -168,7 +168,7 @@ struct DeviceProfileAlignmentTests {
         #expect(mpeg4Profile?.conditions.contains {
             $0.property == "IsInterlaced" && $0.condition == "NotEquals" && $0.value == "true"
         } == true)
-        // Anamorphic is not excluded; see
+        // Anamorphic is not excluded. See
         // anamorphicSourcesAreNoLongerExcludedFromDirectPlay.
 
         #expect(SoftwareVideoDecoder.supports(codecID: AV_CODEC_ID_MPEG4))
@@ -234,7 +234,7 @@ struct DeviceProfileAlignmentTests {
     }
 
     @Test func hardwareWithoutHEVCIsNeverOfferedHEVC() throws {
-        // The engine requires a hardware HEVC decoder; without one HEVC fails
+        // The engine requires a hardware HEVC decoder. Without one HEVC fails
         // outright with -12906.
         let reduced = DeviceProfile.profile(for: PlaybackCapabilities(hardwareHEVC: false))
         let json = try String(
@@ -376,7 +376,7 @@ struct DeviceProfileAlignmentTests {
 
     @Test func interlacedH264IsRoutedToTheSoftwareDecoderAndProgressiveIsNot() {
         // The demuxer's field-order check splits H.264: interlaced decodes in
-        // software, which deinterlaces; progressive stays on VideoToolbox.
+        // software, which deinterlaces. Progressive stays on VideoToolbox.
         let capabilities = PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: true)
         #expect(FFmpegDemuxer.usesCompressedVideoPath(
             codecID: AV_CODEC_ID_H264, capabilities: capabilities, interlaced: false

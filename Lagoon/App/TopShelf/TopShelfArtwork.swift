@@ -6,7 +6,7 @@ import UIKit
 /// Builds the full-screen images the Top Shelf carousel shows.
 ///
 /// `TVTopShelfCarouselItem` has no `title`, so the name is drawn into the
-/// artwork. The app composes finished JPEGs into the shared container; the
+/// artwork. The app composes finished JPEGs into the shared container. The
 /// extension only reads them, so it needs no credentials or network.
 nonisolated enum TopShelfArtwork {
     /// Full screen at @2x. tvOS lays out in 1920x1080 points.
@@ -41,7 +41,7 @@ nonisolated enum TopShelfArtwork {
     /// off the main thread.
     static func opaqueFormat() -> UIGraphicsImageRendererFormat {
         let format = UIGraphicsImageRendererFormat()
-        // Sizes are already pixels; screen scale would quadruple the bitmap.
+        // Sizes are already pixels. Screen scale would quadruple the bitmap.
         format.scale = 1
         format.opaque = true
         format.preferredRange = .standard
@@ -140,7 +140,7 @@ nonisolated enum TopShelfArtwork {
     /// persistent storage and refuses the write elsewhere (simulators do not).
     /// `publishIfEmpty` redraws the artwork if the system purges it.
     ///
-    /// Mirrored by `ContentProvider.artworkDirectory`; change both.
+    /// Mirrored by `ContentProvider.artworkDirectory`. Change both.
     static let containerSubpath = "Library/Caches/TopShelf"
 
     /// The shared directory, created on demand. Nil when the App Group is not

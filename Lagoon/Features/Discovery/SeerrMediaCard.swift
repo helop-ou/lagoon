@@ -29,7 +29,7 @@ struct SeerrMediaCard: View {
         .media(id: item.id, type: mediaType)
     }
 
-    /// No badge for unrequested or deleted titles; blocklisted ones get one.
+    /// No badge for unrequested or deleted titles. Blocklisted ones get one.
     private var visibleStatus: SeerrAvailabilityStatus? {
         let status = item.mediaInfo?.availability ?? .unknown
         return status.allowsRequesting ? nil : status

@@ -49,7 +49,7 @@ struct CastStrip: View {
     }
 
     /// Server order is kept. Library people without a headshot keep their
-    /// place behind a placeholder; Seerr's are dropped.
+    /// place behind a placeholder. Seerr's are dropped.
     private var cast: [CastCredit] {
         if let credits {
             return credits.filter { $0.imageURL != nil }

@@ -144,7 +144,7 @@ struct AppThemeTests {
             #expect(rect.insetBy(dx: -0.5, dy: -0.5).contains(bounds), "wave \(wave)")
         }
         let ghost = GhostGeometry.path(in: rect)
-        // The body is filled; an eye is a hole in it. Probed off the eyes'
+        // The body is filled. An eye is a hole in it. Probed off the eyes'
         // centre line, where the ellipses' curve joints sit and the
         // containment test miscounts crossings.
         #expect(ghost.contains(CGPoint(x: rect.minX + 25, y: rect.minY + 12), eoFill: true))
@@ -161,7 +161,7 @@ struct AppThemeTests {
         #expect(bounds.contains(left.onSteepRadial(0.3)))
         #expect(bounds.contains(left.onSteepRadial(1)))
         #expect(left.steep.y > left.hub.y)
-        // Same seed, same web; another seed, another web.
+        // Same seed, same web. Another seed, another web.
         #expect(CobwebGeometry.web(size: 100, seed: 3).spiral.description == left.spiral.description)
         #expect(CobwebGeometry.web(size: 100, seed: 11).spiral.description != left.spiral.description)
     }

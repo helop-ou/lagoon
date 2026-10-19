@@ -7,7 +7,7 @@ struct PlaybackSettingsView: View {
     @AppStorage(MaximumQuality.defaultsKey) private var maximumQuality: MaximumQuality = .auto
     @AppStorage(GroupPlaybackDriver.correctionDefaultsKey) private var correctsSyncDrift = true
 
-    /// Why a Watch Together picture might nudge; shared by both platforms.
+    /// Why a Watch Together picture might nudge. Shared by both platforms.
     private static let syncDriftFooter = LocalizedStringKey(
         "In a Watch Together group, Lagoon nudges the speed by a fraction to bring this device back in step, and jumps when it is a long way out. Turn it off if you would rather it left the picture alone."
     )

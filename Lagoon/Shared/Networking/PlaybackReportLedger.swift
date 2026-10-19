@@ -7,10 +7,10 @@ private let log = Logger(subsystem: "ee.helop.lagoon", category: "playback-repor
 ///
 /// The stop report is fire-and-forget, and the screen underneath re-fetches
 /// on dismiss. Unchecked, the re-fetch wins the race and shows Play instead
-/// of Resume. Screens call `settle()` before re-fetching; it is bounded by a
+/// of Resume. Screens call `settle()` before re-fetching. It is bounded by a
 /// timeout.
 final class PlaybackReportLedger {
-    /// Covers a slow server's stop report; a dead server costs one pause,
+    /// Covers a slow server's stop report. A dead server costs one pause,
     /// not a hang.
     nonisolated static let defaultSettleTimeout: Duration = .seconds(8)
 

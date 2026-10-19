@@ -21,7 +21,7 @@ nonisolated enum HomeRowID {
     /// The old single toggle for the Recently Added rows. Read only.
     static let legacyRecentlyAdded = "lagoon.recentlyAdded"
 
-    /// Native row ids start with this; plugin rows use the server's section name.
+    /// Native row ids start with this. Plugin rows use the server's section name.
     static let nativePrefix = "lagoon."
 
     /// Keeps a plugin section named like a library id from colliding with a
@@ -226,7 +226,7 @@ nonisolated enum HomeSectionPreferenceResolver {
     ]
 
     /// Folds a legacy layout into the single ordered list. Hidden rows and
-    /// plugin order carry over; native order does not, since nobody chose it.
+    /// plugin order carry over. Native order does not, since nobody chose it.
     static func migratedLayout(
         isConfigured: Bool,
         pluginRows: [HomeSectionPreferenceRow],
@@ -310,7 +310,7 @@ nonisolated enum HomeSectionPreferenceResolver {
         }
 
         // New plugin sections arrive shown until the viewer has arranged a
-        // plugin row; after that they arrive hidden.
+        // plugin row. After that they arrive hidden.
         let hasArrangedPluginRows = rows.contains { !HomeRowID.isNative($0.id) }
         for section in sections where seen.insert(section).inserted {
             rows.append(HomeSectionPreferenceRow(id: section, isEnabled: !hasArrangedPluginRows))
@@ -318,7 +318,7 @@ nonisolated enum HomeSectionPreferenceResolver {
         return rows
     }
 
-    /// Every placeable row in draw order, hidden ones included; the default
+    /// Every placeable row in draw order, hidden ones included. The default
     /// order until the viewer arranges their own.
     static func arrangement(
         preferences: HomeSectionPreferenceValues,
@@ -446,7 +446,7 @@ final class HomeSectionPreferencesStore {
 
     func move(fromOffsets offsets: IndexSet, toOffset destination: Int) {
         adoptArrangement()
-        // Reorder only the visible rows; unnamed remembered rows stay put.
+        // Reorder only the visible rows. Unnamed remembered rows stay put.
         var visibleIDs = choices.map(\.id)
         guard offsets.allSatisfy({ visibleIDs.indices.contains($0) }),
               (0...visibleIDs.count).contains(destination) else { return }

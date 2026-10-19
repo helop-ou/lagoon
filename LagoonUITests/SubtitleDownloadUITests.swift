@@ -74,7 +74,7 @@ final class SubtitleDownloadUITests: XCTestCase {
         expect(probe) { ($0.value as? String)?.contains("panel=1") == true }
         let tab = app.buttons["player.tab.subtitles"]
         XCTAssertTrue(tab.waitForExistence(timeout: 5))
-        // Focus alone switches tabs; Select could activate a track.
+        // Focus alone switches tabs. Select could activate a track.
         let tracks = app.buttons["player.track.subtitle-off"]
         for _ in 0..<4 where !tracks.exists { XCUIRemote.shared.press(.right) }
         XCTAssertTrue(tracks.waitForExistence(timeout: 5))
@@ -139,7 +139,7 @@ final class SubtitleDownloadUITests: XCTestCase {
         guard element.exists else { return false }
         if element.hasFocus { return true }
         // XCTest reports no focus for this conditionally inserted button, so
-        // read the probe; the assertions after Select check the real action.
+        // read the probe. The assertions after Select check the real action.
         guard element.identifier == "player.subtitleLoad.retry" else { return false }
         let value = app.descendants(matching: .any)["player.regression.state"].value as? String ?? ""
         return RegressionState(value).string("focus") == "track-subtitle-retry"

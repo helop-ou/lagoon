@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// A Seerr title's page, composed like a library title's, with request
-/// state where Play would be. TMDB artwork via Seerr; the Jellyfin logo once
+/// state where Play would be. TMDB artwork via Seerr. The Jellyfin logo once
 /// the title is in the library.
 struct SeerrMediaDetailView: View {
     @Environment(\.displayScale) private var displayScale
@@ -122,7 +122,7 @@ struct SeerrMediaDetailView: View {
         return nil
     }
 
-    /// Cast in billing order, then crew; the strip drops anyone without a picture.
+    /// Cast in billing order, then crew. The strip drops anyone without a picture.
     private func castCredits(_ details: SeerrMediaDetails) -> [CastCredit] {
         guard let credits = details.credits else { return [] }
         let portraitWidth = ArtworkSizing.pixels(for: Metrics.castPortraitSize, displayScale: displayScale)
@@ -330,7 +330,7 @@ struct SeerrMediaDetailView: View {
         )
     }
 
-    /// The primary button when nothing is playable yet; a pill otherwise.
+    /// The primary button when nothing is playable yet. A pill otherwise.
     @ViewBuilder
     private func requestMoreSeasonsButton(_ details: SeerrMediaDetails, isPrimary: Bool = false) -> some View {
         let button = Button {

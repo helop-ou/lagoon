@@ -10,7 +10,7 @@ nonisolated enum PersonPageSubject: Hashable {
 }
 
 /// A person page's data. A library person reaches TMDB through their
-/// provider id; a TMDB person reaches the library through a name search
+/// provider id. A TMDB person reaches the library through a name search
 /// checked against that id. A failed refresh keeps what is on screen, and
 /// only the latest load commits. Outside the view so it can be tested.
 @Observable

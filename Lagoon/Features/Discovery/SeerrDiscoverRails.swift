@@ -54,7 +54,7 @@ struct SeerrDiscoverRail: View {
                     ProgressView().accessibilityLabel("Loading \(source.title)")
                 }
             }
-            // Loaded but empty draws nothing; an empty watchlist is normal.
+            // Loaded but empty draws nothing. An empty watchlist is normal.
         }
         .task(id: "\(source.id):\(seerr.user?.id ?? -1):\(retryID):\(refreshGeneration)") {
             await loader.load(

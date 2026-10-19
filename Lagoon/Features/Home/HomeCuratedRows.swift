@@ -5,7 +5,7 @@ import Foundation
 /// Order: personal, then new, then a movie block, then a show block (each
 /// ending with its genre shelf), then mixed rows.
 nonisolated enum HomeCuratedRows {
-    /// Persisted per account; renaming one would re-enable a hidden row.
+    /// Persisted per account. Renaming one would re-enable a hidden row.
     enum ID {
         static let becauseYouWatched = "lagoon.becauseYouWatched"
         static let highlyRated = "lagoon.highlyRated"
@@ -29,10 +29,10 @@ nonisolated enum HomeCuratedRows {
     /// keeping a 22-minute sitcom episode.
     static let minimumSeedRuntime: Double = 15 * 60
 
-    /// Recent titles to try; a real seed can still have no similar items.
+    /// Recent titles to try. A real seed can still have no similar items.
     static let seedAttempts = 4
 
-    /// An unknown runtime passes; servers do not always report one.
+    /// An unknown runtime passes. Servers do not always report one.
     static func isSubstantialSeed(_ item: MediaItem) -> Bool {
         guard let ticks = item.runTimeTicks else { return true }
         return Ticks.seconds(ticks) >= minimumSeedRuntime
@@ -116,7 +116,7 @@ nonisolated enum HomeRotation {
         "Movies from the \(year)s"
     }
 
-    /// Genres across played items, most first; ties break on name so the
+    /// Genres across played items, most first. Ties break on name so the
     /// rotation is stable between loads.
     static func rankGenres(byWatchHistory items: [MediaItem]) -> [String] {
         var counts: [String: Int] = [:]

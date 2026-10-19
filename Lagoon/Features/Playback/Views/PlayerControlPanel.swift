@@ -83,7 +83,7 @@ struct PlayerControlPanel: View {
         }
         .padding(.top, Metrics.railTopPadding)
         .defaultFocus(focus, .tab(selectedTab))
-        // Switching modes removes the focused row; place focus explicitly.
+        // Switching modes removes the focused row. Place focus explicitly.
         .onChange(of: subtitleSearch?.isBrowsingResults) { _, isBrowsing in
             moveFocusForSubtitleBrowsing(isBrowsing)
         }
@@ -91,7 +91,7 @@ struct PlayerControlPanel: View {
     }
 
     #if os(tvOS)
-    /// Entering lands on Done; leaving lands on the downloaded track, else
+    /// Entering lands on Done. Leaving lands on the downloaded track, else
     /// Search.
     private func moveFocusForSubtitleBrowsing(_ isBrowsing: Bool?) {
         guard let isBrowsing, case .track(let id)? = focus.wrappedValue else { return }
@@ -115,7 +115,7 @@ struct PlayerControlPanel: View {
     }
     #endif
 
-    // Native buttons only; never draw custom focus chrome.
+    // Native buttons only. Never draw custom focus chrome.
     @ViewBuilder
     private var tabBar: some View {
         #if os(iOS)
@@ -236,7 +236,7 @@ struct PlayerControlPanel: View {
         #if os(tvOS)
         .focused(focus, equals: .track(Self.togetherLeaveID))
         #else
-        // Shared Form row; an automatic button would also fire its neighbour.
+        // Shared Form row. An automatic button would also fire its neighbour.
         .buttonStyle(.borderless)
         #endif
         .accessibilityIdentifier("player.together.leave")
@@ -585,7 +585,7 @@ struct PlayerControlPanel: View {
         .focused(focus, equals: .track(Self.subtitleSearchCloseID))
         .accessibilityIdentifier("player.subtitleSearch.close")
         #if os(iOS)
-        // Shared Form row; see `togetherOptions`.
+        // Shared Form row. See `togetherOptions`.
         .buttonStyle(.borderless)
         #endif
     }
@@ -681,7 +681,7 @@ struct PlayerControlPanel: View {
                         .focused(focus, equals: .track("subtitle-retry"))
                         .accessibilityIdentifier("player.subtitleLoad.retry")
                         #if os(iOS)
-                        // Shared Form row; see `togetherOptions`.
+                        // Shared Form row. See `togetherOptions`.
                         .buttonStyle(.borderless)
                         #endif
                 }

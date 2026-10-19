@@ -40,7 +40,7 @@ struct DownloadControl: View {
             }
         }
         .task(id: item.id) {
-            // The store owns the download permission; see `permitted`.
+            // The store owns the download permission. See `permitted`.
             transcodingAllowed = await session.client.canTranscodeForDownload()
         }
         .task(id: item.id) {

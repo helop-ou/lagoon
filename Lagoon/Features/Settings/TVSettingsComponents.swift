@@ -67,14 +67,14 @@ struct TVSettingsPage<Content: View>: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .scrollClipDisabled()
-            // Some pages start with unfocusable content; this keeps a target right of Back.
+            // Some pages start with unfocusable content. This keeps a target right of Back.
             .focusSection()
             .frame(maxWidth: .infinity)
         }
         .padding(.horizontal, Metrics.screenGutter)
         .padding(.top, Metrics.Space.xxl)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        // The app's background; otherwise Settings inherits the system grey.
+        // The app's background. Otherwise Settings inherits the system grey.
         .themedPageBackground()
         .navigationBarBackButtonHidden(true)
         .onExitCommand { dismiss() }
@@ -196,7 +196,7 @@ struct TVSettingsOption<Value: Hashable>: Identifiable {
 /// labels to a value-only pill.
 struct TVSettingsMenuPicker<Value: Hashable>: View {
     let title: LocalizedStringKey
-    /// Shown on the row; the selected option's title unless a caller's
+    /// Shown on the row. The selected option's title unless a caller's
     /// display differs from its menu entries.
     let valueTitle: String?
     let accessibilityIdentifier: String

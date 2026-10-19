@@ -153,8 +153,8 @@ struct GenreLibraryView: View {
                 ScrollView(showsIndicators: false) {
                     VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
                         #if os(tvOS)
-                        // A tvOS navigation title floats over the grid;
-                        // in the content it scrolls away with the first row.
+                        // A tvOS navigation title floats over the grid.
+                        // In the content it scrolls away with the first row.
                         Text(genre)
                             .font(.largeTitle.bold())
                             .accessibilityIdentifier("genre.library.title")

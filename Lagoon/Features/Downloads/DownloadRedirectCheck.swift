@@ -22,7 +22,7 @@ nonisolated enum DownloadRedirectCheck {
 
     enum Step: Equatable {
         case done(Outcome)
-        /// A redirect that stays on the host over HTTPS; see where it leads.
+        /// A redirect that stays on the host over HTTPS. See where it leads.
         case follow(URL)
     }
 

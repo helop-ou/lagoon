@@ -1,7 +1,7 @@
 import Foundation
 
 /// Forgetting is local and immediate even if Keychain is temporarily locked.
-/// Pending removals quarantine credentials until deletion succeeds; adding the
+/// Pending removals quarantine credentials until deletion succeeds. Adding the
 /// same identity again must finish cleanup before saving its replacement token.
 @MainActor
 final class AccountLocalData {
@@ -62,7 +62,7 @@ final class AccountLocalData {
     func finishRemoval(accountID: String) throws {
         guard pendingAccountIDs.contains(accountID) else { return }
         // Enumerate before deleting so a failure cannot report the cookies
-        // removed; the quarantine stays on error.
+        // removed. The quarantine stays on error.
         let cookiePrefix = "seerr.cookie:\(accountID)|"
         let names = try credentials.accountNames().filter { $0.hasPrefix(cookiePrefix) }
         var failure: Error?

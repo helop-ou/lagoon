@@ -190,7 +190,7 @@ final class ServerSyncUITests: XCTestCase {
         XCTAssertEqual(profile.frame.size.height, refresh.frame.size.height, accuracy: 1)
         attachScreenshot(of: app, named: "profile-home-tab-bar")
 
-        // Home content scrolls the chrome away; the button goes with it.
+        // Home content scrolls the chrome away. The button goes with it.
         let restingDelta = profile.frame.midY - tabBar.frame.midY
         remote.press(.down)
         for _ in 0..<4 {
@@ -227,7 +227,7 @@ final class ServerSyncUITests: XCTestCase {
         XCTAssertTrue(profile.hasFocus)
 
         // The bootstrap activates an unstored account, so this picker lists
-        // no profiles; AccountPrivacyUITests covers the current profile.
+        // no profiles. AccountPrivacyUITests covers the current profile.
         remote.press(.select)
         let add = app.buttons["account.add"]
         XCTAssertTrue(add.waitForExistence(timeout: 8), "The profile button did not open the picker")
@@ -401,7 +401,7 @@ final class ServerSyncUITests: XCTestCase {
     }
 
     private func launch(interval: Double) -> XCUIApplication {
-        // A supplied fixture server has a Home hero; the demo may not.
+        // A supplied fixture server has a Home hero. The demo may not.
         let app = XCUIApplication.regression(
             extra: ["-debug.serverSyncRegression", "YES", "-debug.serverSyncIntervalSeconds", String(interval)],
             forwardFixtureServer: true

@@ -72,7 +72,7 @@ extension JellyfinClient {
         let isInNetwork: Bool?
     }
 
-    /// Negotiates a stream. `.negotiated` lets the server pick freely; lower
+    /// Negotiates a stream. `.negotiated` lets the server pick freely. Lower
     /// rungs withdraw permissions after a failure, forcing a remux, then a
     /// re-encode. `maxBitrate` overrides the connection's ceiling, for a
     /// viewer who asked for a lower quality mid-title.
@@ -167,7 +167,7 @@ extension JellyfinClient {
         }
         // Direct stream: playable bytes served through the server (.strm,
         // static-bitrate limits). The container can be an ffprobe list
-        // ("mov,mp4,m4a"); use the first.
+        // ("mov,mp4,m4a"). Use the first.
         if source.supportsDirectStream == true, accessToken != nil,
            let container = source.container?.split(separator: ",").first {
             return (
@@ -179,7 +179,7 @@ extension JellyfinClient {
             guard let resolvedURL = serverRelativeURL(transcodingUrl) else {
                 throw JellyfinError.unplayable
             }
-            // Strip a server-stamped api_key/ApiKey; the header carries the
+            // Strip a server-stamped api_key/ApiKey. The header carries the
             // credential. Cross-origin URLs are left alone.
             let url = mediaRequestAuthorization()?.sanitizedURL(resolvedURL) ?? resolvedURL
             return (url, .transcode)
@@ -196,8 +196,8 @@ extension JellyfinClient {
 
     // MARK: - Remote subtitles
 
-    /// Searches the server's subtitle providers. `language` is an ISO code;
-    /// results keep provider ranking.
+    /// Searches the server's subtitle providers. `language` is an ISO code.
+    /// Results keep provider ranking.
     func searchRemoteSubtitles(itemId: String, language: String) async throws -> [RemoteSubtitleInfo] {
         try await get(
             ["Items", itemId, "RemoteSearch", "Subtitles", language],
@@ -219,7 +219,7 @@ extension JellyfinClient {
     func remoteSubtitleFile(subtitleId: String) async throws -> (url: URL, data: Data) {
         guard accessToken != nil else { throw JellyfinError.notConfigured }
         let components = ["Providers", "Subtitles", "Subtitles", subtitleId]
-        // Identity only; the bytes come from `getData`, so no credential.
+        // Identity only. The bytes come from `getData`, so no credential.
         let deliveryURL = try url(pathComponents: components)
         return (
             deliveryURL,
@@ -278,7 +278,7 @@ extension JellyfinClient {
     nonisolated struct PlaybackExtras: Decodable {
         let chapters: [ChapterInfo]
         let originalLanguage: String?
-        /// Media source id, then width. Dictionary keys arrive verbatim; the
+        /// Media source id, then width. Dictionary keys arrive verbatim. The
         /// key strategy only converts `CodingKey`s.
         let trickplay: [String: [String: TrickplayTileInfo]]
 
@@ -303,7 +303,7 @@ extension JellyfinClient {
     }
 
     /// Fetched separately: neither `playbackInfo` nor rail items carry these.
-    /// Never throws; playback goes on without them.
+    /// Never throws. Playback goes on without them.
     func playbackExtras(itemId: String) async -> PlaybackExtras {
         guard let userId else { return .none }
         return (try? await get("Users/\(userId)/Items/\(itemId)")) ?? .none
@@ -315,7 +315,7 @@ extension JellyfinClient {
         // source id than the tiles were made from.
         let byWidth = extras.trickplay.first { $0.key.caseInsensitiveCompare(mediaSourceId) == .orderedSame }?.value
             ?? (extras.trickplay.count == 1 ? extras.trickplay.first?.value : nil)
-        // Highest resolution; the decode caps sheet size, so no memory cost.
+        // Highest resolution. The decode caps sheet size, so no memory cost.
         guard let info = byWidth?.values.max(by: { $0.width < $1.width }),
               info.width > 0, info.height > 0,
               info.tileWidth > 0, info.tileHeight > 0,
@@ -339,7 +339,7 @@ extension JellyfinClient {
         )
     }
 
-    /// Authenticated route (401 without credentials); the header carries
+    /// Authenticated route (401 without credentials). The header carries
     /// the token, never the URL.
     private func trickplaySheetURL(itemId: String, width: Int, index: Int) -> URL? {
         guard accessToken != nil else { return nil }

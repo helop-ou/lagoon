@@ -4,7 +4,7 @@ import Foundation
 /// A canned-response `URLProtocol` stub for fixture suites that just map a
 /// request to a fixed status, headers and body (or an error) by host.
 /// Suites with holds, streaming, byte-range serving or other extra modes
-/// keep their own `URLProtocol` subclass; this only covers the simple case.
+/// keep their own `URLProtocol` subclass. This only covers the simple case.
 ///
 /// A session built on `configuration()` never reaches the network: a request
 /// to a host nobody registered fails with `unregisteredHostError`. Recorded

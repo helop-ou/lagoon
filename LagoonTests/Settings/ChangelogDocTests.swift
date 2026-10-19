@@ -6,7 +6,7 @@ import Testing
 /// `Changelog.swift` is the source of truth, checked by `ChangelogTests`.
 ///
 /// `scripts/generate-changelog.sh` runs this and copies the result into
-/// `CHANGELOG.md`; `--check` fails on drift instead.
+/// `CHANGELOG.md`. `--check` fails on drift instead.
 @Suite("Changelog document")
 struct ChangelogDocTests {
     @Test func writesTheChangelogDocument() throws {
@@ -62,7 +62,7 @@ enum ChangelogDocument {
         entries.reduce(into: header()) { out, entry in out += section(entry) }
     }
 
-    /// One build; `scripts/generate-changelog.sh --notes` lifts it out for a
+    /// One build. `scripts/generate-changelog.sh --notes` lifts it out for a
     /// GitHub release.
     static func section(_ entry: ChangelogEntry) -> String {
         var out = "## \(entry.displayVersion)\n\n"

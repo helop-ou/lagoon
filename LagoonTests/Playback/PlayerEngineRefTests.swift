@@ -18,7 +18,7 @@ struct PlayerEngineRefTests {
     }
 
     // The memberwise initializer still takes the engine directly, which keeps
-    // `CustomPlayerView(engine:)` call sites unchanged; the tests below use it.
+    // `CustomPlayerView(engine:)` call sites unchanged. The tests below use it.
 
     @Test func attachedEngineReadsThroughToTheOwner() {
         let engine = TestEngine()
