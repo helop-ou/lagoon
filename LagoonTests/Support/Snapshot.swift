@@ -30,7 +30,7 @@ enum Snapshot {
             )
             try png.write(to: reference)
             Issue.record(
-                "Recorded \(reference.lastPathComponent); look at it, then run again.",
+                "Recorded \(reference.lastPathComponent). Look at it, then run again.",
                 sourceLocation: sourceLocation
             )
             return
@@ -50,7 +50,7 @@ enum Snapshot {
             files += " and \(diff.lastPathComponent)"
         }
         Issue.record(
-            Comment(rawValue: "\(name) \(comparison.summary(actual: image, expected: expected)); see \(files)."),
+            Comment(rawValue: "\(name) \(comparison.summary(actual: image, expected: expected)). See \(files)."),
             sourceLocation: sourceLocation
         )
     }
@@ -158,8 +158,10 @@ enum Snapshot {
                 }
                 if differs {
                     differing += 1
-                    minX = min(minX, x); maxX = max(maxX, x)
-                    minY = min(minY, y); maxY = max(maxY, y)
+                    minX = min(minX, x)
+                    maxX = max(maxX, x)
+                    minY = min(minY, y)
+                    maxY = max(maxY, y)
                     marked[pixel] = 255
                     marked[pixel + 1] = 0
                     marked[pixel + 2] = 0
