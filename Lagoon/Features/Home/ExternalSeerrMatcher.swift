@@ -43,6 +43,21 @@ nonisolated enum ExternalSeerrMatcher {
         }
     }
 
+    /// Where a card leads: the title's Seerr page once it is found, Seerr's
+    /// sign-in while signed out, since Seerr shows nothing before it, and
+    /// nowhere for a title Seerr cannot hold or did not find.
+    static func route(
+        for item: JellyfinClient.ExternalSectionItem,
+        seerrTitle: ExternalSeerrTitle?,
+        isSignedIn: Bool
+    ) -> SeerrNavigationRoute? {
+        if let seerrTitle {
+            return .media(id: seerrTitle.id, type: seerrTitle.mediaType)
+        }
+        guard !isSignedIn, item.seerrType != nil else { return nil }
+        return .signIn(then: item)
+    }
+
     /// Seerr's record of one title: by id for Seerr's own, by search for
     /// Sonarr's and Radarr's. Nil when Seerr has none or cannot be reached.
     @MainActor

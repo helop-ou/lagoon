@@ -59,7 +59,7 @@ extension JellyfinClient {
     /// Seerr. It is not in the library: its `Id` is random on every request,
     /// or all zeros, so it has no Jellyfin artwork or page, and fetching
     /// either 404s. What there is sits in `ProviderIds`.
-    nonisolated struct ExternalSectionItem: Decodable, Identifiable, Equatable, Sendable {
+    nonisolated struct ExternalSectionItem: Decodable, Identifiable, Hashable, Sendable {
         /// The source and its own id, stable across requests.
         let id: String
         let title: String
@@ -74,6 +74,9 @@ extension JellyfinClient {
         let seerrType: SeerrMediaType?
         /// A Radarr movie's year, which tells remakes apart.
         let year: Int?
+        /// The Seerr server the plugin reads, which Seerr's titles name and
+        /// Sonarr's and Radarr's do not. Offered when Lagoon has none yet.
+        let seerrAddress: String?
 
         /// Each source's id key. The plugin names the poster `<source>Poster`.
         private static let sources = [
@@ -104,6 +107,7 @@ extension JellyfinClient {
             title = name ?? ""
             year = try? c.decodeIfPresent(Int.self, forKey: "productionYear")
             posterPath = value("\(source)Poster")
+            seerrAddress = value("JellyseerrRoot")
 
             let formattedDate = value("FormattedDate")
             switch source {
