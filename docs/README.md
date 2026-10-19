@@ -22,7 +22,7 @@ you are changing. The guides describe the code as it is today.
   [playback](reference/playback/README.md),
   [architecture](reference/architecture.md), [design](reference/design-system.md)
   and the [regression lane](reference/regression-lane.md). Some describe
-  experiments on a specific build; the code may have moved on.
+  experiments on a specific build, and the code may have moved on.
 
 Generated files. Each script takes `--check` to fail on drift instead of
 writing:
@@ -32,7 +32,7 @@ writing:
 | [Codec support](codec-support.md) | `DeviceProfile.everything`, the envelope the app sends Jellyfin, so it cannot overstate direct play | [`generate-codec-support.sh`](../scripts/generate-codec-support.sh) |
 | [CHANGELOG.md](../CHANGELOG.md) | `Changelog.swift`, the source of truth for About and release bodies (`--notes <build>` prints one build) | [`generate-changelog.sh`](../scripts/generate-changelog.sh) |
 | The website's `app-facts.json` | The declared version and `DeviceProfile`. The site's prose, Jellyfin floor and availability stay hand-written there | [`generate-site-facts.sh`](../scripts/generate-site-facts.sh) |
-| [Native dependency inventory](reference/native-dependency-inventory.json) | The resolved engine checkout; regenerate whenever the engine pin moves (no `--check`) | [`inventory-native-dependencies.py`](../scripts/inventory-native-dependencies.py) |
+| [Native dependency inventory](reference/native-dependency-inventory.json) | The resolved engine checkout. Regenerate whenever the engine pin moves (no `--check`) | [`inventory-native-dependencies.py`](../scripts/inventory-native-dependencies.py) |
 
 ## Keeping this clean
 

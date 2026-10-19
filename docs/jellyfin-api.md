@@ -54,7 +54,7 @@ Session expiry:
 
 - An authenticated 401 expires only the account session that made the
   request. Lagoon dismisses playback and opens sign-in for that server,
-  keeping username, remembered identity and preferences; reauthentication
+  keeping username, remembered identity and preferences. Reauthentication
   replaces the token.
 - Progress reports use the same path, so a remote revocation during buffered
   playback is caught on the next report. There is no expiry polling and no
@@ -71,7 +71,7 @@ optional custom headers under Advanced, such as a Cloudflare service token.
 
 - `ServerHeaderStore` keeps them in the keychain, one item per host holding
   scopes. While connecting they are host-wide, because connecting tries
-  several schemes and ports for the host the viewer typed; once a server
+  several schemes and ports for the host the viewer typed. Once a server
   answers, `narrow(toServer:)` moves them to its port and path. A Jellyfin
   and a Seerr on one host, at different ports or paths, keep separate
   headers, and a request gets the most specific scope covering it.
@@ -89,7 +89,7 @@ optional custom headers under Advanced, such as a Cloudflare service token.
   probe, images, Top Shelf artwork, trickplay, the socket, downloads, and the
   engine's media requests through `MediaRequestAuthorization.additionalHeaders`.
 - `ServerHeaderRedirectGuard` on the app's sessions, and the engine's media
-  transport and `BoundedDownload` (images, trickplay, sidecar subtitles; from
+  transport and `BoundedDownload` (images, trickplay and sidecar subtitles, from
   engine 1.1.1), drop them when a redirect leaves the host or HTTPS, and add
   them when an HTTP request is upgraded to HTTPS on the same host. Foundation
   forwards custom headers across hosts on its own, so every session that
@@ -122,7 +122,7 @@ Settings → Playback → Maximum Quality on Auto asks before negotiating
   TCP ramps up (0.5, 2 and 8 MiB read 8, 24 and 44 Mbit/s on one link).
 - Both are probes: a failure keeps today's ceiling and is never reported.
   Results are kept per server for half an hour, or until the device moves to
-  another network (`NetworkPathObserver.generation`); a failure for two
+  another network (`NetworkPathObserver.generation`). A failure is kept for two
   minutes. A title's page starts the measurement, so Play rarely waits on it.
 
 ## Library endpoints
@@ -131,32 +131,32 @@ Settings → Playback → Maximum Quality on Auto asks before negotiating
 | --- | --- | --- |
 | Libraries | `Users/{uid}/Views` | filter `CollectionType` to `movies`/`tvshows` |
 | Browse/search | `Users/{uid}/Items` | `ParentId`, `IncludeItemTypes`, `SearchTerm`, paged via `StartIndex`/`Limit` |
-| Decade choices | `Items/Filters` | `Years` for `UserId`, `IncludeItemTypes`, optional `ParentId`; recursive full catalogue. Not `Filters2`, which has no years |
+| Decade choices | `Items/Filters` | `Years` for `UserId`, `IncludeItemTypes`, optional `ParentId`. Recursive full catalogue. Not `Filters2`, which has no years |
 | Item detail | `Users/{uid}/Items/{id}` | re-fetched after playback for fresh `UserData` |
 | Continue watching | `Users/{uid}/Items/Resume` | `MediaTypes=Video` |
-| Next up | `Shows/NextUp?UserId=` | Home uses `EnableResumable=false&EnableRewatching=false`; **never** for autoplay, see below |
+| Next up | `Shows/NextUp?UserId=` | Home uses `EnableResumable=false&EnableRewatching=false`. **Never** for autoplay, see below |
 | Recently added | `Users/{uid}/Items/Latest` | **returns a bare array**, not an `Items` wrapper |
 | Seasons/episodes | `Shows/{seriesId}/Seasons` / `…/Episodes?SeasonId=` | seasons ask for `Fields=RemoteTrailers` |
 | The episode after this one | `Shows/{seriesId}/Episodes?startItemId=&Limit=2` | index 1 is the next one |
 | Collections | `Users/{uid}/Items?IncludeItemTypes=BoxSet` | **`EnableUserData=false` or it takes 40 s**, see below |
 | What is in a collection | `Users/{uid}/Items?ParentId={boxSetId}&Recursive=false` | `SortBy` from the collection's `DisplayOrder`, see below |
-| Playlists | `Users/{uid}/Items?IncludeItemTypes=Playlist` | `EnableUserData=false` as for collections; keep `MediaType=Video` with a `ChildCount`, see below |
-| What is in a playlist | `Playlists/{playlistId}/Items?UserId=` | no `SortBy`: the owner's order; a title listed twice comes back twice |
+| Playlists | `Users/{uid}/Items?IncludeItemTypes=Playlist` | `EnableUserData=false` as for collections. Keep `MediaType=Video` with a `ChildCount`, see below |
+| What is in a playlist | `Playlists/{playlistId}/Items?UserId=` | no `SortBy`: the owner's order. A title listed twice comes back twice |
 | Queue progress | `DisplayPreferences/lagoon?userId=&client=Lagoon` | read the whole record and write it all back, see below |
-| A person | `Users/{uid}/Items/{personId}` | birth date in `PremiereDate`, death in `EndDate`, birthplace in `ProductionLocations`; dates stay strings |
-| What credits a person | `Users/{uid}/Items?PersonIds={personId}&IncludeItemTypes=Movie,Series` | every role, not just acting; `SortBy=PremiereDate,ProductionYear,SortName` descending |
+| A person | `Users/{uid}/Items/{personId}` | birth date in `PremiereDate`, death in `EndDate`, birthplace in `ProductionLocations`. Dates stay strings |
+| What credits a person | `Users/{uid}/Items?PersonIds={personId}&IncludeItemTypes=Movie,Series` | every role, not just acting. `SortBy=PremiereDate,ProductionYear,SortName` descending |
 | A person by TMDB id | `Persons?userId=&searchTerm={name}&Fields=ProviderIds` | **`AnyProviderIdEquals` is ignored for people** (12.2 answers with arbitrary ones), so search by name and keep only an exact `ProviderIds.Tmdb` match |
 
 List calls pass `Fields=Overview,Genres,…,OriginalLanguage` through
 `JellyfinClient.defaultFields`, because lists omit those fields by default.
 
 **Trailers are provider links.** `RemoteTrailers` (`Url`, optional `Name`)
-comes with the item detail; nearly every entry is YouTube, and a season
+comes with the item detail. Nearly every entry is YouTube, and a season
 almost never has its own, so a series page offers the show's unless the
 picked season has one. An entry without a usable `Url` is dropped on its own.
 `TrailerLink` prefers an official trailer, then any trailer, then other
 clips, then teasers. tvOS has no browser, so there it opens only YouTube
-links, as `youtube://watch/<id>` in the YouTube app; iOS opens the web link,
+links, as `youtube://watch/<id>` in the YouTube app. iOS opens the web link,
 which the YouTube app claims when it is installed. Local trailers
 (`LocalTrailerCount`) are not offered yet.
 
@@ -168,7 +168,7 @@ request for missing parents) and deduplicates in first-occurrence order, so an
 old show with a new episode appears at its latest-addition position.
 
 - Do not replace this with a series `DateCreated` sort.
-- Missing parents are dropped; a failed lookup falls back to Home's last good
+- Missing parents are dropped, and a failed lookup falls back to Home's last good
   rail.
 - Movie libraries use the Latest response as is.
 
@@ -178,7 +178,7 @@ Measured against a server with 173 collections:
 
 - **Listing costs 38.6 s with user data, 0.25 s without.** A collection's
   `UserData` includes `UnplayedItemCount`, which walks its children. Dropping
-  `Fields`, scoping by `ParentId` or shrinking the page did not help;
+  `Fields`, scoping by `ParentId` or shrinking the page did not help.
   `EnableUserData=false` is the whole fix. It is safe because a collection's
   own watched state is never drawn. The query for titles inside a collection
   keeps user data and answers in 50 ms.
@@ -199,7 +199,7 @@ Measured against a server with 173 collections:
 ## Playlists
 
 - **Audio and video share the endpoint.** A playlist's `MediaType` is its
-  first entry's; the demo server's two are both `Audio`. Lagoon keeps
+  first entry's. The demo server's two are both `Audio`. Lagoon keeps
   `Video` playlists with a `ChildCount` above zero (`isVideoPlaylist`).
 - **`PlaylistItemId` is not an entry id on 12.2.** It returns the title's own
   `Id`, so a title listed twice comes back twice with identical ids. The
@@ -214,7 +214,7 @@ Measured against a server with 173 collections:
   A write also replaces the record's custom keys wholesale. So queue
   progress reads the record as untyped JSON, changes its one key
   (`lagoonQueues`) and posts everything else back as it came. Both jaflix
-  and the demo (12.2) accept the write; the record is per user and client,
+  and the demo (12.2) accept the write, and the record is per user and client,
   so every Lagoon device shares it.
 - **The server adds a `Playlists` view** (`CollectionType=playlists`) to
   `Users/{uid}/Views` once a playlist exists, audio ones included. Library
@@ -227,7 +227,7 @@ Measured against a server with 173 collections:
   request). It never guesses from a stream title or filename.
 - `IsDefault`, `IsForced`, `IsHearingImpaired` and `Language` drive the other
   selection modes.
-- The server profile holds one audio and one subtitle language; Lagoon's
+- The server profile holds one audio and one subtitle language. Lagoon's
   ordered primary and fallback choices are local, keyed by server and user.
 - Precedence: a manual in-player choice carried into the next episode, then
   the local default, then Jellyfin's default stream.
@@ -258,7 +258,7 @@ the server lists a special inside the season it aired in, by
 `AirsBeforeSeasonNumber`/`AirsBeforeEpisodeNumber`, and the series-wide walk
 above follows the same order. Lagoon never reorders episodes, so the series
 page, autoplay and Up Next agree. A special keeps `ParentIndexNumber` 0 wherever
-it appears, which is all its "Special 1" label needs; the `Airs*` fields only
+it appears, which is all its "Special 1" label needs. The `Airs*` fields only
 come with `Fields=SpecialEpisodeNumbers` and are not requested.
 `IndexNumberEnd` marks a double episode (`E1–2`) and comes without asking.
 
@@ -282,7 +282,7 @@ A landscape card with no artwork shows its title.
 
 | Purpose | Endpoint | Notes |
 | --- | --- | --- |
-| Original file | `GET Items/{id}/Download` | gated by the per-user `EnableContentDownloading` policy; the control is hidden without it |
+| Original file | `GET Items/{id}/Download` | gated by the per-user `EnableContentDownloading` policy, and the control is hidden without it |
 | Progressive transcode | `GET Videos/{id}/stream.ts` | one MPEG-TS response, playable while incomplete, so a background `URLSession` task can carry a whole transcode. Needs a fresh `playSessionId` per request: the server keys the job on it and would reuse an abandoned job's output |
 | Permission and policy fields | `GET Users/Me` | `EnableContentDownloading` and `EnableVideoPlaybackTranscoding` on `UserPolicy`, like `EnableSubtitleManagement` |
 
@@ -299,17 +299,17 @@ A landscape card with no artwork shows its title.
   once per account, since a rail card cannot await one per tap.
 - `EnableContentDownloading` decides whether the Download control or submenu
   appears. `EnableVideoPlaybackTranscoding` decides only the qualities:
-  Original is always offered; High and Standard are server transcodes and are
+  Original is always offered, but High and Standard are server transcodes and are
   hidden when the account may not transcode.
 
 ## Remote subtitles
 
-Lagoon uses Jellyfin's provider-agnostic remote-subtitle routes; no client
+Lagoon uses Jellyfin's provider-agnostic remote-subtitle routes, and no client
 code knows which provider plugin answered.
 
 | Purpose | Endpoint | Notes |
 | --- | --- | --- |
-| Search | `GET Items/{itemId}/RemoteSearch/Subtitles/{language}` | ISO 639-2; Apple/BCP-47 preferences are converted to three letters |
+| Search | `GET Items/{itemId}/RemoteSearch/Subtitles/{language}` | ISO 639-2. Apple/BCP-47 preferences are converted to three letters |
 | Fetch provider file | `GET Providers/Subtitles/Subtitles/{subtitleId}` | ids are opaque and stay one percent-encoded path component |
 | Persist fetched file | `POST Videos/{itemId}/Subtitles` | uploads the validated bytes as base64 to avoid a second provider download |
 | Compatibility fallback | `POST Items/{itemId}/RemoteSearch/Subtitles/{subtitleId}` | for provider formats Lagoon cannot parse |
@@ -326,7 +326,7 @@ Search and failures:
 
 - Preferred languages are searched **concurrently**, then re-sorted into
   request order to keep each provider's ranking. One language failing does
-  not discard another's results; a permission or session failure outranks
+  not discard another's results. A permission or session failure outranks
   other failures.
 - Empty results, missing permission, absent-provider 404s, transport failures
   and download failures are distinct UI states. Automatic mode searches when
@@ -347,7 +347,7 @@ Provider file limits (shared `BoundedDownload` transport):
   cap applies to sidecars and to provider files fetched through Jellyfin.
 - HTML/JSON success bodies, truncated transfers and unreadable cues are
   rejected before selecting or saving.
-- HTTP errors keep at most 16 KiB of body; 401/403/429 finish without
+- HTTP errors keep at most 16 KiB of body, but 401/403/429 finish without
   waiting for it.
 - The captured-session check still runs first, so an old account's late 401
   cannot expire the current one.
@@ -360,7 +360,7 @@ provider file itself, checks it has readable cues, inserts and selects it in
 the running engine, and uploads the same bytes to Jellyfin for later
 sessions. That is one provider download, and it works on a read-only library.
 Formats Lagoon cannot parse use the native endpoint plus a PlaybackInfo poll.
-Position, renderers, selected audio and Now Playing are not rebuilt; forced
+Position, renderers, selected audio and Now Playing are not rebuilt. Forced
 and hearing-impaired flags are preserved.
 
 **Jellyfin is the only subtitle source.** There is no direct OpenSubtitles
@@ -376,13 +376,13 @@ immediately is already wrong. Probed against Jellyfin 12.0.0.
 
 | Purpose | Endpoint | Notes |
 | --- | --- | --- |
-| Groups | `GET SyncPlay/List` | `[]` with no groups; also the availability probe, since a server without SyncPlay fails the route |
-| Membership | `POST SyncPlay/New {GroupName}`, `Join {GroupId}`, `Leave` | 204 each. The new group's id is **not** in the response; it arrives over the socket as `GroupJoined`, like a join |
-| Queue | `POST SyncPlay/SetNewQueue {PlayingQueue, PlayingItemPosition, StartPositionTicks}`, `SetPlaylistItem`, `NextItem`, `PreviousItem` | item ids go up; the group's `PlaylistItemId`s come back in a `PlayQueue` update |
-| Transport | `POST SyncPlay/Unpause`, `Pause`, `Stop`, `Seek {PositionTicks}` | nothing happens locally; the server sends every member a command |
+| Groups | `GET SyncPlay/List` | `[]` with no groups. Also the availability probe, since a server without SyncPlay fails the route |
+| Membership | `POST SyncPlay/New {GroupName}`, `Join {GroupId}`, `Leave` | 204 each. The new group's id is **not** in the response. It arrives over the socket as `GroupJoined`, like a join |
+| Queue | `POST SyncPlay/SetNewQueue {PlayingQueue, PlayingItemPosition, StartPositionTicks}`, `SetPlaylistItem`, `NextItem`, `PreviousItem` | item ids go up. The group's `PlaylistItemId`s come back in a `PlayQueue` update |
+| Transport | `POST SyncPlay/Unpause`, `Pause`, `Stop`, `Seek {PositionTicks}` | nothing happens locally, and the server sends every member a command |
 | Readiness | `POST SyncPlay/Buffering`, `Ready` `{When, PositionTicks, IsPlaying, PlaylistItemId}` | the slowest member sets the pace. `SetIgnoreWait {IgnoreWait}` stops this client holding the group up |
 | Latency | `POST SyncPlay/Ping {Ping}` | milliseconds, from the clock estimate below |
-| Capabilities | `POST Sessions/Capabilities/Full` | **not** needed for command delivery. Sent so the session appears controllable; `SupportedCommands` stays empty until the player handles `GeneralCommand` |
+| Capabilities | `POST Sessions/Capabilities/Full` | **not** needed for command delivery. Sent so the session appears controllable. `SupportedCommands` stays empty until the player handles `GeneralCommand` |
 
 **The socket.** `wss://<server>/socket?api_key=<token>&deviceId=<id>`, built
 from `serverRelativeURL("socket")` with the scheme swapped, so a reverse-proxy
@@ -397,17 +397,17 @@ because the handshake was not verified to carry the `Authorization` header.
 - An unknown `MessageType` is ignored, never a decoding failure.
 - `ForceKeepAlive` carries a timeout in seconds (60 observed). Reply
   `{"MessageType":"KeepAlive"}` at once, then every half-timeout. The server
-  echoes it; neither is forwarded.
+  echoes it, but neither is forwarded.
 - Reconnect backs off 1, 2, 4, 8, 16, 30 s with ±20 % jitter, reset once a
   connection delivers a message.
 
-**Group ids have two spellings.** `GroupId` fields are undashed lowercase hex;
+**Group ids have two spellings.** `GroupId` fields are undashed lowercase hex.
 `GroupLeft`'s payload is the dashed form. Compare through
 `SyncPlayGroupIdentifier`, never `==`. It also recognises the all-zero
 `PlaylistItemId` on the `Stop` a new group receives.
 
 **The clock.** `GET GetUtcTime` returns `{RequestReceptionTime,
-ResponseTransmissionTime}`; with the local send and receive instants, that is
+ResponseTransmissionTime}`. With the local send and receive instants, that is
 NTP's four-timestamp measurement. `ServerClock` keeps the last eight samples
 and uses the one with the _lowest_ round trip, never an average: a slow sample
 is asymmetric, not noisy. It samples three times a second apart, then once a
@@ -436,7 +436,7 @@ A Seerr title page reads `movie/{id}` or `tv/{id}`:
   on the wire, unlike the rest of Seerr, so their DTOs carry their own keys.
 - "More Like This" is `movie/{id}/recommendations` or
   `tv/{id}/recommendations`. TMDB's `similar` list is keyword-matched and
-  weaker, so it is not used. Recommendations load once; live refresh re-reads
+  weaker, so it is not used. Recommendations load once, and live refresh re-reads
   only the details.
 - Discovery titles use their name in type unless a matching Jellyfin item has
   a Logo image.
@@ -458,12 +458,12 @@ discover result plus `character` or `job`, `genreIds` and `voteCount`.
 `mediaInfo` is present only for titles Seerr tracks. The "More from TMDB"
 rail:
 
-- keeps movies and shows with a poster, most voted first;
+- keeps movies and shows with a poster, most voted first.
 - collapses repeat entries for one title (TMDB ids repeat between movies and
-  shows, so the key is type and id);
+  shows, so the key is type and id).
 - drops self-appearances: TMDB's News, Reality and Talk genres (10763, 10764,
   10767), and characters that start with "Self", "Himself", "Herself" or
-  "Themselves", which catches award shows and documentaries;
+  "Themselves", which catches award shows and documentaries.
 - drops what the library has: Available or Partially Available in
   `mediaInfo`, or a TMDB id among the library rail's titles.
 
@@ -528,7 +528,7 @@ python3 scripts/test-session-recovery.py --server-address
 ```
 
 The fixture requires proxy paths and checks Jellyfin sign-in and Seerr
-discovery. iOS covers typed setup and invalid-input recovery; tvOS covers
+discovery. iOS covers typed setup and invalid-input recovery, and tvOS covers
 restored sign-in, remote focus and a restored Seerr pairing. The HTTPS
 disclosure check is a UI check, not a TLS test. Physical-network acceptance is
 still owed.
@@ -575,7 +575,7 @@ Arrangement (Settings › Home Rows):
 - Natively covered sections are never offered, so an arrangement cannot bring
   back a duplicate.
 - Keyed by server and user. A catalogue entry found after plugin rows were
-  arranged starts hidden; for an account that only ever hid native rows it
+  arranged starts hidden, but for an account that only ever hid native rows it
   starts shown.
 - Rows are never pruned: a failed `homeSections()` returns an empty
   catalogue, and pruning would erase the order the first time the server was
@@ -613,11 +613,11 @@ id in `ProviderIds` (`SonarrEpisodeId`, `RadarrMovieId`, `LidarrAlbumId`,
   - Signed out, Seerr shows no title at all (`movie/{id}` answers 401), so a
     card shows the plugin's poster cropped and opens `SeerrSignInGate`:
     Seerr's sign-in, its address field filled from `ProviderIds.JellyseerrRoot`
-    when the account has no Seerr server yet (Seerr's own titles carry it;
-    Sonarr's and Radarr's do not), then the title's page in its place. Music
+    when the account has no Seerr server yet (only Seerr's own titles carry
+    it), then the title's page in its place. Music
     and books, which Seerr does not hold, open nothing.
 
-On a plain movies/TV server this correctly shows **nothing** new; it matters
+On a plain movies/TV server this correctly shows **nothing** new, but it matters
 with Jellyseerr requests, My List, Discover or custom collection sections. All
 28 sections resolve in about 1.8 s concurrently (empties about 0.1 s each), so
 they load eagerly.
@@ -630,14 +630,14 @@ they load eagerly.
   Jellyfin items by exact `ProviderIds.Tmdb` match within the same movie or TV
   catalogue. Duplicate editions and repeated ids take one slot.
 - Fewer than four matches omits the row, and so does an unconfigured Seerr
-  connection. Rows contain only playable library items; no title or year
+  connection. Rows contain only playable library items, with no title or year
   guessing.
 - Top 10 loads independently, so a slow catalogue never delays the native
   shelves.
-- Legacy Home Screen Sections Manager sections still work; its ranked-section
+- Legacy Home Screen Sections Manager sections still work, and its ranked-section
   API is not needed.
 
-This approximates popularity; it is not a personal `PlayCount` substitute.
+This approximates popularity. It is not a personal `PlayCount` substitute.
 
 ## Testing without a home server
 

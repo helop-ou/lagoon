@@ -19,7 +19,7 @@ PlaybackController
 ```
 
 Playback lives in `Lagoon/Features/Playback/`. `PlaybackController.swift`
-owns the session; `Views/VideoPlayerView.swift` retains it with `@State`.
+owns the session, and `Views/VideoPlayerView.swift` retains it with `@State`.
 Surfaces, controls, overlays and PiP presentation are in `Views/`.
 
 Demux, decode and render are **not in this repository**. The `LagoonEngine`
@@ -54,7 +54,7 @@ failure-driven delivery ladder go direct play → remux → video transcode.
   and server CPU per viewer, so a failure that says nothing about the
   bitstream must never reach it.
 - **A `.delivery` verdict never skips to the re-encode.** It goes to remux
-  first; only a remux that fails too, for either cause, falls to the
+  first, and only a remux that fails too, for either cause, falls to the
   transcode.
 
 The engine guards its own verdicts: a reclaimed decode session is rebuilt,
@@ -94,8 +94,8 @@ display-capability check is needed. When checking by eye:
   with it on is meaningless.
 - The panel shows no badge in Filmmaker Mode.
 
-Subtitles come from embedded streams or Jellyfin's permission-gated routes;
-there is no direct provider login. Disc images use the app's bounded byte
+Subtitles come from embedded streams or Jellyfin's permission-gated routes,
+and there is no direct provider login. Disc images use the app's bounded byte
 source and UDF handling.
 
 See [negotiation and
@@ -146,7 +146,7 @@ rows can be told apart and recognised later.
 The same ladder, in subtitle ordinals: embedded tracks, then external ones,
 with 0 meaning none. `SubtitleTrackMemoryStore` keeps one choice per series
 per account under its own key. Both stores are `TrackMemoryStore` (re-read,
-merge, evict, persist); the policies stay separate because layout shape
+merge, evict, persist), but the policies stay separate because layout shape
 differs and off is a valid answer.
 
 - **Off is stored like any other choice.** It is the choice a server default
@@ -169,7 +169,7 @@ engine. It applies, lowest first: automatic selection, the choice carried
 from the previous episode, the choice remembered for the show, then the bench
 hook. It also holds what recording a later choice needs: the scope, the
 layouts and what automatic selection picked. `PlaybackTrackPlanTests` pins the
-order; keep it.
+order, so keep it.
 
 The carry matches audio on the file's `title` and subtitles on Jellyfin's
 `displayTitle`. The difference is deliberate: a subtitle's display title names
@@ -193,10 +193,10 @@ guide](https://github.com/helop-ou/lagoon-engine/blob/main/docs/engine.md#lifecy
   does not, the player stops with an error rather than attaching a new engine
   to a layer the old one still owns.
 - The byte cache belongs to the engine. `prepare` takes an item ID and a
-  delivery and decides whether to cache; `stageSuccessor` warms the next
-  episode; `bufferState` feeds the scrub bar. Nothing here builds a cache
+  delivery and decides whether to cache. `stageSuccessor` warms the next
+  episode. `bufferState` feeds the scrub bar. Nothing here builds a cache
   session or runs a fill loop. The engine enforces one active scope and at
-  most one staged successor across engine replacements; exit, failure,
+  most one staged successor across engine replacements. Exit, failure,
   account replacement and handoff retire scopes. The cache is transient, not
   an offline library.
 - Do not replace queue ownership with unstructured tasks during a file
@@ -206,14 +206,14 @@ guide](https://github.com/helop-ou/lagoon-engine/blob/main/docs/engine.md#lifecy
 
 Before negotiating or consulting a prepared successor, the controller asks
 `DownloadStore` whether the item is a finished download. If so, playback
-starts without the network: no negotiation, `playbackInfo` or `streamURL`;
+starts without the network: no negotiation, `playbackInfo` or `streamURL`, just
 direct play from the file on disk, with no cache scope in front of it.
 
 - **Track metadata.** An original-quality download is the source file, so its
   stream list drives audio and subtitle selection as usual. A High/Standard
   download is a server transcode (different container, one audio track, no
   external subtitles), so the controller passes empty track metadata. The
-  engine and selection policies fall back to what the file demuxes to; only
+  engine and selection policies fall back to what the file demuxes to, and only
   language and title labels are lost.
 - **No chapters, trickplay or skip segments offline.** Those requests are
   skipped, not awaited, because an unreachable server would burn the full
@@ -239,7 +239,7 @@ states their contracts. Two matter constantly here:
 - `setCorrectionRate(_:)` is not `rate`. `rate` stays the viewer's choice and
   is what the speed row and Now Playing show.
 
-The controller is the boundary; a group driver never holds the engine.
+The controller is the boundary, and a group driver never holds the engine.
 
 - It starts playback with `start(startPosition:startPaused:)`. The server's
   position outranks every resume rule, and a member can wait primed and
@@ -260,7 +260,7 @@ group, queue. `GroupPlaybackDriver` owns everything that touches playback,
 holding the controller weakly and the engine not at all.
 
 - **The viewer's transport is a request.** Play, pause, seek, skips, scrub
-  commit and the lock screen go to `groupTransport`. Nothing moves locally;
+  commit and the lock screen go to `groupTransport`. Nothing moves locally, and
   the server's echo moves every member. Audio track, subtitles, audio delay
   and speed stay local.
 - **A report says where the engine is, not where it was.** `beginPlayback`
@@ -271,7 +271,7 @@ holding the controller weakly and the engine not at all.
   `GroupJoined` and the `PlayQueue` update, and the member never hears from
   the group again.
 - **Leaving the player is not leaving the group.** `onClosed` posts
-  `SetIgnoreWait(true)`; `rejoinPlayback()` reopens where the group is now,
+  `SetIgnoreWait(true)`, and `rejoinPlayback()` reopens where the group is now,
   not where the last command pointed.
 - **Waiting is not buffering.** A member primed and paused at the group's
   position is not stalled, and the spinner says so.
@@ -334,7 +334,7 @@ video costs the compositor, so bench any change to it.
   disable hit testing and are accessibility-hidden. The layout stays mounted,
   so fading and toolbar safe-area changes cannot shift the centre cluster.
 - Double-tapping either half seeks 10 s without revealing controls. Repeats
-  within the 700 ms feedback window add up; changing direction resets.
+  within the 700 ms feedback window add up, and changing direction resets.
 - Dragging the timeline previews trickplay and commits on release. Skip and Up
   Next take direct taps. Close and Info are in the native toolbar. The options
   sheet suppresses surface interaction.
@@ -373,7 +373,7 @@ integration](reference/playback/system-integration.md).
 - A screen only _requests_ playback through `playerPresentation`. The single
   `playerPresentationHost` at the tab root, `PlayerPresentationHub`, presents
   it and keeps the hosting controller across PiP.
-- The swipe down requests PiP; only PiP's successful start callback hides
+- The swipe down requests PiP, and only PiP's successful start callback hides
   fullscreen. Restore reuses the same controller. Closing PiP or withdrawing
   the request cleans up, and `onDismiss` still reaches the requesting screen.
 - **Never present the host from inside a `NavigationStack` destination.** A
@@ -413,7 +413,7 @@ app-owned Sentry envelope transport. There is no SDK.
 - Only keys in `DiagnosticSchema.fields` leave the device. A title, URL,
   message or `localizedDescription` handed to it is dropped and counted.
 - A new failure path gives `PlaybackEngineFailure` a `PlaybackFailureDetail`
-  with stage, error domain and code; never rely on its message.
+  with stage, error domain and code, and never rely on its message.
 - Record the moment with `Diagnostics.record`, and report with a fingerprint
   that never varies per occurrence.
 - Keep `record` cheap and off the pump queues. The hub already runs the sink
@@ -427,14 +427,14 @@ Detectors, thresholds, limits, tester controls and Sentry setup are in the
 - Build both platforms and run the relevant logic tests.
 - `TouchPlayerUITests` covers iPhone/iPad touch and auto-hide.
   `PlayerRegressionUITests` covers remote input, reporting, handoff and
-  teardown. Both pass on the simulator; physical checks are still owed.
+  teardown. Both pass on the simulator, but physical checks are still owed.
 - The [regression lane reference](reference/regression-lane.md) covers what a
   journey may assume about server and simulator state, and the resolver flags
   that open a title by property.
 - XCTest can see faded buttons and nonzero frames despite
   `accessibilityHidden`. For auto-hide, assert the launch-gated `transport`
   state, toolbar disappearance and screenshots together. Use full-screen
-  screenshots for landscape; app screenshots can be cropped.
+  screenshots for landscape, because app screenshots can be cropped.
 - Simulator evidence does not establish physical VoiceOver or PiP acceptance.
 
 Measurement:

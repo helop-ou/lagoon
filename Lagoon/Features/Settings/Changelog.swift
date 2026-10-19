@@ -106,7 +106,7 @@ nonisolated enum Changelog {
             headline: "A clearer sign-in on iPhone and iPad, and subtitles chosen by System Setting stay in your language.",
             sections: [
                 ChangelogSection(category: .newFeatures, changes: [
-                    "Settings › Playback › Maximum Quality. On Auto, Lagoon checks the connection to a server away from home before playing and asks for a smaller version when the original would keep pausing; at home nothing changes. Or choose a fixed maximum.",
+                    "Settings › Playback › Maximum Quality. On Auto, Lagoon checks the connection to a server away from home before playing and asks for a smaller version when the original would keep pausing. At home nothing changes. Or choose a fixed maximum.",
                     "When playback keeps pausing to load, the player offers a lower quality that carries on from the same moment.",
                 ]),
                 ChangelogSection(category: .improvements, changes: [
@@ -168,7 +168,7 @@ nonisolated enum Changelog {
                 ChangelogSection(category: .bugFixes, changes: [
                     "Dolby Vision titles with gaps in their metadata play smoothly in full quality instead of freezing or switching to a transcode at the same point every time.",
                     "More kinds of damaged video, including H.264, AV1 and VP9 titles, play through the damage instead of switching to a transcode.",
-                    "A short Wi-Fi or server outage no longer stops playback or switches to a transcode; the video plays on from what it has buffered.",
+                    "A short Wi-Fi or server outage no longer stops playback or switches to a transcode, and the video plays on from what it has buffered.",
                     "TrueHD, DTS and FLAC audio that changes channel layout or sample rate partway through no longer crashes playback or plays too fast.",
                     "TV recordings play: MPEG-TS files with AAC audio no longer stop a second in, and recordings that switch between SD and HD keep playing.",
                     "Resuming a title that falls back to another playback mode keeps your place instead of starting over and clearing Continue Watching.",
@@ -192,7 +192,7 @@ nonisolated enum Changelog {
                     "4K AV1 and VP9 titles use far less memory on Apple TV.",
                 ]),
                 ChangelogSection(category: .bugFixes, changes: [
-                    "On Apple TV, a single click on Skip Intro or Up Next works; it no longer takes a double click.",
+                    "On Apple TV, a single click on Skip Intro or Up Next works, and it no longer takes a double click.",
                     "A title with a few damaged frames keeps playing instead of going black and switching to a transcode.",
                     "Poster grids on iPhone stay three across when the text size is smaller than the default.",
                 ]),

@@ -15,8 +15,8 @@ simulator.
 | Tier | How it is selected | What it guarantees | What it does not have |
 | --- | --- | --- | --- |
 | Public demo (default) | `-debug.playerRegression YES -debug.regressionBootstrapPublicDemo YES` and no `LAGOON_REGRESSION_*` in the environment | `demo.jellyfin.org/stable`, user `demo`, Jellyfin 12 behind a `/stable` base path. Sign-in, browsing, detail pages, direct-play H.264 films and episodes, `Pioneer One` with successive episodes | Subtitles, multiple audio tracks, chapters, intro segments, 4K, HDR, VC-1. Everything direct-plays, so HLS only through `-debug.regressionInitialDelivery remux`. The Home hero can be empty between the demo's periodic resets |
-| Private fixture server | `LAGOON_REGRESSION_SERVER`, `_USER`, `_PASS` in the test runner's environment (`TEST_RUNNER_` prefix under `xcodebuild`) | Whatever that library holds; the journeys that need a specialised item resolve it by property, never by a private title | Nothing is assumed absent. A missing hero or fixture on a supplied server is a failure, not a skip |
-| Loopback synthetic fixture | `LAGOON_SESSION_FIXTURE` pointing at `127.0.0.1`, started by `scripts/test-session-recovery.py` (which runs `scripts/jellyfin-regression-fixture.py`) | Deterministic direct and HLS delivery, session revocation, subtitle failure and size modes, proxy base paths, account privacy pairs, denied local network | Real media and a real Jellyfin; the fixture is a small HTTP server with ffmpeg-generated clips |
+| Private fixture server | `LAGOON_REGRESSION_SERVER`, `_USER`, `_PASS` in the test runner's environment (`TEST_RUNNER_` prefix under `xcodebuild`) | Whatever that library holds. The journeys that need a specialised item resolve it by property, never by a private title | Nothing is assumed absent. A missing hero or fixture on a supplied server is a failure, not a skip |
+| Loopback synthetic fixture | `LAGOON_SESSION_FIXTURE` pointing at `127.0.0.1`, started by `scripts/test-session-recovery.py` (which runs `scripts/jellyfin-regression-fixture.py`) | Deterministic direct and HLS delivery, session revocation, subtitle failure and size modes, proxy base paths, account privacy pairs, denied local network | Real media and a real Jellyfin. The fixture is a small HTTP server with ffmpeg-generated clips |
 
 Third-tier journeys skip with "Requires the synthetic … fixture" when the
 variable is absent. The first two tiers share `PlayerUITestCase.launchSignedIn`,
@@ -39,7 +39,7 @@ one. `LaunchFixtureResolver` in `Lagoon/App/` reads them all:
 | … plus `-debug.regressionRequireAudio` | … that also has an audio stream | same |
 | … plus `-debug.regressionRequireDirectPlay` | … whose first source the server offers for direct play under the simulator profile | `missing:direct-play playable item` |
 | `-debug.regressionFindDirectStream` | A direct-stream (remux) source | `missing:direct-stream item` |
-| `-debug.regressionFindEpisodeWithSuccessor` | Earliest of at least two episodes in one series; `-debug.regressionRequireDirectH264Successor` narrows it to direct-play H.264 | `missing:requested handoff series` or the H.264 variant |
+| `-debug.regressionFindEpisodeWithSuccessor` | Earliest of at least two episodes in one series. `-debug.regressionRequireDirectH264Successor` narrows it to direct-play H.264 | `missing:requested handoff series` or the H.264 variant |
 | `-debug.regressionFindMultiAudioH264` | Direct-play H.264 with more than one audio track | `missing:direct-play H.264 multi-audio item` |
 | `-debug.regressionFindSkippableEpisode` | Episode of the named series with a skippable segment | `missing:requested skippable series` |
 | `-debug.regressionFindVC1InSeries` | VC-1 episode of the named series | `missing:VC-1 episode` |
@@ -59,7 +59,7 @@ Delivery hooks:
 - `-debug.regressionFailFirstDelivery delivery|undecodable` injects the first
   failure so the fallback ladder runs.
 - `-debug.simulatorTranscode` only withdraws HEVC and Dolby Vision from the
-  profile; it never forces a transcode by itself.
+  profile, and it never forces a transcode by itself.
 
 ## State on the simulator
 
@@ -72,7 +72,7 @@ flag. It runs before session restore and removes:
 - the Seerr server keyed by Jellyfin URL
 - every keychain item of the app's service except the device id
 
-App-wide settings (skip mode, autoplay, caption style) stay; a journey that
+App-wide settings (skip mode, autoplay, caption style) stay. A journey that
 cares sets them by launch argument and restores what it flips. The bootstrap
 then signs into the lane's server, whatever the simulator last used, and
 persists nothing.
@@ -119,9 +119,9 @@ scripts/test-session-recovery.py --subtitle-downloads --platforms iOS tvOS
 
 - Give a UI run its own `-derivedDataPath`, or it shares a build database
   with `xcodebuild build` and dies with "database is locked".
-- Two lanes at once on one machine are fine; three caused load flakes.
+- Two lanes at once on one machine are fine, but three caused load flakes.
 - A passed lane means every test passed or skipped with a named fixture
   reason. A skip on a supplied fixture server is a missing-fixture finding,
   not a pass.
 
-Evidence for a revision goes on its ticket; the lane's contracts live here.
+Evidence for a revision goes on its ticket. The lane's contracts live here.

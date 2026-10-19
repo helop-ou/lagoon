@@ -12,7 +12,7 @@ screen-specific copies.
 | `screenGutter` | 80 | 20 |
 | `cardSpacing` | 40 | 14 |
 | `posterWidth` | 280 | 160 rail card baseline, scales with Dynamic Type |
-| `phoneGridPosterMinimum` / `padGridPosterMinimum` | Not used | 100 / 150; grids fit as many columns as these allow |
+| `phoneGridPosterMinimum` / `padGridPosterMinimum` | Not used | 100 / 150: grids fit as many columns as these allow |
 | `landscapeWidth` | 360 | 240 |
 | `heroHeight` | 620 | 200 on iPhone and compact-width iPad |
 | `expandedHeroHeight` | Not used | 360 on regular-width iPad |
@@ -25,7 +25,7 @@ screen-specific copies.
 | `detailPosterAmbientBlur` | Not used | 36: blur of the poster copy filling a landscape hero's sides |
 | `detailPosterAmbientDecodeSize` | 240 | Longest edge of that blurred copy's decode, shared |
 | `detailPlayButtonMaxWidth` / `detailLandscapePlayButtonMaxWidth` | Not used | 360 / 260: the phone's Play pill cap, portrait / landscape row |
-| `gridColumns` | 5 | Not used; columns follow the width (three on a portrait phone) |
+| `gridColumns` | 5 | Not used: columns follow the width (three on a portrait phone) |
 | `downloadRingLineWidth` | Not used | 2.5: download progress ring stroke |
 | `downloadMarkSize` | Not used | 18: download progress ring |
 | `cardMarkSize` / `cardMarkInset` | 28 / 8 | 18 / 4: a card's "downloaded" and "watched" badges and their corner inset |
@@ -52,7 +52,7 @@ screen-specific copies.
 | `flyingGhostSize` | 120 | 56: a ghost crossing a haunted page's background |
 
 - `Metrics.Space`: `hair=2`, `xs=4`, `s=8`, `m=12`, `l=16`, `xl=24`,
-  `xxl=40`, `section=56`. Use it for internal spacing; gutters and card sizes
+  `xxl=40`, `section=56`. Use it for internal spacing. Gutters and card sizes
   have their own tokens.
 - Radii: card 12, artwork 10, badge 6, panel 32. iOS Home and Discover heroes
   use `heroCornerRadius` 16. tvOS heroes keep the native card shape.
@@ -89,7 +89,7 @@ connect code's letter spacing is `Typography.quickConnectCodeTracking` (6).
 A theme is a `ThemePalette` of eight roles: `accent`, `ground`, `background`,
 `surface`, `glowDepth`, `controlTint`, `artworkTint` and `chrome`. Three exist:
 `AppTheme.lagoon` over true black, `AppTheme.babyPink` and `AppTheme.spooky`.
-Keep the list short; each theme is checked over every screen.
+Keep the list short, because each theme is checked over every screen.
 
 - **Read colours from `Theme.accent`, `.ground`, `.background` and `.glow`
   inside `body`**, never brand tokens or `Color.black`. That is what makes a
@@ -111,8 +111,8 @@ Keep the list short; each theme is checked over every screen.
 - **Through October a profile on the default wears Spooky**
   (`AppTheme.seasonal(on:)`): one that never chose, or chose Lagoon before
   October. A profile that chose another theme keeps it. Choosing Lagoon during
-  October keeps Lagoon until next October. November brings Lagoon back;
-  Spooky stays in the picker all year.
+  October keeps Lagoon until next October. November brings Lagoon back,
+  and Spooky stays in the picker all year.
 
 Materials: use native `.glass` actions and the existing circular control
 shape. The iOS player's centre transport uses `.glass(.clear)` so video shows
@@ -140,10 +140,10 @@ notes](reference/design-system.md#themes).
   (`MediaRail`, `SeerrMediaRail`, `TopTenRail`, `CollectionRail` (Collections and Playlists), `GenreRail`,
   the Seerr genre and search rails) is built on the shared `RailShelf`, which
   owns the heading, the iOS "See All" link, the gutter/rail paddings and
-  `.scrollClipDisabled()`; `RailPlaceholder` matches its shape while a shelf
+  `.scrollClipDisabled()`. `RailPlaceholder` matches its shape while a shelf
   loads or fails. Titles go beneath posters. Horizontal gutters stay inside
-  scroll content; keep focus padding. tvOS Library has five columns; iOS uses
-  `PosterLayout`.
+  scroll content. Keep focus padding. tvOS Library has five columns, and iOS
+  uses `PosterLayout`.
   - Poster cards (`PosterCard`, `SeerrMediaCard`, `SeerrRequestCard`) are thin
     wrappers around `PosterCardShell`, which owns the placeholder, the 2:3
     frame and clip, `.cardButtonStyle()`, focus hue and the caption. A
@@ -152,7 +152,7 @@ notes](reference/design-system.md#themes).
     and the Seerr `StatusCapsule` can share one `ZStack` with no imposed
     alignment.
   - Landscape tiles (`LandscapeCard`, `EpisodeCard`) share `LandscapeArtwork`
-    for the 16:9 clip, bottom metadata wash and progress bar; each supplies
+    for the 16:9 clip, bottom metadata wash and progress bar. Each supplies
     its own `metadata` closure for the title block.
   - Genre and collection cards (`GenreCard`, `CollectionCard`,
     `SeerrGenreCard`) share `NamedArtworkBackground` (artwork, or a gradient
@@ -160,22 +160,22 @@ notes](reference/design-system.md#themes).
     dimmed, shadowed title, centered and multi-line on tvOS). Genre cards
     also soften their artwork with `genreArtworkTreatment()`, so a colourful
     poster or one with its own title painted in never fights the genre
-    name; collection cards caption below the art and keep it untouched.
+    name. Collection cards caption below the art and keep it untouched.
   - The `.downloadedBadge(itemID:)` modifier draws the top-trailing corner
     marks (iOS-only `DownloadedMark`, plus an optional `leading` view like
-    `WatchedMark`); `String.appendingDownloadedSuffix(itemID:)` appends the
+    `WatchedMark`). `String.appendingDownloadedSuffix(itemID:)` appends the
     matching accessibility suffix without an `#if` at each call site.
 - **Chip rows** (Discover's Movies/Shows/Requests, the Requests filters) stay
   one row everywhere. On a phone the row scrolls horizontally, with the gutter
   as a content margin and no glyphs, and never folds into a column. The TV
   keeps a fixed row for focus geometry.
 - **Title art:** `TitleArtView` shows a library title's Jellyfin logo and
-  `TitleArtImage` any logo URL; both fall back to the name in type. Seerr
+  `TitleArtImage` any logo URL. Both fall back to the name in type. Seerr
   titles use the Jellyfin logo once the title is in the library.
 - **Profile picker:** round `ProfilePortrait`s with the name beneath. On
   tvOS only the portrait is the button, `.buttonStyle(.card)` with
-  `.buttonBorderShape(.circle)`, so the system focus lift follows the circle;
-  borderless and plain styles draw a square platter. Several servers put each
+  `.buttonBorderShape(.circle)`, so the system focus lift follows the circle.
+  Borderless and plain styles draw a square platter. Several servers put each
   server's name, address and status dot beside its row on tvOS and above its
   grid on iOS, so three servers fit one TV screen. The active profile carries a
   check mark only when the picker is opened from the app. UIKit controls and
@@ -191,7 +191,7 @@ notes](reference/design-system.md#themes).
   (`OnboardingFieldGroup`, each field `OnboardingField`), the system's own
   sign-in pattern: they read as inputs, where bare underlines read as
   dividers. Connect and Sign In take the detail Play's prominence
-  (extra-large glass, semibold title3); every other action is a regular glass
+  (extra-large glass, semibold title3). Every other action is a regular glass
   capsule, and About Lagoon is the footnote footer. Errors use
   `OnboardingErrorText`. Outside a Form, `CustomHeaderFields` gives each
   header its own card with Remove beneath it, and Add Header is a glass
@@ -202,10 +202,10 @@ notes](reference/design-system.md#themes).
 - **Heroes:** contained banner, artwork wash, native paging. The focused or
   tappable control stays stable while artwork transitions. Home and Discover
   share the taller iPad layout, with title and two-line synopsis in a bounded
-  column; height grows for Dynamic Type. Ambient glow uses `AmbientGlowView`.
+  column. Height grows for Dynamic Type. Ambient glow uses `AmbientGlowView`.
 - **Details:** `DetailPageScaffold`, `DetailMetadataHeader`,
   `DetailActionLayout`, `MetadataFlowLayout`, title art and cast components
-  serve both Jellyfin and Seerr pages; request state stands in for Play.
+  serve both Jellyfin and Seerr pages. Request state stands in for Play.
   `CastStrip` takes Jellyfin people or `CastCredit`s (Seerr's TMDB credits).
   People are round native `.card` buttons on a `RailShelf` that open the
   person page, library people and Seerr's alike. See the [design
@@ -233,16 +233,16 @@ notes](reference/design-system.md#themes).
   notes](reference/design-system.md#detail-pages).
 
 - **Settings:** native category navigation on each platform. iOS uses Forms,
-  pickers, toggles and Edit/reorder; tvOS keeps remote focus. An iOS picker
+  pickers, toggles and Edit/reorder. tvOS keeps remote focus. An iOS picker
   opens as a menu on its row (`TouchSettingsPage`), like the TV's
-  `TVSettingsMenuPicker`; only a list too long for a menu, such as the
+  `TVSettingsMenuPicker`. Only a list too long for a menu, such as the
   language pickers, pushes a page. Home Rows is one
   list of every row, each naming its source under its title. Reorder is Edit
   and drag on iOS, up/down glass buttons beside each row on the TV.
 - **Modals (tvOS):**
   - `TVModalPanel` is the panel: Changelog, Acknowledgements, About Lagoon
-    and Watch Together use it. It owns the size, the Done button and Menu;
-    a panel with levels of its own passes `onExit`.
+    and Watch Together use it. It owns the size, the Done button and Menu.
+    A panel with levels of its own passes `onExit`.
   - A sheet with custom content ignores `presentationSizing`, so the panel
     sets its size (`Metrics.modalPanelSize`) or fills the screen.
   - Layout is title, scrolling content, Done, in sequence, not
@@ -284,7 +284,7 @@ notes](reference/design-system.md#themes).
   theme. Every rule below fails silently when broken, and `QRCodeTests`
   renders and decodes the real view to catch it.
   - Colours are `lagoonInk` on `lagoonMist` (about 16:1). Keep the pair
-    extreme; never tint the light half.
+    extreme. Never tint the light half.
   - Scale with `.interpolation(.none)`, since the generator emits one pixel per
     module.
   - Keep modules square. Rounded or dotted ones lose contrast at sofa
@@ -304,7 +304,7 @@ notes](reference/design-system.md#themes).
 - Adaptive actions measure intrinsic width and height before stacking.
 - Segmented pickers become menu pickers at accessibility sizes.
 - Phone synopses show in full. Title art has a spoken title and header trait.
-  Cast names and roles are combined; portraits are decorative.
+  Cast names and roles are combined. Portraits are decorative.
 - The transport stays available with VoiceOver, with adjustable timeline
   seeking and descriptive icon labels. Respect Reduce Motion explicitly for
   symbol effects.
@@ -319,7 +319,7 @@ Use `CachedAsyncImage` with an explicit `maxPixelSize`, never `AsyncImage`.
 `ArtworkSizing` converts display size to pixels, and a size change reloads.
 The loader gives synchronous cache hits, off-main thumbnail decoding,
 coalesced requests and per-caller cancellation. Artwork that has to be fetched
-fades in over its placeholder (`Motion.standard`); a memory-cache hit draws on
+fades in over its placeholder (`Motion.standard`). A memory-cache hit draws on
 the first frame and never fades, so returning to a screen doesn't replay it.
 
 | Limit | Value |

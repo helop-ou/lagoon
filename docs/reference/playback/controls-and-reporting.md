@@ -17,7 +17,7 @@ playback:
   reorders Continue Watching.
 
 Screens underneath re-fetch in `fullScreenCover`'s `onDismiss`: detail pages
-re-read the item (and, for a series, what is up next); Home re-reads Resume
+re-read the item (and, for a series, what is up next). Home re-reads Resume
 and Next Up and republishes Top Shelf. Three invariants make that re-fetch see
 the new position, and each alone was enough to break it:
 
@@ -30,7 +30,7 @@ the new position, and each alone was enough to break it:
   when nothing is open. Dismissal itself never waits.
 - **Bypass the URL cache.** Jellyfin sends item JSON without cache headers,
   yet CFNetwork reused it (`cache_hit=true`). Every API request sets
-  `reloadIgnoringLocalCacheData` and the client has no `urlCache`; images and
+  `reloadIgnoringLocalCacheData` and the client has no `urlCache`. Images and
   the playback cache use their own sessions.
 - **Compare `MediaItem` by value.** SwiftUI drops a `@State` write whose new
   value compares equal, so an id-only `==` meant the fetched item was stored
@@ -76,7 +76,7 @@ touch:
 
 The tap calls `pokeControls()`, the path every interaction uses, so showing
 the bar and resetting auto-hide cannot drift apart. XCUITest cannot produce a
-light touch-surface tap; this is checked only on a physical remote.
+light touch-surface tap, so this is checked only on a physical remote.
 
 `-debug.playerInputTrace YES` (Debug builds) logs a `PlayerInput` line for
 every press, the path that took it (gate recognizer, `pressesBegan` and
@@ -109,7 +109,7 @@ A focusable control there needs all of these:
 Platform limits, verified on device:
 
 - **SwiftUI `Menu` never presents inside the player's `fullScreenCover`.** The
-  button takes focus and Select does nothing; the HIG lists pop-up buttons as
+  button takes focus and Select does nothing. The HIG lists pop-up buttons as
   unsupported on tvOS. Build menus from ordinary buttons.
 - **Focusable buttons inside another `Button`'s overlay never take focus.**
   Anchor a popup from outside: publish the corner with `anchorPreference` and
@@ -136,8 +136,8 @@ Platform limits, verified on device:
   captures `[weak]`, and a stale copy reads `DetachedPlayerEngine.shared`
   instead of crashing.
 - On failure the engine is set to **nil** and replaced with an error overlay
-  that has a Back button and `.onExitCommand`; a dead surface would swallow
-  Menu and trap the viewer.
+  that has a Back button and `.onExitCommand`, because a dead surface would
+  swallow Menu and trap the viewer.
 - Never nest `SharedState.withLock`: it is non-recursive and nesting caused a
   deadlock. `sample <pid>` names the stuck line when a queue wedges.
 
@@ -151,7 +151,7 @@ Platform limits, verified on device:
   closes, so every presenter wraps in `.restoresFocusAfterPlayer(isPresented:)`
   (`Lagoon/Shared/UI/FocusRestoration.swift`: a focus scope plus `resetFocus`
   after the dismissal transition).
-- Native buttons only; the system lozenge is the design.
+- Native buttons only. The system lozenge is the design.
 
 **Scrub grammar:**
 
@@ -170,11 +170,11 @@ Platform limits, verified on device:
   timeout and iOS drags keep the previous play state. Menu cancels to the live
   position, so it outranks closing the panel in `MenuPressGate`.
 - Walking accelerates 10 → 30 → 60 s. Up/Down hop chapters only mid-scrub
-  (Down otherwise opens the panel and would strand the playhead); a backwards
+  (Down otherwise opens the panel and would strand the playhead). A backwards
   hop lands on the current chapter's start first.
-- Chapter ticks are unlabelled (a film can have ~25); the chip names the
+- Chapter ticks are unlabelled (a film can have ~25). The chip names the
   chapter under the playhead.
-- iOS seeks on release only; seeking per drag update would flush and
+- iOS seeks on release only. Seeking per drag update would flush and
   re-demux every frame.
 
 **Skip intro, recap and credits:**
@@ -188,15 +188,15 @@ Platform limits, verified on device:
   after it as more credits, so anime's post-credits scenes are reachable.
   Otherwise it hands off to Up Next. The threshold is Up Next's run-out, so
   the pill and the card never share the corner. `SkipSegmentPolicy` decides
-  this in the app; the engine's `Kind.isSkippable` still says intro and
+  this in the app. The engine's `Kind.isSkippable` still says intro and
   recap only.
 - Episodes quite often have **two `Intro` segments**, and one can start at
-  tick 0. Both cases are handled; do not "simplify" to first-of-each.
+  tick 0. Both cases are handled. Do not "simplify" to first-of-each.
 - `SkipMode`: auto after delay (default: 5 s fill then commit), instant, or
   ask every time. Menu dismisses the pill in both modes that draw it.
 - **The button is not focusable**, since focus would pull `onMoveCommand` off
   the surface. It extends the priority chains instead: Select commits a
-  scrub, else skips, else toggles pause; Menu cancels a scrub, else dismisses
+  scrub, else skips, else toggles pause. Menu cancels a scrub, else dismisses
   the pill or the Up Next card, else closes the panel, else exits. A prompt
   is a layer above the player, so Back answers it first, countdown or not
   (HIG, Playing video: give people a clear way to dismiss an overlay). The iOS pill takes a
@@ -215,7 +215,7 @@ Platform limits, verified on device:
   queue is a collection's or playlist's entries in play order, movies and
   episodes mixed, and needs no request. Its entries are keyed by position,
   because a playlist can hold the same title twice. A hand-off advances the
-  position; a fallback or a quality change replays the same entry; a Watch
+  position. A fallback or a quality change replays the same entry. A Watch
   Together item change drops back to `.series`, because the group orders
   the items. The card reads title and year for a movie, and names the show
   when an episode follows another title. Each list entry that starts
@@ -226,7 +226,7 @@ Platform limits, verified on device:
   PlaybackInfo and warms its first 8 MiB (direct file) on the same
   cooperative scheduler, replacing the current title's proactive fill so
   credits never carry two downloads. Advancing reports the old session
-  stopped and retires its demuxer and synchronizer; only when the lifecycle
+  stopped and retires its demuxer and synchronizer. Only when the lifecycle
   counters reach zero does `SampleBufferVideoSurface.updateUIView` attach the
   successor to the same layer. Never overlapping decoders.
 - Presentation survives the boundary: the old frame stays under a
@@ -240,7 +240,7 @@ Platform limits, verified on device:
   report lands it returns the episode that just ended, and autoplay loops.
   `episodeAfter(_:)` uses
   `Shows/{seriesId}/Episodes?startItemId=<current>&Limit=2` and takes index 1.
-  It checks that item 0 _is_ the anchor; a mismatch means the server started
+  It checks that item 0 _is_ the anchor. A mismatch means the server started
   from the top, and rolling into episode 1 is worse than doing nothing.
 - **Two anchors.** With an `Outro` segment that runs to the end, the card
   appears at its start and counts down from there. Without one, or when the
@@ -290,8 +290,8 @@ Platform limits, verified on device:
   alongside PlaybackInfo), not taken from the `MediaItem`, because rail list
   requests omit those fields. Both degrade to nothing when absent.
 - A faded overlay **still hit-tests**. The transport gates `allowsHitTesting`
-  on its own visibility, or the invisible iOS scrubber swallows drags; tvOS
-  keeps the whole transport non-hit-testable.
+  on its own visibility, or the invisible iOS scrubber swallows drags, while
+  tvOS keeps the whole transport non-hit-testable.
 - **`onExitCommand` never fires inside a `fullScreenCover` on tvOS 26.**
   UIKit consumes Menu and dismisses the cover, and
   `interactiveDismissDisabled` does not stop it. `MenuPressGate` owns the
@@ -304,7 +304,7 @@ Platform limits, verified on device:
   - The simulator's Escape arrives as a keyboard press (never `.menu`), so
     `pressesEnded` must catch `key?.keyCode == .keyboardEscape`.
   Each environment exercises only one path.
-- **Nothing that appears inside the player can use a transition; animate
+- **Nothing that appears inside the player can use a transition. Animate
   values instead.** The animation transaction does not cross the
   `MenuPressGate` hosting boundary (`rootView` reassignment), so
   `withAnimation` lands instantly while `.animation(_, value:)` inside the
@@ -324,7 +324,7 @@ Platform limits, verified on device:
 - Hard gates: one six-tab sweep under 1.75 s, and the full sweep plus 30-row
   walk may grow the footprint by at most 12 MB.
 - Wall time is remote-input-bound (about 1.3 s) and peak memory sits in a
-  64–80 MB band; treat movement in that band as noise unless it crosses
+  64–80 MB band. Treat movement in that band as noise unless it crosses
   XCTest's 10% tolerance. CPU and instruction counts are where panel work
   shows. Narrowing `GlassEffectContainer` from the whole panel to the four tab
   controls moved them most.
@@ -333,12 +333,12 @@ Platform limits, verified on device:
   Animation Hitches instrument on a physical Apple TV, where GPU composition
   is representative.
 - `testLivePlayerPanelSweepPerformance` runs the same sweep over live playback
-  to include the player's per-tick work. It has no timing assertion; only the
-  CPU figures move.
+  to include the player's per-tick work. It has no timing assertion, and only
+  the CPU figures move.
 
 The public demo covers navigation, generic playback, lifecycle and panel
-tests but has no subtitle, multi-audio, chapter or intro fixtures; those tests
-skip explicitly. To run them against a private library:
+tests but has no subtitle, multi-audio, chapter or intro fixtures, so
+those tests skip explicitly. To run them against a private library:
 
 ```sh
 TEST_RUNNER_LAGOON_REGRESSION_SERVER='https://example.test' \
@@ -384,14 +384,14 @@ Two rules, both easy to break:
   property.** `isPaused`, `isBuffering`, `duration`, `subtitleLoadState` and
   `videoSize` change per item or action and are fine. `activeSegment` and
   `showsNextUp` read the position and are used only in `handleMenu`,
-  `handleSelect`, `onMoveCommand` and `onPlayPauseCommand`; reads in a closure
+  `handleSelect`, `onMoveCommand` and `onPlayPauseCommand`. Reads in a closure
   that runs later are not body reads.
 - **A leaf that can answer without the position must not read it.**
   `PlayerSkipOverlay` returns nil before reading `timePosition` when there is
   no skippable segment, and `PlayerNextUpOverlay` when there is no successor
   or autoplay is off (every movie). The read is the subscription.
 
-The hidden transport stays mounted at opacity 0 for the fade; its scrubber
+The hidden transport stays mounted at opacity 0 for the fade. Its scrubber
 and timeline take an `isVisible` flag and read `engine.timePosition` only on
 the visible branch, so a hidden transport shows the last position and holds
 no subscription.

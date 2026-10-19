@@ -5,7 +5,7 @@ release checklist or proof of hardware acceptance.
 
 ## Session lifecycle
 
-`SessionStore`'s phases are **states, not screens you navigate to**;
+`SessionStore`'s phases are **states, not screens you navigate to**.
 `RootView` crossfades between them. Persistence:
 
 - UserDefaults: the `accounts` list, the active account id, and the server
@@ -16,8 +16,8 @@ release checklist or proof of hardware acceptance.
 
 `restore()` resumes the last active account, so a single profile never sees
 the picker. `choosingAccount` appears only when nothing can be resumed or
-Settings asks. A missing token goes to `needsSignIn`; no accounts at all goes
-to `needsServer`.
+Settings asks. A missing token goes to `needsSignIn`, and no accounts at all
+goes to `needsServer`.
 
 ### Server reconciliation
 
@@ -32,14 +32,15 @@ discards superseded responses, and keeps the last good snapshot on failure.
 Extra rules:
 
 - **Home's hero always has a source.** `HeroSelection` walks tiers in order:
-  Recently Added; Continue Watching and Next Up; Favorites; plugin and curated
-  rails; last, a random library sample fetched only when all else is empty.
+  Recently Added, then Continue Watching and Next Up, then Favorites, then
+  plugin and curated rails, and last a random library sample fetched only when
+  all else is empty.
   The first tier with an item that has a backdrop and overview supplies the
-  whole hero; tiers are never mixed to reach six. On refresh, items still
+  whole hero. Tiers are never mixed to reach six. On refresh, items still
   returned by the server keep their place and gaps fill from the leading tier.
   Collections are excluded (their cards route to a collection page, the hero
   to an item).
-- **Home's Next Up holds only unstarted, unwatched episodes**; in-progress
+- **Home's Next Up holds only unstarted, unwatched episodes**. In-progress
   ones belong to Continue Watching. Series detail Play still resumes, and
   autoplay has its own cursor. Recently Added TV resolves episodes to real,
   deduplicated series in latest-addition order, on load and refresh.
@@ -48,7 +49,7 @@ Extra rules:
 
 `ServerRefreshModifier` gives top-level browse destinations a five-minute
 cadence and manual refresh. `MainTabView` passes the selected tab and an empty
-root path explicitly; otherwise mounted hidden tabs would poll and a pushed
+root path explicitly. Otherwise mounted hidden tabs would poll and a pushed
 detail would refresh content behind it.
 
 tvOS Refresh button:
@@ -63,7 +64,7 @@ tvOS Refresh button:
   pushed, and `MainTabView` keeps the last chrome offset at root scope. A
   recreated control first reports the screen origin and flashes Refresh over a
   deeply scrolled root.
-- While refreshing, the arrow rotates; Reduce Motion keeps it still. It targets
+- While refreshing, the arrow rotates. Reduce Motion keeps it still. It targets
   `ServerSyncState.activeTarget`, so only the visible destination refreshes.
 
 The scene stays active under a full-screen player, so playback dismissal has
@@ -88,12 +89,12 @@ account.
   move every existing install would be signed out. It runs first in
   `restore()` and is idempotent, guarded on the `accounts` key being absent.
 - **Signing out forgets the account.** `logout` revokes the token, so a kept
-  entry could only fail. Other accounts are untouched; the picker takes over
+  entry could only fail. Other accounts are untouched. The picker takes over
   if any remain.
 
 Switching to a valid remembered account needs no re-authentication. The
 session transition synchronously clears outgoing Seerr state, moves
-recent-search ownership and invalidates Top Shelf work; entering the picker
+recent-search ownership and invalidates Top Shelf work. Entering the picker
 drops active access. `MainTabView` is identified by account, so navigation,
 details and search rebuild for the next viewer.
 
@@ -130,14 +131,14 @@ Each of the five tabs owns a `NavigationStack`. `ItemDetailRouter` resolves a
 `ContentNavigationRoute`: `.series` → `SeriesDetailView`, a collection or
 playlist → `CollectionDetailView`, everything else → `ItemDetailView`.
 `.playlists` opens Library's `PlaylistsView`. On tvOS playback is a `fullScreenCover(item:)` on the screen
-that started it; on iOS the screen requests it and the tab root's host
+that started it, and on iOS the screen requests it and the tab root's host
 presents it ([Playback](../playback.md#controls-and-presentation)).
 
 **Library** is one paged grid of movies and series.
 
 - Every filter (media type, sort, source library, genre, decade, unwatched,
   favorites, 4K movies) goes to Jellyfin on each page and refresh, so it holds
-  across pagination. Resolution filtering is Movies-only; series folders have
+  across pagination. Resolution filtering is Movies-only. Series folders have
   no resolution.
 - `LibrarySelection` persists per server/account. Source choices come from
   cached `LibraryTab` values until `userViews()` succeeds, so a stale saved
@@ -148,11 +149,11 @@ presents it ([Playback](../playback.md#controls-and-presentation)).
 - Media type is a segmented Picker on iOS and a menu Picker on tvOS. **The
   tvOS menu commits on Select, not focus**, so moving past it toward Sort or
   Filters never flips Movies to Shows or clears the 4K filter. Only
-  watch-state, favorites and 4K are Toggles; the rest are single-selection
+  watch-state, favorites and 4K are Toggles. The rest are single-selection
   Pickers.
 - Decade ranges come from Jellyfin's `Items/Filters` years for the current
   media type and source, not the loaded page or a fixed range. Gaps and
-  undated titles make no choices; queries use the `Years` parameter. A saved
+  undated titles make no choices. Queries use the `Years` parameter. A saved
   decade stays clearable while loading or offline and drops only when a
   successful catalogue lacks it. A saved genre survives a catalogue that no
   longer lists it.
@@ -165,7 +166,7 @@ matches as separate rails, recent terms (`RecentSearchStore`) under the
 keyboard when the field is empty.
 
 - It is **its own tab**. tvOS `.searchable` draws a resident field and full
-  keyboard and expects to own the screen; folding it into Discover pushed
+  keyboard and expects to own the screen. Folding it into Discover pushed
   content below the fold.
 - `.searchable` goes on the content, **not** the `NavigationStack`, or the
   field draws over pushed details. The stack is a heterogeneous
@@ -186,7 +187,7 @@ keyboard when the field is empty.
 changelog sheet's tvOS pattern: no `NavigationStack`, its own header and
 footer at `Metrics.modalPanelSize`, and licence text split into focusable
 paragraphs. Privacy Policy and Support rows appear only once
-`LegalDestinations` has a URL; iOS opens it, tvOS shows the address to type
+`LegalDestinations` has a URL. iOS opens it, tvOS shows the address to type
 elsewhere. The sign-in screen's "About Lagoon" reaches the same section.
 
 ## Top Shelf is a full-screen carousel
@@ -195,7 +196,7 @@ elsewhere. The sign-in screen's "About Lagoon" reaches the same section.
 `summary`, `genre`, `duration`), so **the title must be in the artwork**, as
 in the Apple TV app.
 
-The app composes; the extension only reads.
+The app composes and the extension only reads.
 
 - `TopShelfArtwork` draws the backdrop, a scrim over the text corner, then
   Jellyfin's logo or, failing that, the title in type (as `TitleArtImage`
@@ -211,23 +212,23 @@ The app composes; the extension only reads.
   a unique `<account-hash>-<generation>` staging directory.
 - Once complete artwork exists it commits `snapshot-v2.json` atomically,
   prunes old generations and notifies TVServices. A stale worker deletes only
-  its own directory; the extension never sees a half-written shelf.
+  its own directory. The extension never sees a half-written shelf.
 - The extension reads only that manifest. It validates artwork paths and
   rechecks the generation.
 - Switching accounts, entering the picker, forgetting and logout invalidate
   pending work and clear the snapshot. An empty resume result clears the
-  shelf; a network failure keeps the last valid snapshot; an unrelated Next Up
+  shelf. A network failure keeps the last valid snapshot. An unrelated Next Up
   failure cannot block clearing.
 
 Deep links: `lagoon://play/{id}` resumes and `lagoon://item/{id}` opens the
-detail. Both require `owner=<account-hash>&generation=<UUID>`; the app checks
+detail. Both require `owner=<account-hash>&generation=<UUID>`. The app checks
 the active account and committed manifest before and after fetching, so
 unowned links and links from cleared snapshots are ignored.
 `DeepLinkRouterTests` and `TopShelfPublisherTests` cover this.
 
 ### Eight items, and why artwork is only composed once
 
-The cap is **8**. The HIG's "three to eight" is for scrolling banners; nothing
+The cap is **8**. The HIG's "three to eight" is for scrolling banners. Nothing
 numbers a carousel. The banner's reason still applies: a swipe-navigated,
 wrapping carousel buries the title you want if it runs long.
 
@@ -297,7 +298,7 @@ a quietly wrong badge.
   AVAILABLE, BLOCKLISTED=6, DELETED=7`.
 
 `BLOCKLISTED` and `DELETED` differ. Deleted media can be requested again and
-reads "Not Requested". Blocklisted media cannot; an administrator with
+reads "Not Requested". Blocklisted media cannot. An administrator with
 `MANAGE_BLOCKLIST` gets an Unblock button, and since Jellyseerr drops the
 media row with the blocklist entry, the reload shows the ordinary Request
 button. Lagoon can lift a block but not add one.
@@ -321,8 +322,8 @@ Discover opens on Home's `HeroSection`, then draws rails in the order the
 onto rows, so re-ordering sliders in Jellyseerr re-orders Discover.
 
 - Four of the twelve built-in types are skipped: `recentlyAdded` and
-  `recentRequests` duplicate Home's rails and the Requests chip;
-  `studios`/`networks` are web-client logo shelves the API does not serve.
+  `recentRequests` duplicate Home's rails and the Requests chip,
+  and `studios`/`networks` are web-client logo shelves the API does not serve.
 - Unknown types are skipped too, so a newer Jellyseerr cannot break the page.
 - If nothing renderable comes back, the layout falls back to Jellyseerr's
   default order minus those four.
@@ -349,7 +350,7 @@ Hero:
 - Rotation is a cancellable seven-second view task, separate from refresh.
   Its identity includes item IDs, selected ID and whether cycling is allowed,
   so a manual pick restarts the interval. It runs only while the hero is
-  visible, its root active and the scene foregrounded; touch scrolling, tvOS
+  visible, its root active and the scene foregrounded. Touch scrolling, tvOS
   hero focus, Reduce Motion, VoiceOver and Home's playback pause it.
 - Artwork and palette work checks cancellation before publishing, so a
   superseded slide's palette cannot land late.

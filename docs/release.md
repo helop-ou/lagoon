@@ -1,7 +1,7 @@
 # Release
 
 The single release checklist. Builds go to external TestFlight testers
-through the public link; the App Store has more gates below. Simulator
+through the public link. The App Store has more gates below. Simulator
 results and unsigned archives do not complete those gates.
 
 ## Cutting a build, start to finish
@@ -42,7 +42,7 @@ scripts/publish-release.sh <build>                # 10. tag and publish
 5. **Build both platforms and run the unit suite on both.** Archiving runs no tests.
 6. **Commit and push.** Step 10 refuses a revision the remote lacks.
 7. **Fill in `.env`**, once per checkout. See
-   [`.env.example`](../.env.example); the shell still overrides it.
+   [`.env.example`](../.env.example). The shell still overrides it.
 8. **[Archive](#internal-testflight)** with `--archive-only` when uploading
    through Xcode, because an Xcode-made archive has diagnostics off.
 9. **Upload** as **App Store Connect**, not TestFlight Internal Only, with
@@ -54,9 +54,9 @@ scripts/publish-release.sh <build>                # 10. tag and publish
 
 **Build number.** Lagoon owns its build numbers. Bump only for a build you
 will distribute, not per commit. `scripts/bump-build.sh` advances all
-configurations and the app and Top Shelf together; `--set <number>` picks an
+configurations and the app and Top Shelf together, and `--set <number>` picks an
 explicit higher number. It rejects backwards numbering and configuration
-drift. The build number, not the version, identifies a binary; About shows
+drift. The build number, not the version, identifies a binary. About shows
 both as `0.2.0 (107)`.
 
 **Marketing version.** Always `MAJOR.MINOR.PATCH`: major for a significant
@@ -93,13 +93,13 @@ carried.
   work that never shipped. No em dashes. `ChangelogTests` enforces this.
 - Notes are written per release, not generated per commit.
 - About groups each build's notes as **New features**, **Improvements** or
-  **Bug fixes**; keep related notes under the category a viewer would
+  **Bug fixes**. Keep related notes under the category a viewer would
   notice. About badges the installed build.
 
 ### The published changelog
 
 [`CHANGELOG.md`](../CHANGELOG.md) is generated from `Changelog.swift` by
-`scripts/generate-changelog.sh`; never edit it by hand. The About screen, the
+`scripts/generate-changelog.sh`. Never edit it by hand. The About screen, the
 Markdown file and the GitHub release body are three renderings of one source,
 so they cannot disagree. `ChangelogTests` checks what it can: the declared
 build has an entry, categories are in order, no em dashes.
@@ -119,7 +119,7 @@ Tag a build when it is distributed, and only then, just as build numbers
 advance only for builds that go out.
 
 Tags read `<version>-<build>`, e.g. `0.2.0-107`. The build number makes them
-unique and is what viewers see in About and quote in bug reports; the version
+unique and is what viewers see in About and quote in bug reports. The version
 says what it shipped as. A tag is never renamed when the marketing version
 moves.
 
@@ -202,7 +202,7 @@ scripts/upload-testflight.sh both                # archive and upload
   `manageAppVersionAndBuildNumber=false`. Keep both for this flow.
 - API key environment: `ASC_KEY_ID`, `ASC_ISSUER_ID`, `ASC_KEY_PATH`. The
   `.p8` file stays outside the repository.
-- These can go in `.env` (copy [`.env.example`](../.env.example)); exported
+- These can go in `.env` (copy [`.env.example`](../.env.example)). Exported
   values override it. The script refuses to run if `.env` is staged.
 
 ### Archiving in Xcode switches diagnostics off
@@ -211,7 +211,7 @@ scripts/upload-testflight.sh both                # archive and upload
 
 `LagoonInfo.plist` sets `LagoonSentryDSN` to `$(LAGOON_SENTRY_DSN)`, and the
 project leaves that setting empty. `upload-testflight.sh` fills it at archive
-time; Xcode does not. `DiagnosticsConfiguration.resolveDSN` treats an empty or
+time. Xcode does not. `DiagnosticsConfiguration.resolveDSN` treats an empty or
 unexpanded value as no DSN and installs no sink. This is deliberate:
 reporting is on in Release, so a tracked DSN would let any checkout spend the
 project's quota.
@@ -243,7 +243,7 @@ join the external group "Lagoonies Beta" through its public link, which the
 website carries.
 
 Adding a build to an external group submits it to Beta App Review under the
-full App Review Guidelines; uploading alone never does. Apple reviews a
+full App Review Guidelines. Uploading alone never does. Apple reviews a
 platform's first build, and later ones usually pass without review. iOS and
 tvOS are separate binaries under one record and are reviewed separately.
 
@@ -262,12 +262,12 @@ Required before submitting:
   feedback or screenshots, so that address is their only channel.
 - App Review Information: contact details and sign-in credentials, since the
   app shows nothing until a server is configured.
-- Age rating and content rights (app-level; content rights covers showing
+- Age rating and content rights (app-level, and content rights covers showing
   third-party content).
 - Export compliance, already met by `ITSAppUsesNonExemptEncryption=NO`.
 
-A reviewer needs a reachable server and account; there is no demo mode outside
-`#if DEBUG`. `demo.jellyfin.org/stable` is rights-cleared and nothing
+A reviewer needs a reachable server and account, and there is no demo mode
+outside `#if DEBUG`. `demo.jellyfin.org/stable` is rights-cleared and nothing
 auto-connects to it, but it is a third party's server and an outage during
 review looks like a broken app. Review notes should:
 
@@ -328,11 +328,11 @@ profiles do. The workflow runs on the same `xcode-27` image and Xcode as the
   inventory records. It fails until the inventory matches the pin, so
   regenerate the inventory in the same change that moves the pin.
 - Some pinned prebuilt native frameworks lack usable dSYMs. The resulting
-  upload warning limits native symbolication; tell it apart from missing app
+  upload warning limits native symbolication. Tell it apart from missing app
   or extension symbols by reading the actual archive warnings.
 
 A separate assessment covers data flow, native licensing, encryption and the
-required-reason API. It is a point-in-time snapshot; reconcile it with the
+required-reason API. It is a point-in-time snapshot. Reconcile it with the
 actual release before making declarations. The [native
 inventory](reference/native-dependency-inventory.json) is generated by
 `scripts/inventory-native-dependencies.py` from the engine checkout SwiftPM
@@ -349,27 +349,27 @@ final signed candidate, not an earlier audit revision.
 
 - [x] Licence selected and applied: **MPL-2.0** for Lagoon's own code, with
   the Lagoon name and brand assets carved out of the grant. Chosen for
-  attribution rather than reciprocity; it matches Swiftfin and
+  attribution rather than reciprocity. It matches Swiftfin and
   jellyfin-sdk-swift and avoids the GPL's conflict with App Store terms.
   `LICENSE` carries the canonical text verbatim, `TRADEMARKS.md` the
   carve-out, and `CODE_OF_CONDUCT.md` the Contributor Covenant.
 - [ ] Deliver and test the corresponding-source, notices and relinking
   materials for every native component. FFmpeg is statically linked, so the
-  shared-library route is unavailable; publishing the source is the cheapest
+  shared-library route is unavailable. Publishing the source is the cheapest
   way to discharge this and removes the per-release burden. Since engine
   1.0.2 all four FFmpeg libraries are built by the engine from
   checksum-pinned source without `--enable-version3`, and are
-  LGPL-2.1-or-later; dav1d, lcms2 and uavs3d are built there too. libdovi is
+  LGPL-2.1-or-later, and dav1d, lcms2 and uavs3d are built there too. libdovi is
   the one component vendored prebuilt, because it needs a Rust toolchain.
   In place: every engine release attaches FFmpeg's corresponding source
-  (upstream tarball, patch, build script and configure records); each
-  artifact ships its licence, libdovi's with its Rust crates; the FFmpeg
+  (upstream tarball, patch, build script and configure records). Each
+  artifact ships its licence, libdovi's with its Rust crates. The FFmpeg
   notice links that release and credits the Independent JPEG Group, whose
   DCT code is in libavcodec. Both repositories have been public since
   2026-09-23, before the first external build. Owed: the FFmpeg line on
   the website's download pages. Whether the App Store's usage
   rules are a further restriction under LGPL-2.1 §10 is a legal judgement,
-  not an engineering one; VLC for iOS ships the same arrangement.
+  not an engineering one. VLC for iOS ships the same arrangement.
 - [ ] Record encryption classification and territories, including France.
   Align build declarations and keep any required documentation.
 - [ ] Approve data collection and retention answers, complete the app's
@@ -394,7 +394,7 @@ final signed candidate, not an earlier audit revision.
    next unused build number. Write the changelog entry and regenerate
    `CHANGELOG.md` with `scripts/generate-changelog.sh`.
 2. Run the iOS and tvOS unit suites and the applicable UI and hardware
-   journeys explicitly; archive does **not** run them. Keep result bundles and
+   journeys explicitly. Archive does **not** run them. Keep result bundles and
    device, OS, media and server details for that revision.
 3. Archive separately for generic iOS and tvOS devices with the distribution
    team and signing. Keep both archives and their app and extension dSYMs.
@@ -405,7 +405,7 @@ final signed candidate, not an earlier audit revision.
    for both archives. Generate the Organizer privacy report and validate the
    signed archives in Xcode. Review icons and Top Shelf artwork, frameworks,
    native symbols and App Store validation messages. The script checks
-   resources and basic bundle consistency; it is not Apple's validation or
+   resources and basic bundle consistency. It is not Apple's validation or
    legal approval.
 5. Keep per-slice dependency hashes and build records with the exact release,
    and regenerate the inventory if an input changes. Match the recipient
@@ -436,7 +436,7 @@ public candidate.
 
 Once the build is accepted, run `scripts/publish-release.sh <build>` to tag
 the exact archived revision and publish the release (see [Release
-tags](#release-tags)); pass `--rev` if that revision is not `HEAD`. Without
+tags](#release-tags)). Pass `--rev` if that revision is not `HEAD`. Without
 it a recipient cannot identify the corresponding source, which the native
 licences require. GitHub attaches that source archive to the release.
 
@@ -456,7 +456,7 @@ licences require. GitHub attaches that source archive to the release.
   credentials stay out of the repository and the public website.
 - [ ] A publisher has reviewed the final candidate and explicitly authorized
   upload, submission and release. Record processing and review results, and
-  follow up on App Store warnings; an unsigned archive is not acceptance.
+  follow up on App Store warnings. An unsigned archive is not acceptance.
 
 ## Website
 

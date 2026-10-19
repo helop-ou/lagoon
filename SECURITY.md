@@ -28,8 +28,8 @@ have not heard back in two weeks, send a reminder.
 
 Lagoon is a client for servers you run. It connects to:
 
-- your Jellyfin server, with credentials you enter, stored in the keychain;
-- your Seerr server, if you configure one, for discovery and requests;
+- your Jellyfin server, with credentials you enter, stored in the keychain,
+- your Seerr server, if you configure one, for discovery and requests,
 - Sentry, for automatic diagnostic reports about playback and request
   failures.
 
@@ -44,4 +44,4 @@ field that can be sent and every field that cannot.
 
 There is no Lagoon account, no analytics beyond those reports, and no other
 network destination. Vulnerabilities in Jellyfin, Jellyseerr or Overseerr
-themselves belong to those projects; report them there.
+themselves belong to those projects, so report them there.

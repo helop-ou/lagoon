@@ -7,8 +7,8 @@ evidence for the decision it justified, not a current acceptance result.
 
 ## The engine is not here
 
-All playback runs through the `LagoonEngine` package in its own repository;
-there is no AVPlayer or mpv path. Demux, decode, render, queues, the byte
+All playback runs through the `LagoonEngine` package in its own repository,
+and there is no AVPlayer or mpv path. Demux, decode, render, queues, the byte
 cache, the FFmpeg build and per-codec behaviour are documented there:
 
 - [The engine guide](https://github.com/helop-ou/lagoon-engine/blob/main/docs/engine.md):
