@@ -115,6 +115,26 @@ here.
   replay, PiP and hardware performance checks.
 - No new compiler warnings, and no blanket suppression.
 
+### Continuous integration
+
+`.github/workflows/tests.yml` runs the unit suite on tvOS and iOS for every
+pull request and every push to `main`, the same `xcodebuild test` as a local
+run. It is a backstop, not a replacement: run the tests before committing,
+because CI only reports after the push.
+
+- It uses GitHub's `xcode-27` runner image (a preview) with Xcode 27.1, the
+  version Lagoon is developed with. When the local Xcode moves, move
+  `DEVELOPER_DIR` in the workflow in the same change, after checking the
+  [image's list](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md)
+  has it.
+- iOS runs on iPhone 17, as the image has no iPhone 17 Pro.
+- The engine resolves from `Package.resolved` and is cached by its hash, so
+  a pin move refetches it once.
+- A failed run keeps its `.xcresult` and full log for 14 days, under the
+  run's artifacts.
+- UI journeys do not run in CI: they need a server and minutes per test. See
+  the [regression lane](reference/regression-lane.md).
+
 [Design system](design-system.md) owns tokens, controls, focus, artwork and
 accessibility; [Jellyfin API](jellyfin-api.md) owns wire contracts;
 [Release](release.md) owns build numbers and release evidence. Update the

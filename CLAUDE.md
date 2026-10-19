@@ -59,7 +59,10 @@ clean" in docs/README.md.
   check. A new test earns its place by failing when the behaviour it names
   breaks: break the code once and watch it fail. UI journeys run under the
   `LagoonHardwareRegression` scheme; see the [regression
-  lane](docs/reference/regression-lane.md).
+  lane](docs/reference/regression-lane.md). CI runs the same unit suites on
+  every pull request and push to `main`
+  ([standards](docs/standards.md#continuous-integration)); it reports after
+  the push, so it never replaces a local run.
 - Build numbers belong to the repo. Never let Xcode manage them at upload; see
   [Release](docs/release.md). A change a viewer would notice gets a line in
   `Lagoon/Features/Settings/Changelog.swift`, then
