@@ -10,8 +10,9 @@
 #   scripts/publish-release.sh 108 --dry-run    # print what it would do
 #   scripts/publish-release.sh 108 --rev a1b2c3d
 #
-# Without --rev it tags the revision scripts/upload-testflight.sh recorded when
-# it archived the build, or HEAD if there is no record.
+# Without --rev it tags the revision recorded when the build was archived:
+# build/archived-<build>.sha from scripts/upload-testflight.sh, or the
+# refs/archived/<build> ref the release workflow pushes. HEAD if neither.
 # --no-prerelease marks a full release. Otherwise anything below 1.0 is a
 # pre-release.
 set -euo pipefail
@@ -49,6 +50,13 @@ recorded=false
 if [ -z "$rev" ] && [ -f "$record" ]; then
     rev="$(cat "$record")"
     recorded=true
+elif [ -z "$rev" ]; then
+    remote_record="$(git -C "$root" ls-remote origin "refs/archived/${want_build}" 2>/dev/null | cut -f1)"
+    if [ -n "$remote_record" ]; then
+        git -C "$root" fetch --quiet origin "refs/archived/${want_build}" || die "could not fetch refs/archived/${want_build}"
+        rev="$remote_record"
+        recorded=true
+    fi
 fi
 rev="${rev:-HEAD}"
 sha="$(git -C "$root" rev-parse --verify "${rev}^{commit}" 2>/dev/null)" \
