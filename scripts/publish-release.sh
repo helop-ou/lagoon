@@ -10,13 +10,13 @@
 #   scripts/publish-release.sh 108 --dry-run    # print what it would do
 #   scripts/publish-release.sh 108 --rev a1b2c3d
 #
-# --rev tags a revision other than HEAD: use the one the archive was built from.
+# Without --rev it tags the revision scripts/upload-testflight.sh recorded when
+# it archived the build, or HEAD if there is no record.
 # --no-prerelease marks a full release. Otherwise anything below 1.0 is a
 # pre-release.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-project="$root/Lagoon.xcodeproj/project.pbxproj"
 changelog="$root/Lagoon/Features/Settings/Changelog.swift"
 
 want_build="${1:-}"
@@ -27,7 +27,7 @@ want_build="${1:-}"
 shift
 
 dry_run=false
-rev="HEAD"
+rev=""
 prerelease=""
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -44,8 +44,23 @@ warn() { printf '  ! %s\n' "$1"; }
 note() { printf '  - %s\n' "$1"; }
 die() { printf '\n  error: %s\n' "$1" >&2; exit 1; }
 
+record="$root/build/archived-${want_build}.sha"
+recorded=false
+if [ -z "$rev" ] && [ -f "$record" ]; then
+    rev="$(cat "$record")"
+    recorded=true
+fi
+rev="${rev:-HEAD}"
+sha="$(git -C "$root" rev-parse --verify "${rev}^{commit}" 2>/dev/null)" \
+    || die "cannot resolve revision ${rev}"
+
+# Read from the revision being tagged, not the working tree, so an earlier
+# build can still be published after the project has moved on.
+project_text="$(git -C "$root" show "${sha}:Lagoon.xcodeproj/project.pbxproj")" \
+    || die "cannot read the project at ${sha:0:9}"
+
 # Tags read <version>-<build>. The build number keeps them unique.
-version="$(grep -m1 -o 'MARKETING_VERSION = [0-9.]*' "$project" | grep -o '[0-9.]*$')"
+version="$(printf '%s\n' "$project_text" | grep -m1 -o 'MARKETING_VERSION = [0-9.]*' | grep -o '[0-9.]*$')"
 tag="${version}-${want_build}"
 
 echo
@@ -66,12 +81,13 @@ ok "working tree clean"
 
 # 3. The build must be the one the project declares, or the tag names a binary
 #    nobody built.
-values="$(grep -o 'CURRENT_PROJECT_VERSION = [0-9]*' "$project" | grep -o '[0-9]*$' | sort -u)"
+values="$(printf '%s\n' "$project_text" | grep -o 'CURRENT_PROJECT_VERSION = [0-9]*' | grep -o '[0-9]*$' | sort -u)"
 [ "$(printf '%s\n' "$values" | wc -l | tr -d ' ')" = "1" ] \
     || die "CURRENT_PROJECT_VERSION differs across configurations: $(echo $values)"
 [ "$values" = "$want_build" ] \
-    || die "the project declares build ${values}, not ${want_build}"
-ok "project declares ${version} (${want_build})"
+    || die "${sha:0:9} declares build ${values}, not ${want_build}"
+ok "${sha:0:9} declares ${version} (${want_build})"
+[ "$recorded" = true ] && ok "tagging the revision recorded when build ${want_build} was archived"
 
 # 4. Same rule as the upload script and ChangelogTests; last chance before public.
 grep -A 2 "version: \"${version}\"" "$changelog" | grep -q "build: \"${want_build}\"" \
@@ -102,8 +118,6 @@ fi
 ok "${tag} is unused"
 
 # 8. gh creates the tag through the API, so the remote must have the revision.
-sha="$(git -C "$root" rev-parse --verify "${rev}^{commit}")" \
-    || die "cannot resolve revision ${rev}"
 git -C "$root" fetch --quiet origin || die "could not reach origin"
 if ! git -C "$root" merge-base --is-ancestor "$sha" origin/main 2>/dev/null; then
     die "${rev} (${sha:0:9}) is not on origin/main yet. Push before releasing."
@@ -135,7 +149,7 @@ fi
 #     build-number bump and let a human confirm.
 bump="$(git -C "$root" log --format=%H -S"CURRENT_PROJECT_VERSION = ${want_build};" \
     --pickaxe-regex -1 -- Lagoon.xcodeproj/project.pbxproj 2>/dev/null || true)"
-if [ -n "$bump" ] && [ "$bump" != "$sha" ]; then
+if [ "$recorded" = false ] && [ -n "$bump" ] && [ "$bump" != "$sha" ]; then
     ahead="$(git -C "$root" rev-list --count "${bump}..${sha}" 2>/dev/null || echo "?")"
     echo
     echo "  ! ${sha:0:9} is ${ahead} commit(s) past the build ${want_build} bump (${bump:0:9}):"
