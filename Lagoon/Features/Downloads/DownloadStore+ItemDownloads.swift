@@ -9,7 +9,7 @@ extension DownloadStore: ItemDownloadPresenting {
     }
 }
 
-/// A card's long-press download entries. Movies and episodes only; others
+/// A card's long-press download entries. Movies and episodes only. Others
 /// have no file of their own. A new download gets `DownloadControl`'s
 /// quality picker.
 private struct DownloadContextMenuItems: View {
@@ -50,7 +50,7 @@ private struct DownloadContextMenuItems: View {
     }
 
     /// Default quality first, as in `DownloadControl`. High and Standard need
-    /// transcode permission; Original needs only download permission.
+    /// transcode permission. Original needs only download permission.
     private var qualities: [DownloadQuality] {
         DownloadQuality.ordered(
             default: store.defaultQuality,

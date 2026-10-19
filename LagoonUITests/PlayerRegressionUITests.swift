@@ -40,7 +40,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
             XCTFail("Invalid native menu index for \(title)")
             return
         }
-        // Menus reopen on the current row; Up enough times to reach the first.
+        // Menus reopen on the current row. Up enough times to reach the first.
         for _ in 0..<24 {
             remote.press(.up)
             Thread.sleep(forTimeInterval: 0.05)
@@ -86,7 +86,7 @@ final class PlayerRegressionUITests: PlayerUITestCase {
     }
 
     func waitForPanelReveal() {
-        // The spring is 200 ms; the rest lets focus settle on hardware.
+        // The spring is 200 ms. The rest lets focus settle on hardware.
         Thread.sleep(forTimeInterval: 0.6)
     }
 

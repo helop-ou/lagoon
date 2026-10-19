@@ -5,11 +5,11 @@ import LagoonEngine
 /// stay quiet after a failure or rate limit.
 nonisolated struct SentryTransportPolicy: Equatable, Sendable {
     enum Outcome: Equatable, Sendable {
-        /// Taken. A 200 can still carry `X-Sentry-Rate-Limits`; honour it.
+        /// Taken. A 200 can still carry `X-Sentry-Rate-Limits`. Honour it.
         case accepted(pauseFor: TimeInterval?)
         /// The server said when to come back (429).
         case retryAfter(TimeInterval)
-        /// The server will never take this envelope; drop it and move on.
+        /// The server will never take this envelope. Drop it and move on.
         case discard
         /// Transient: keep the envelope, back off.
         case backoff

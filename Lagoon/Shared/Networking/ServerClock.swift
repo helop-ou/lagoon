@@ -60,7 +60,7 @@ nonisolated struct ServerClockEstimate: Equatable, Sendable {
 final class ServerClock {
     static let greedySampleCount = 3
     static let greedyInterval: Duration = .seconds(1)
-    /// Tracks network changes; clock drift per minute is negligible.
+    /// Tracks network changes. Clock drift per minute is negligible.
     static let steadyInterval: Duration = .seconds(60)
 
     private(set) var estimate = ServerClockEstimate()
@@ -79,7 +79,7 @@ final class ServerClock {
         self.client = client
     }
 
-    /// Server minus local, in seconds; nil before the first sample.
+    /// Server minus local, in seconds, nil before the first sample.
     var offset: Double? { estimate.offset }
 
     var pingMilliseconds: Int? {

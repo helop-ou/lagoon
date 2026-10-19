@@ -112,7 +112,7 @@ nonisolated enum SeerrAvailabilityStatus: Int, Hashable {
         }
     }
 
-    /// Deleted media can be requested again; the server refuses blocklisted
+    /// Deleted media can be requested again. The server refuses blocklisted
     /// media.
     var allowsRequesting: Bool {
         self == .unknown || self == .deleted
@@ -198,7 +198,7 @@ nonisolated enum SeerrRequestProgress: Hashable {
         }
     }
 
-    /// Only states still in progress animate; a moving final state reads as
+    /// Only states still in progress animate. A moving final state reads as
     /// an error.
     var motion: SeerrStatusMotion {
         switch self {
@@ -297,7 +297,7 @@ nonisolated struct SeerrDownloadProgress: Hashable {
             : 0
         downloadCount = unique.count
         isImporting = unique.allSatisfy { $0.sizeLeft <= 0 }
-        // Quote a running entry; finished ones report "00:00:00".
+        // Quote a running entry. Finished ones report "00:00:00".
         timeLeft = unique
             .filter { $0.sizeLeft > 0 }
             .compactMap(\.timeLeft)
@@ -475,7 +475,7 @@ nonisolated struct SeerrCredits: Decodable, Hashable {
 }
 
 nonisolated struct SeerrCastMember: Decodable, Hashable, Identifiable {
-    /// Unique per role; the person id repeats when one actor plays two
+    /// Unique per role. The person id repeats when one actor plays two
     /// parts. Falls back to the person id rather than failing the page.
     let creditId: String
     let id: Int
@@ -589,7 +589,7 @@ nonisolated struct SeerrContentRating: Decodable, Hashable {
 nonisolated struct SeerrGenre: Decodable, Hashable, Identifiable {
     let id: Int
     let name: String
-    /// TMDB backdrop paths; only `discover/genreslider/*` sends them, so
+    /// TMDB backdrop paths. Only `discover/genreslider/*` sends them, so
     /// elsewhere this is empty.
     let backdrops: [String]
 
@@ -710,7 +710,7 @@ nonisolated struct SeerrMediaRequest: Decodable, Hashable, Identifiable {
     let requestedBy: SeerrUser?
     let is4k: Bool?
     let seasons: [SeerrRequestedSeason]?
-    /// The Radarr/Sonarr quality profile and server. Ids only; the names
+    /// The Radarr/Sonarr quality profile and server. Ids only. The names
     /// live on the service.
     let profileId: Int?
     let serverId: Int?
@@ -863,7 +863,7 @@ nonisolated enum SeerrDiscoverSliderType: Int, Decodable, Hashable {
 
 nonisolated struct SeerrDiscoverSlider: Decodable, Hashable, Identifiable {
     let id: Int
-    /// Nil for a type this build does not know; skip it rather than fail the
+    /// Nil for a type this build does not know. Skip it rather than fail the
     /// layout.
     let type: SeerrDiscoverSliderType?
     let order: Int

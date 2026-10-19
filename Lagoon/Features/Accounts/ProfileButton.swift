@@ -12,7 +12,7 @@ struct ProfileButton: View {
     /// offset is lost, as with Refresh.
     let isAvailable: Bool
     nonisolated let moveDownAction: (@MainActor @Sendable () -> Void)?
-    /// Left, to Refresh beside it; see `TopChromeButton.moveLeftAction`.
+    /// Left, to Refresh beside it. See `TopChromeButton.moveLeftAction`.
     nonisolated let moveLeftAction: (@MainActor @Sendable () -> Void)?
     let action: @MainActor () -> Void
     @State private var allowsFocus = false
@@ -94,8 +94,8 @@ private struct TVProfileControl: UIViewRepresentable {
         button.accessibilityIdentifier = tracksTopChrome ? "profile.button" : "profile.button.inactive"
     }
 
-    /// The portrait inside a thin glass ring, the size of Refresh's circle;
-    /// a person glyph until the portrait has rendered.
+    /// The portrait inside a thin glass ring, the size of Refresh's circle.
+    /// A person glyph until the portrait has rendered.
     private func configuration(for image: UIImage?) -> UIButton.Configuration {
         var configuration = UIButton.Configuration.glass()
         if let image {

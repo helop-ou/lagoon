@@ -19,7 +19,7 @@ struct ServerConnectView: View {
             JellyfishSwimLayer()
 
             #if os(iOS)
-            // Centred while everything fits, like the picker; scrolls once
+            // Centred while everything fits, like the picker. Scrolls once
             // the custom headers or the keyboard take the room.
             OnboardingColumn {
                 VStack(spacing: Metrics.Space.l) {
@@ -50,7 +50,7 @@ struct ServerConnectView: View {
             }
             #else
             // Scrolls once the custom headers are open, and stays centred
-            // while everything fits; focus moving down brings fields into view.
+            // while everything fits. Focus moving down brings fields into view.
             GeometryReader { proxy in
                 ScrollView {
                     VStack(spacing: Metrics.Space.l) {

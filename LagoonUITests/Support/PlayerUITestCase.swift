@@ -45,7 +45,7 @@ class PlayerUITestCase: XCTestCase {
     }
 
     /// Skips when the server lacks the fixture, rather than failing. The demo
-    /// has no subtitle, multi-audio, chapter or intro item; supply a server
+    /// has no subtitle, multi-audio, chapter or intro item. Supply a server
     /// through LAGOON_REGRESSION_*.
     func requireRegressionFixture(
         in app: XCUIApplication,

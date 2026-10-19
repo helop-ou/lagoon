@@ -168,7 +168,7 @@ struct SeerrRequestsView: View {
 nonisolated enum SeerrRequestsPaging {
     static let pageSize = 20
 
-    /// Seerr pages are 1-based; `skip` counts requests.
+    /// Seerr pages are 1-based, and `skip` counts requests.
     static func skip(forPage page: Int) -> Int {
         (page - 1) * pageSize
     }

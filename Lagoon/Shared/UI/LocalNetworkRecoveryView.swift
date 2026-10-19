@@ -3,7 +3,7 @@ import SwiftUI
 import UIKit
 #endif
 
-/// Shared by server setup and optional-service setup; never guesses a
+/// Shared by server setup and optional-service setup. Never guesses a
 /// permission state from an address or generic connectivity failure.
 struct LocalNetworkRecoveryView: View {
     @Environment(\.openURL) private var openURL

@@ -2,7 +2,7 @@ import Foundation
 import Observation
 
 /// Follows the active Jellyfin account. The Seerr address is shared per
-/// Jellyfin server; the session cookie is stored per account.
+/// Jellyfin server. The session cookie is stored per account.
 @Observable
 final class SeerrSessionStore {
     private(set) var configuredURL: URL?
@@ -126,7 +126,7 @@ final class SeerrSessionStore {
                 guard resolvedSettings.initialized else {
                     throw SeerrError.server(409, "Finish setting up this Seerr server before connecting Lagoon.")
                 }
-                // Lagoon accounts are Jellyfin identities; refuse a Plex Seerr.
+                // Lagoon accounts are Jellyfin identities. Refuse a Plex Seerr.
                 if let mediaServerType = resolvedSettings.mediaServerType, mediaServerType != 2 {
                     throw SeerrError.server(409, "This Seerr server is not configured for Jellyfin.")
                 }
@@ -192,7 +192,7 @@ final class SeerrSessionStore {
         let accountID = activeAccount?.id
         errorMessage = nil
 
-        // Quick Connect may be off; only the manual paths remain.
+        // Quick Connect may be off. Only the manual paths remain.
         guard (try? await jellyfin.quickConnectEnabled()) == true else {
             throw SeerrError.quickConnectUnavailable
         }
@@ -215,7 +215,7 @@ final class SeerrSessionStore {
         throw SeerrError.unauthenticated
     }
 
-    /// The automatic path; silent when there is nothing to do.
+    /// The automatic path. Silent when there is nothing to do.
     func signInUsingJellyfinIfNeeded(_ jellyfin: JellyfinClient) async {
         guard isConfigured, !isConnected, !isLoading, !hasAttemptedJellyfinSignIn else { return }
         hasAttemptedJellyfinSignIn = true

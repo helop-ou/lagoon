@@ -524,8 +524,8 @@ final class SubtitleSearchCoordinator {
         ), described: stream, to: engine)
     }
 
-    /// Whether a finished download may still attach. Cancellation throws; a
-    /// newer download drops it silently; a subtitle choice the viewer made
+    /// Whether a finished download may still attach. Cancellation throws. A
+    /// newer download drops it silently. A subtitle choice the viewer made
     /// meanwhile wins and leaves the status idle.
     private func isStillCurrent(generation: Int, selectionRevision: Int, engine: any PlayerEngine) throws -> Bool {
         try Task.checkCancellation()

@@ -2,7 +2,7 @@ import Foundation
 import Observation
 import UIKit
 
-/// What the group wants played. The store never presents; `MainTabView`
+/// What the group wants played. The store never presents, and `MainTabView`
 /// owns the player and answers this request.
 nonisolated struct SyncPlayPlayRequest: Identifiable, Equatable, Sendable {
     let id = UUID()
@@ -12,7 +12,7 @@ nonisolated struct SyncPlayPlayRequest: Identifiable, Equatable, Sendable {
 }
 
 /// Watch Together: SyncPlay group membership (socket, clock, group, queue,
-/// notices). Playback is `GroupPlaybackDriver`; decisions are the pure,
+/// notices). Playback is `GroupPlaybackDriver`. Decisions are the pure,
 /// tested `SyncPlayGroupSession`.
 ///
 /// Owned by `SessionStore`. The iOS UIKit player host rebuilds the
@@ -67,8 +67,8 @@ final class SyncPlayStore {
         contextGeneration &+= 1
         let leaving = session.isJoined ? self.client : nil
         teardown()
-        // SessionStore reconfigures its shared client before calling this;
-        // snapshot so this account's credentials, and the Leave, stay its own.
+        // SessionStore reconfigures its shared client before calling this.
+        // Snapshot so this account's credentials, and the Leave, stay its own.
         self.client = accountID == nil ? nil : client.sessionSnapshot()
         sourceSession = client.sessionIdentity
         self.accountID = accountID

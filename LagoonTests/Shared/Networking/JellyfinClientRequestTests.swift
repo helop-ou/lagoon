@@ -136,7 +136,7 @@ struct JellyfinClientRequestTests {
 
     // MARK: - Incidents
 
-    /// A probe's failure is an answer, so it never becomes an incident; an
+    /// A probe's failure is an answer, so it never becomes an incident. An
     /// ordinary request failing the same way does.
     @Test func aFailedProbeIsNeverAnIncident() async throws {
         let sink = CapturingSink()

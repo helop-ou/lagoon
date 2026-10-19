@@ -2,7 +2,7 @@ import Testing
 @testable import Lagoon
 
 /// How the diagnostics history names the end of an attempt. Several can be
-/// true at once; the first that applies wins.
+/// true at once. The first that applies wins.
 @Suite("Playback stop outcome")
 struct PlaybackStopOutcomeTests {
     private func outcome(

@@ -290,7 +290,7 @@ private nonisolated final class ProgressClock: Sendable {
 }
 
 /// URLProtocol callbacks may run off the main actor. All fixture state is
-/// protected by the mutex; the subclass adds no unprotected instance state.
+/// protected by the mutex. The subclass adds no unprotected instance state.
 private nonisolated final class ReportingURLProtocol: URLProtocol, @unchecked Sendable {
     struct Record: Sendable {
         let path: String

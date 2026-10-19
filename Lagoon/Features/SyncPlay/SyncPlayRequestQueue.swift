@@ -1,7 +1,7 @@
 import Foundation
 
 /// Ordered group requests. Every task is retained so cancel reaches the whole
-/// chain; cancelling the tail does not propagate to earlier Tasks.
+/// chain. Cancelling the tail does not propagate to earlier Tasks.
 @MainActor
 final class SyncPlayRequestQueue {
     private var tail: Task<Void, Never>?
@@ -27,7 +27,7 @@ final class SyncPlayRequestQueue {
                     try await work()
                 } catch {
                     try Task.checkCancellation()
-                    // Only idempotent readiness retries; a repeated seek or
+                    // Only idempotent readiness retries. A repeated seek or
                     // next could move the group twice.
                     guard let retryDelay, !(error is CancellationError) else { throw error }
                     try await Task.sleep(for: retryDelay)
@@ -35,7 +35,7 @@ final class SyncPlayRequestQueue {
                     try await work()
                 }
             } catch {
-                // Release the next request; never move the local player.
+                // Release the next request. Never move the local player.
                 if !Task.isCancelled, !(error is CancellationError) { onFailure?() }
             }
         }

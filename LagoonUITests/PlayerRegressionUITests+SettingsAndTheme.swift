@@ -75,7 +75,7 @@ extension PlayerRegressionUITests {
         moveFocus(to: appearance, maxPresses: 10) { remote.press(.down) }
         remote.press(.select)
         let theme = app.descendants(matching: .any)["settings.appearance.theme"]
-        // The Menu's value sits on a wrapper; the control inside owns focus.
+        // The Menu's value sits on a wrapper. The control inside owns focus.
         func themeHasFocus() -> Bool {
             theme.hasFocus || theme.descendants(matching: .any).allElementsBoundByIndex.contains(where: \.hasFocus)
         }
@@ -97,7 +97,7 @@ extension PlayerRegressionUITests {
             predicate: NSPredicate(format: "value == %@", "Baby Pink"), object: theme
         )
         XCTAssertEqual(XCTWaiter().wait(for: [pinkSelected], timeout: 5), .completed)
-        // The bloom is hidden from accessibility; wait out its 1.7 s + 0.2 s fade.
+        // The bloom is hidden from accessibility. Wait out its 1.7 s + 0.2 s fade.
         Thread.sleep(forTimeInterval: 2.2)
         XCTAssertTrue(themeHasFocus(), "Theme selection should preserve native control focus")
         capture("Baby Pink tvOS — settled Appearance and focused theme control")

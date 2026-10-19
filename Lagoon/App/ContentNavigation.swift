@@ -17,7 +17,7 @@ nonisolated enum ContentNavigationRoute: Hashable {
     #endif
 
     // Route identity is the item or person id, however stale the carried
-    // copy is; the page re-fetches. `MediaItem` itself still compares by value.
+    // copy is. The page re-fetches. `MediaItem` itself still compares by value.
     static func == (lhs: Self, rhs: Self) -> Bool {
         switch (lhs, rhs) {
         case let (.item(a), .item(b)):

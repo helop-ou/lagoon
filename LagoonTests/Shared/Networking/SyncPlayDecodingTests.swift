@@ -173,7 +173,7 @@ struct SyncPlayDecodingTests {
     /// PascalCase via the client's key strategy, never CodingKeys.
     @Test func theReadinessReportEncodesWithPascalCaseKeys() throws {
         let report = SyncPlayReadinessReport(
-            // A fraction a Double holds exactly; digits are tested elsewhere.
+            // A fraction a Double holds exactly. Digits are tested elsewhere.
             when: JellyfinTimestamp.string(1_789_386_256.25),
             positionTicks: 600_000_000,
             isPlaying: true,

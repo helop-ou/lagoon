@@ -33,18 +33,18 @@ struct CustomPlayerView<Surface: View>: View {
     var playerSurfaceIdentity = ""
     var handoffMilliseconds: Double? = nil
     var playbackMethod: PlayMethod = .directPlay
-    /// Jellyfin reports `Transcode` for both remux and re-encode; the probe
+    /// Jellyfin reports `Transcode` for both remux and re-encode. The probe
     /// needs this to tell them apart.
     var deliveryRung: PlaybackDelivery = .negotiated
     var isPlaybackCacheActive = false
-    /// Probe only; the scrubber draws `bufferedRanges`.
+    /// Probe only. The scrubber draws `bufferedRanges`.
     var bufferedFraction: Double? = nil
     var bufferedRanges: [PlaybackBufferedRange] = []
     var playheadPrefetchCount = 0
     let info: PlayerItemInfo
     /// Skip and Up Next, decided off the engine's clock by the controller.
     let automation: PlaybackAutomation
-    /// Where play, pause and seek go; a SyncPlay group sends them to the
+    /// Where play, pause and seek go. A SyncPlay group sends them to the
     /// server. Nil means straight to the engine.
     var transport: PlayerTransportActions? = nil
     let onDismiss: () -> Void
@@ -62,7 +62,7 @@ struct CustomPlayerView<Surface: View>: View {
     var isWaitingForGroup = false
     var subtitleStyle: SubtitleRenderStyle = .fallback
     var subtitleSearch: SubtitleSearchCoordinator? = nil
-    /// A lower quality after repeated stalls; nil where nothing offers one.
+    /// A lower quality after repeated stalls, nil where nothing offers one.
     var qualityOffer: PlaybackQualityOffer? = nil
     @ViewBuilder let surface: () -> Surface
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -71,7 +71,7 @@ struct CustomPlayerView<Surface: View>: View {
     private struct SeekFeedback: Equatable {
         let forward: Bool
         let token: Int
-        /// Stacked iOS double-tap total; always 10 on tvOS.
+        /// Stacked iOS double-tap total. Always 10 on tvOS.
         var seconds: Int = 10
     }
 
@@ -83,11 +83,11 @@ struct CustomPlayerView<Surface: View>: View {
     @State private var selectedTab: PlayerPanelTab = .info
     @State private var seekFeedback: SeekFeedback?
     @State private var showsBuffering = false
-    /// The virtual playhead while scrubbing; nil otherwise.
+    /// The virtual playhead while scrubbing, nil otherwise.
     @State private var scrubTarget: Double?
     /// Regression-probe evidence only.
     @State private var lastCommittedScrubTarget: Double = -1
-    /// Steps in the current input run; the step size accelerates on it.
+    /// Steps in the current input run. The step size accelerates on it.
     @State private var scrubRunLength = 0
     @State private var scrubStepToken = 0
     /// Chapter hops get a different self-commit window than steps.
@@ -130,7 +130,7 @@ struct CustomPlayerView<Surface: View>: View {
         #else
         NavigationStack {
             playerContent
-                // Toolbar visibility changes the safe area; keep the video
+                // Toolbar visibility changes the safe area. Keep the video
                 // and centre controls from moving.
                 .ignoresSafeArea(.container, edges: .top)
                 .toolbar {
@@ -454,7 +454,7 @@ struct CustomPlayerView<Surface: View>: View {
             .ignoresSafeArea()
         #if os(tvOS)
             // Stays focusable during the panel animation so the cover is
-            // never focusless; `onMoveCommand` bridges the first command.
+            // never focusless, and `onMoveCommand` bridges the first command.
             .focusable()
             .focused($playerFocus, equals: .surface)
         #endif
@@ -490,7 +490,7 @@ struct CustomPlayerView<Surface: View>: View {
             .onMoveCommand { direction in
                 if panelOpen {
                     // tvOS can keep focus on the surface until the tabs slide
-                    // in; send this first command to the intended tab.
+                    // in. Send this first command to the intended tab.
                     let tabs = PlayerPanelTab.offered(inGroup: together != nil)
                     if direction == .left || direction == .right,
                        let index = tabs.firstIndex(of: selectedTab) {
@@ -582,7 +582,7 @@ struct CustomPlayerView<Surface: View>: View {
         interactionToken += 1
     }
 
-    /// The hierarchy survives autoplay; clear only per-item state and keep
+    /// The hierarchy survives autoplay. Clear only per-item state and keep
     /// the display layer for a seamless engine swap.
     private func resetForPlaybackIdentity() {
         controlsVisible = true
@@ -610,7 +610,7 @@ struct CustomPlayerView<Surface: View>: View {
     }
 
     /// Custom renderers must report on-screen captions to Media
-    /// Accessibility; an empty array clears it.
+    /// Accessibility. An empty array clears it.
     private func reportDisplayedCaption(_ text: String?) {
         let strings: NSArray = text.map { [$0] } ?? []
         MACaptionAppearanceDidDisplayCaptions(strings)
@@ -620,7 +620,7 @@ struct CustomPlayerView<Surface: View>: View {
 
     private var isScrubbing: Bool { scrubTarget != nil }
 
-    /// Clears the iOS centre cluster; tvOS has none.
+    /// Clears the iOS centre cluster. tvOS has none.
     private var waitingDrop: CGFloat {
         #if os(iOS)
         isWaitingForGroup ? Metrics.Space.section * 2 : 0
@@ -633,12 +633,12 @@ struct CustomPlayerView<Surface: View>: View {
         (controlsVisible || voiceOverEnabled || engine.isPaused || isScrubbing) && !panelOpen
     }
 
-    /// Needs a known duration; deliberately not gated on pause.
+    /// Needs a known duration. Deliberately not gated on pause.
     private var canScrub: Bool {
         engine.duration > 0
     }
 
-    /// Sustained input accelerates 10 → 30 → 60 s; a single press is 10 s.
+    /// Sustained input accelerates 10 → 30 → 60 s. A single press is 10 s.
     private func stepScrub(direction: Double) {
         let origin = scrubTarget ?? engine.timePosition
         let step: Double = switch scrubRunLength {
@@ -653,7 +653,7 @@ struct CustomPlayerView<Surface: View>: View {
         scrubStepToken += 1
     }
 
-    /// `resume` is an explicit Select/Play; drags and the timeout keep the
+    /// `resume` is an explicit Select/Play. Drags and the timeout keep the
     /// play state.
     private func commitScrub(to target: Double, resume: Bool) {
         lastCommittedScrubTarget = target

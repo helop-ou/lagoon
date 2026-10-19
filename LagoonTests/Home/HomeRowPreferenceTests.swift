@@ -414,7 +414,7 @@ struct HomeRowPreferenceTests {
         #expect(store.choices.map(\.id) == before)
     }
 
-    /// Settings lists hidden rows too; it is the only way to bring one back.
+    /// Settings lists hidden rows too. It is the only way to bring one back.
     @Test @MainActor func settingsKeepsListingARowAfterItIsHidden() {
         let suiteName = "HomeRowPreferenceTests.\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: suiteName)!
@@ -430,7 +430,7 @@ struct HomeRowPreferenceTests {
     }
 
     /// The server's sections join a saved arrangement as soon as Settings
-    /// loads them, and the result is saved; rows Lagoon draws natively are
+    /// loads them, and the result is saved. Rows Lagoon draws natively are
     /// never offered twice.
     @Test @MainActor func aLoadedCatalogueJoinsTheArrangementAndIsSaved() async throws {
         let suiteName = "HomeRowPreferenceTests.\(UUID().uuidString)"

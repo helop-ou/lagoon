@@ -13,14 +13,14 @@ import UIKit
 private let log = Logger(subsystem: "ee.helop.lagoon", category: "topshelf")
 
 /// Publishes a Continue Watching snapshot for the Top Shelf carousel. The
-/// extension holds no credentials and does no networking; it only reads the
+/// extension holds no credentials and does no networking. It only reads the
 /// files written here.
 enum TopShelfStore {
     /// Mirrored by `TopShelfItem` in `LagoonTopShelf/ContentProvider.swift`,
     /// since the extension cannot import the app module. Change both.
     nonisolated struct Item: Codable, Equatable {
         let id: String
-        /// Burned into the artwork; kept so the payload is readable when debugging.
+        /// Burned into the artwork. Kept so the payload is readable when debugging.
         let title: String
         /// The line above the title: why it is here, and which episode or how
         /// much is left.
@@ -74,7 +74,7 @@ enum TopShelfStore {
         items.prefix(limit).map { item in
             let backdrop = client.imageURL(for: item, kind: .backdrop, maxWidth: Int(TopShelfArtwork.scale2x.width))
             let logo = client.imageURL(for: item, kind: .logo, maxWidth: 1200)
-            // Include account identity and presentation inputs; identical IDs
+            // Include account identity and presentation inputs. Identical IDs
             // from different servers must not share artwork.
             let key = "\(client.sessionIdentity?.serverURL.absoluteString ?? "")|\(client.userId ?? "")|\(item.id)|\(item.railTitle)|\(backdrop?.absoluteString ?? "")|\(logo?.absoluteString ?? "")|layout-\(TopShelfArtwork.layoutVersion)"
             return Source(item: item, backdrop: backdrop, logo: logo, name: TopShelfPublisher.accountOwner(key))
@@ -221,7 +221,7 @@ extension MediaItem {
 
         if let video = streams.first(where: { $0.isVideo }) {
             if let width = video.width {
-                // Apple offers only HD and 4K; below 720p gets no badge.
+                // Apple offers only HD and 4K. Below 720p gets no badge.
                 switch MediaQuality.resolutionClass(width: width) {
                 case "4K": options.insert(.videoResolution4K)
                 case "1080p", "720p": options.insert(.videoResolutionHD)

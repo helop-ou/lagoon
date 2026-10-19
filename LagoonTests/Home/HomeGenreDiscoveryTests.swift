@@ -13,7 +13,7 @@ struct HomeGenreDiscoveryTests {
     }
 
     /// A refreshed copy of an item on the stack must still be the same route,
-    /// or the path reorders; a different item must never be.
+    /// or the path reorders. A different item must never be.
     @Test func anItemRouteIsItsItemIDHoweverStaleTheCopy() throws {
         let items = try candidates()
         let stale = items[0]

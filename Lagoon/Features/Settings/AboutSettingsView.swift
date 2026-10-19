@@ -35,7 +35,7 @@ struct AboutSettingsView: View {
                 .accessibilityIdentifier("settings.about.changelog")
             }
 
-            // Shared with the sign-in screens' About sheet; legal info must not need an account.
+            // Shared with the sign-in screens' About sheet. Legal info must not need an account.
             LegalSettingsSection()
 
             TVSettingsSection("Server") {
@@ -260,7 +260,7 @@ struct ChangelogView: View {
                                         .foregroundStyle(.secondary)
                                         .frame(maxWidth: .infinity, alignment: .leading)
                                         #if os(tvOS)
-                                        // tvOS scrolls by focus; unfocusable text cannot scroll.
+                                        // tvOS scrolls by focus. Unfocusable text cannot scroll.
                                         .focusable()
                                         #endif
                                     }

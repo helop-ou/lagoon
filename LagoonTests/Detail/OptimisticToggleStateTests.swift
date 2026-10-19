@@ -56,7 +56,7 @@ struct OptimisticToggleStateTests {
         _ = state.begin(server: false)
         state.succeed(refreshed: false)
         #expect(!state.isInFlight)
-        // The server accepted; the stale item must not flip the icon back.
+        // The server accepted. The stale item must not flip the icon back.
         #expect(state.value(server: false) == true)
         // A later successful re-read lets the server's value through.
         _ = state.begin(server: false)

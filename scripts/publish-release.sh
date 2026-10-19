@@ -97,7 +97,7 @@ values="$(printf '%s\n' "$project_text" | grep -o 'CURRENT_PROJECT_VERSION = [0-
 ok "${sha:0:9} declares ${version} (${want_build})"
 [ "$recorded" = true ] && ok "tagging the revision recorded when build ${want_build} was archived"
 
-# 4. Same rule as the upload script and ChangelogTests; last chance before public.
+# 4. Same rule as the upload script and ChangelogTests. Last chance before public.
 grep -A 2 "version: \"${version}\"" "$changelog" | grep -q "build: \"${want_build}\"" \
     || die "no Changelog entry for ${version} (${want_build})"
 ok "changelog entry exists for ${version} (${want_build})"

@@ -1,7 +1,7 @@
 import SwiftUI
 
 // Layout and animation tokens. Use these, never literals.
-// tvOS values follow the 80pt safe-zone gutter; iOS scales down.
+// tvOS values follow the 80pt safe-zone gutter, and iOS scales down.
 
 enum Metrics {
     #if os(tvOS)
@@ -75,7 +75,7 @@ enum Metrics {
     static let phoneGridPosterMinimum: CGFloat = 100
     static let padGridPosterMinimum: CGFloat = 150
     static let landscapeWidth: CGFloat = 240
-    /// At standard text sizes; HeroSection grows it for Dynamic Type.
+    /// At standard text sizes. HeroSection grows it for Dynamic Type.
     static let heroHeight: CGFloat = 200
     static let expandedHeroHeight: CGFloat = 360
     static let gridRowSpacing: CGFloat = Space.xxl
@@ -152,7 +152,7 @@ enum Metrics {
 
     /// The touch detail page's poster hero, in pixels. The decode budget is
     /// the 2:3 image's longest edge, because `maxPixelSize` caps the longest
-    /// edge; a width-sized budget would decode soft. Declared on both
+    /// edge. A width-sized budget would decode soft. Declared on both
     /// platforms because the URL is built unconditionally.
     static let detailPosterRequestWidth = 1200
     static let detailPosterDecodeSize = 1800
@@ -243,7 +243,7 @@ enum Metrics {
     /// The QR code's side, and a floor under its white margin.
     ///
     /// A code scans from about ten times its width, so the TV needs a large
-    /// one to scan from a sofa. iOS opens the link instead; its size exists
+    /// one to scan from a sofa. iOS opens the link instead. Its size exists
     /// only for the component gallery.
     ///
     /// The real quiet zone is four modules, measured from the generated code
@@ -256,7 +256,7 @@ enum Metrics {
     static let qrCodeSize: CGFloat = 220
     static let qrCodeMinimumQuietZone: CGFloat = 16
     #endif
-    /// iOS hero clipping; tvOS heroes use the native card shape.
+    /// iOS hero clipping. tvOS heroes use the native card shape.
     static let heroCornerRadius: CGFloat = 16
     static let progressBarHeight: CGFloat = 6
     static let themeSwatchSize: CGFloat = 28
@@ -374,7 +374,7 @@ extension Color {
 /// SF Symbols for navigation targets, in one place so tabs, pickers and
 /// Discover's buttons cannot drift apart.
 ///
-/// Navigation and transport are filled; empty and error states are outline.
+/// Navigation and transport are filled. Empty and error states are outline.
 /// `checkmark`, `chevron.*`, `plus`, `minus`, `xmark`, `magnifyingglass` and
 /// `speedometer` have no filled variant.
 ///
@@ -389,7 +389,7 @@ nonisolated enum ContentIcon {
     static let home = "house.fill"
     /// The single sparkle: `sparkles` (0.81) is narrow and lopsided.
     static let discover = "sparkle"
-    /// No filled magnifier exists; circled variants read as a button.
+    /// No filled magnifier exists. Circled variants read as a button.
     /// `Tab(role: .search)` may substitute the system glyph, which is fine.
     static let search = "magnifyingglass"
     static let settings = "gearshape.fill"
@@ -413,7 +413,7 @@ nonisolated enum ContentIcon {
 }
 
 extension View {
-    /// System card style on tvOS (lift, parallax, specular); plain elsewhere.
+    /// System card style on tvOS (lift, parallax, specular). Plain elsewhere.
     @ViewBuilder
     func cardButtonStyle() -> some View {
         #if os(tvOS)
@@ -440,7 +440,7 @@ struct GroundBackground: View {
 ///
 /// Composed here because the brand package has no dark-background lockup.
 /// Ratios are measured from `Lagoon_Lockup_Stacked_Color` and
-/// `_Horizontal_Color`; `import-brand-vectors.swift` crops both to their ink,
+/// `_Horizontal_Color`. `import-brand-vectors.swift` crops both to their ink,
 /// so they apply to the frames directly.
 struct LagoonLockup: View {
     enum Layout {

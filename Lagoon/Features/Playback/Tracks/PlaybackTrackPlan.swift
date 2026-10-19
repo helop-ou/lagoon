@@ -77,7 +77,7 @@ nonisolated struct PlaybackTrackPlan {
         audioLayout = audio.map(Self.audioLayoutStream)
         subtitleLayout = subtitles.map(Self.subtitleLayoutStream)
 
-        // Jellyfin names its default by stream index; the engine counts a
+        // Jellyfin names its default by stream index. The engine counts a
         // 1-based ordinal per kind.
         let serverDefaultAudio = serverDefaultAudioIndex.flatMap { index in
             audio.firstIndex { $0.index == index }.map { $0 + 1 }

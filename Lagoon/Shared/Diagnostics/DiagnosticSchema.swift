@@ -3,7 +3,7 @@ import LagoonEngine
 
 /// What a schema key accepts. Strings could carry private content, so each
 /// is a closed choice or a bounded token, which rules out URLs and prose. A
-/// bare hostname passes the token test, so never pass one to a token key;
+/// bare hostname passes the token test, so never pass one to a token key.
 /// `DiagnosticPrivacyTests` checks this.
 nonisolated enum DiagnosticFieldKind: Equatable, Sendable {
     case int
@@ -21,7 +21,7 @@ nonisolated enum DiagnosticFieldKind: Equatable, Sendable {
 /// show up in the report.
 nonisolated enum DiagnosticSchema {
     static let tokenMaximumLength = 48
-    /// A failure carries about fifty keys; the cap only stops a runaway
+    /// A failure carries about fifty keys. The cap only stops a runaway
     /// caller.
     static let maximumFieldsPerRecord = 64
 

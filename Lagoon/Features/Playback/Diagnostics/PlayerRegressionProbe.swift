@@ -10,7 +10,7 @@ nonisolated enum PlayerRegressionProbe {
 }
 
 /// A launch-gated accessibility probe for the physical-device UI suite. It
-/// observes what the viewer sees; it never calls player actions or replaces
+/// observes what the viewer sees. It never calls player actions or replaces
 /// the Siri Remote path.
 ///
 /// A `ViewModifier` so its tick-rate reads land in its own body, not the

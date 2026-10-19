@@ -17,7 +17,7 @@ nonisolated struct CollectionShelfItem: Identifiable, Equatable {
 /// you own one film in it (173 on the reference library, 18 with more than
 /// one title). These rules filter that down.
 nonisolated enum CollectionShelf {
-    /// Persisted per account; renaming would re-enable a hidden row.
+    /// Persisted per account. Renaming would re-enable a hidden row.
     static let rowID = "lagoon.collections"
 
     /// A one-title collection is just that title.
@@ -101,7 +101,7 @@ nonisolated enum CollectionShelf {
 /// server's name order. Artwork is borrowed as for collections, since
 /// Jellyfin often has none for a playlist.
 nonisolated enum PlaylistShelf {
-    /// Persisted per account; renaming would re-enable a hidden row.
+    /// Persisted per account. Renaming would re-enable a hidden row.
     static let rowID = "lagoon.playlists"
 
     /// Home's row and the Library page. Nil when the list request fails.

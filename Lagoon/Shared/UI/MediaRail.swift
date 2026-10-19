@@ -8,7 +8,7 @@ enum RailStyle {
 /// The shared shape for every horizontal rail: heading, the iOS "See All"
 /// link when there is a destination, and the scrolling shelf beneath it.
 /// The asymmetric top/bottom padding inside the ScrollView is the room the
-/// system focus lift needs; `.scrollClipDisabled()` keeps lifted cards from
+/// system focus lift needs, `.scrollClipDisabled()` keeps lifted cards from
 /// being clipped at rail boundaries. `Destination == Never` (the default
 /// initializer below) drops the "See All" affordance entirely for rails that
 /// never navigate to a fuller list.

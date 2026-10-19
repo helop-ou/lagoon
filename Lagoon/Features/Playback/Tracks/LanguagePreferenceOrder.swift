@@ -6,7 +6,7 @@ import Foundation
 nonisolated struct LanguagePreferenceOrder {
     /// What the viewer chose in Lagoon, in order. Wins over the system.
     let overrides: [String]
-    /// What the system prefers. May be raw identifiers; they are normalized
+    /// What the system prefers. May be raw identifiers. They are normalized
     /// where they are read.
     let system: [String]
 

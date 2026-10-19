@@ -30,7 +30,7 @@ final class LocalNetworkUITests: XCTestCase {
         settings.tap()
         let settingsApp = XCUIApplication(bundleIdentifier: "com.apple.Preferences")
         XCTAssertTrue(settingsApp.wait(for: .runningForeground, timeout: 10))
-        // The simulator has no privacy toggle; restore the fixture instead.
+        // The simulator has no privacy toggle. Restore the fixture instead.
         try await control(server, path: "connectivity?drop=0")
         app.activate()
         XCTAssertTrue(field.waitForExistence(timeout: 5))
@@ -63,7 +63,7 @@ final class LocalNetworkUITests: XCTestCase {
         XCTAssertFalse(settings.exists)
         attachScreenshot(of: app, named: "seerr-local-network-recovered")
 
-        // Reopen with the remembered account and Seerr server; also covers
+        // Reopen with the remembered account and Seerr server. Also covers
         // restoration finishing after the initial prefill.
         app.terminate()
         try await control(server, path: "connectivity?drop=1")

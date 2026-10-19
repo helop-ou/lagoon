@@ -7,7 +7,7 @@ import Testing
 /// Version and build come from `Bundle.main`, which here is Lagoon.app.
 ///
 /// `scripts/generate-site-facts.sh` runs this and copies the result into the
-/// website checkout; `--check` fails on drift instead.
+/// website checkout. `--check` fails on drift instead.
 @Suite("Site facts document")
 struct SiteFactsDocTests {
     @Test @MainActor func writesTheSiteFactsDocument() throws {
@@ -86,7 +86,7 @@ enum SiteFacts {
         "pgs": "PGS", "pgssub": "PGS", "dvdsub": "VobSub", "dvbsub": "DVB",
     ]
 
-    /// Dolby Vision arrives as range types; name them by profile number.
+    /// Dolby Vision arrives as range types. Name them by profile number.
     /// `DOVIWithEL` is the dual-layer profile 7 converted in flight.
     static let rangeNames: [String: String] = [
         "SDR": "", // Accepted, never advertised.

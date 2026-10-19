@@ -66,7 +66,7 @@ struct DetailPlayActions<Secondary: View>: View {
     }
     #endif
 
-    /// Play leads so it takes first focus; otherwise Select on arrival lands
+    /// Play leads so it takes first focus. Otherwise Select on arrival lands
     /// on whatever follows it.
     private var actions: some View {
         DetailActionLayout {
@@ -101,7 +101,7 @@ struct DetailPlayActions<Secondary: View>: View {
         #endif
     }
 
-    /// A pill beside Play on TV and wide iPad; a circle on a phone, where a
+    /// A pill beside Play on TV and wide iPad. A circle on a phone, where a
     /// pill folds the four-control row into a column.
     @ViewBuilder
     private var fromBeginningButton: some View {

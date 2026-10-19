@@ -2,7 +2,7 @@ import Foundation
 import Observation
 
 /// Owns which server, user and token are active. Server and user live in
-/// UserDefaults; the token and device id live in the keychain.
+/// UserDefaults. The token and device id live in the keychain.
 @Observable
 final class SessionStore {
     enum Phase {
@@ -21,7 +21,7 @@ final class SessionStore {
     private(set) var activeAccount: StoredAccount? {
         didSet { synchronizeAccountContext() }
     }
-    /// Retained identity for reauthentication; it has no active credential.
+    /// Retained identity for reauthentication. It has no active credential.
     private(set) var reauthenticationAccount: StoredAccount?
     var isAddingAccount = false
     let client: JellyfinClient
@@ -153,7 +153,7 @@ final class SessionStore {
         migrateLegacySessionIfNeeded()
         accounts = loadAccounts()
 
-        // Resume the last account; the picker is in Settings.
+        // Resume the last account. The picker is in Settings.
         if let id = defaults.string(forKey: DefaultsKey.activeAccountId),
            let account = accounts.first(where: { $0.id == id }) {
             if !activate(account) { beginReauthentication(account) }
@@ -201,7 +201,7 @@ final class SessionStore {
     }
 
     /// Catches up a changed name or picture after activation. An unreachable
-    /// server keeps the stored record; a switch or sign-out mid-read discards it.
+    /// server keeps the stored record. A switch or sign-out mid-read discards it.
     private func refreshProfile(of account: StoredAccount) {
         let generation = connectionGeneration
         profileRefresh = Task { [weak self] in
@@ -233,7 +233,7 @@ final class SessionStore {
     }
 
     /// What a profile is in the middle of, for the picker. nil when its
-    /// sign-in is gone, pending or expired; never starts a re-sign-in.
+    /// sign-in is gone, pending or expired. Never starts a re-sign-in.
     func latestResume(for account: StoredAccount) async -> MediaItem? {
         guard !expiredAccountIDs.contains(account.id),
               !localData.pendingAccountIDs.contains(account.id),
@@ -429,7 +429,7 @@ final class SessionStore {
         defaults.set(try? JSONEncoder().encode(list), forKey: DefaultsKey.accounts)
     }
 
-    /// One-time move off the single-slot layout; without it an upgrade signs everyone out.
+    /// One-time move off the single-slot layout. Without it an upgrade signs everyone out.
     private func migrateLegacySessionIfNeeded() {
         guard defaults.data(forKey: DefaultsKey.accounts) == nil,
               let urlString = defaults.string(forKey: DefaultsKey.serverURL),
@@ -449,7 +449,7 @@ final class SessionStore {
                 throw KeychainStore.StoreError.verificationFailed
             }
         } catch {
-            // Keep the old slot; a failed migration must not sign out.
+            // Keep the old slot. A failed migration must not sign out.
             return
         }
         save(accounts: [account])
@@ -561,7 +561,7 @@ final class SessionStore {
         try await client.initiateQuickConnect()
     }
 
-    /// One poll step; true once the code is approved and the session is active.
+    /// One poll step, true once the code is approved and the session is active.
     func pollQuickConnect(secret: String) async throws -> Bool {
         let generation = connectionGeneration
         try checkConnection(generation)
@@ -642,7 +642,7 @@ final class SessionStore {
     func forgetServer() async {
         connectionGeneration += 1
         let server = client.serverURL
-        // A re-authenticating account is never the active one; keep it past
+        // A re-authenticating account is never the active one. Keep it past
         // the reset or it stays in the picker with no way to remove it.
         let reauthenticating = reauthenticationAccount
         reauthenticationAccount = nil
@@ -656,7 +656,7 @@ final class SessionStore {
             releaseServerHeaders(forServers: [server])
             return
         }
-        // Invalidate now; after revocation, leave any later account alone.
+        // Invalidate now. After revocation, leave any later account alone.
         let remote = client.sessionSnapshot()
         let linkedRemote = seerr.client.sessionSnapshot()
         if let account = activeAccount ?? reauthenticating { try? remove(account) }

@@ -4,8 +4,8 @@ import Testing
 @testable import Lagoon
 
 /// Fixture state for `SentryTransportTests`. The DSN host is fixed, and
-/// `responder` is reassigned mid-test to script a sequence of responses;
-/// the body is always the same placeholder envelope acknowledgement.
+/// `responder` is reassigned mid-test to script a sequence of responses.
+/// The body is always the same placeholder envelope acknowledgement.
 private enum SentryFixture {
     private nonisolated struct State: Sendable {
         var responder: @Sendable (URLRequest) -> (status: Int, headers: [String: String]) = { _ in (200, [:]) }
@@ -123,7 +123,7 @@ struct SentryTransportTests {
         transport.submit(Self.incident(.playbackFailed))
         await Self.wait { SentryFixture.requests.count == 1 && Self.pendingCount(directory) == 1 }
         try await Task.sleep(for: .milliseconds(500))
-        // The first was taken; the second waits out the 60 s the server asked for.
+        // The first was taken. The second waits out the 60 s the server asked for.
         #expect(SentryFixture.requests.count == 1)
         #expect(Self.pendingCount(directory) == 1)
         transport.flush()

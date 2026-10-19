@@ -6,7 +6,7 @@ import os
 // The viewer-facing commands: start, pause, resume, delete.
 extension DownloadStore {
     /// Saves the snapshot and artwork, then starts the transfer. `item` must
-    /// carry media sources (a detail read does; a rail item does not).
+    /// carry media sources (a detail read does, a rail item does not).
     func start(item: MediaItem, source: MediaSource, quality: DownloadQuality, client: JellyfinClient) async throws {
         guard let authorization = client.mediaRequestAuthorization(),
               let accountKey, let accountDirectory else {
@@ -158,7 +158,7 @@ extension DownloadStore {
         )
     }
 
-    /// Keeps resume data only for originals; a progressive transcode has no
+    /// Keeps resume data only for originals. A progressive transcode has no
     /// range support, so it restarts from the beginning.
     func pause(_ itemID: String) {
         guard let entry = manifest.entry(for: itemID), let taskIdentifier = entry.taskIdentifier,

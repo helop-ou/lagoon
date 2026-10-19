@@ -100,7 +100,7 @@ struct SeerrRequestDetailView: View {
         return lines.joined(separator: " ")
     }
 
-    /// Short form; the subtitle carries the full sentence.
+    /// Short form. The subtitle carries the full sentence.
     private var processingBadgeTitle: String {
         guard let progress = currentRequest.downloadProgress else {
             return currentRequest.progress.title

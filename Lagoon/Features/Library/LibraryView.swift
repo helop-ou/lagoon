@@ -13,7 +13,7 @@ struct LibraryView: View {
     @State private var decadeRetry = 0
     @State private var genreViewModel = LibraryGenreViewModel()
     @State private var genreRetry = 0
-    /// Video playlists; the Playlists entry shows only above zero. A failed
+    /// Video playlists. The Playlists entry shows only above zero. A failed
     /// count keeps the last one.
     @State private var playlistCount = 0
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
@@ -100,7 +100,7 @@ struct LibraryView: View {
         }
     }
 
-    /// Opens the playlists page, like Downloads; tvOS has it in the controls
+    /// Opens the playlists page, like Downloads. tvOS has it in the controls
     /// row instead.
     @ViewBuilder
     private var playlistsEntry: some View {

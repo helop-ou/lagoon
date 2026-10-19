@@ -3,7 +3,7 @@ import SwiftUI
 /// AsyncImage replacement backed by ImageCache. The synchronous cache probe
 /// in init renders cached artwork on the first frame, with no placeholder
 /// flash. Artwork that has to be fetched fades in over its placeholder
-/// rather than popping in; cached artwork never fades, so going back to a
+/// rather than popping in. Cached artwork never fades, so going back to a
 /// screen doesn't replay it.
 struct CachedAsyncImage<Content: View, Placeholder: View>: View {
     private let url: URL?

@@ -1,7 +1,7 @@
 import Observation
 import SwiftUI
 
-/// Lagoon's themes. Each is a whole palette; screens ask `Theme` for colours
+/// Lagoon's themes. Each is a whole palette. Screens ask `Theme` for colours
 /// and never check which theme is on. Keep the list short: every theme is
 /// checked over every screen.
 nonisolated enum AppTheme: String, CaseIterable, Identifiable {
@@ -142,7 +142,7 @@ extension ThemePalette {
 }
 
 /// Which theme is on. The choice belongs to the Jellyfin profile, not the
-/// device; `SessionStore` points the store at the active account. While
+/// device. `SessionStore` points the store at the active account. While
 /// nobody is active, the last profile's theme stays up.
 @Observable
 final class ThemeStore {
@@ -318,7 +318,7 @@ struct ThemedForm<Content: View>: View {
 #endif
 
 extension View {
-    /// The theme's chrome wash on iOS bars; apply on each tab's root. Not on
+    /// The theme's chrome wash on iOS bars. Apply on each tab's root. Not on
     /// tvOS: never tint labels there (see docs/design-system.md).
     @ViewBuilder
     func themedChrome() -> some View {

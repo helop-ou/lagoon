@@ -96,7 +96,7 @@ struct SessionStoreTests {
     @Test func aLateProfileReadCannotRenameTheNextAccount() async throws {
         let fixture = try Fixture()
         defer { fixture.cleanUp() }
-        // A's profile read waits; B's answers at once.
+        // A's profile read waits. B's answers at once.
         ProfileProtocol.hold(token: "token-a")
         let store = fixture.store()
         let lateRead = try #require(store.profileRefresh)

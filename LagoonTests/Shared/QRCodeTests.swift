@@ -32,7 +32,7 @@ struct QRCodeTests {
         ))
         context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
         context.fill(CGRect(x: 0, y: 0, width: side, height: side))
-        // Matches the view's `.interpolation(.none)`; smoothing blurs modules.
+        // Matches the view's `.interpolation(.none)`. Smoothing blurs modules.
         context.interpolationQuality = .none
         context.draw(code, in: CGRect(x: 0, y: 0, width: side, height: side))
 

@@ -23,8 +23,8 @@ final class AccountPrivacyUITests: XCTestCase {
         app.launchArguments = ["-debug.regressionBootstrapPublicDemo", "NO", "-session.activeAccountId", ""]
         app.launchEnvironment = [:]
         app.launch()
-        // Each profile shows what it is watching once its server answers;
-        // the fixture has something in progress for Privacy B only.
+        // Each profile shows what it is watching once its server answers.
+        // The fixture has something in progress for Privacy B only.
         let watching = NSPredicate(format: "label == %@", "Privacy B, watching Session fixture movie")
         let profileB = app.buttons["account.select.privacy-b"]
         XCTAssertEqual(
@@ -105,7 +105,7 @@ final class AccountPrivacyUITests: XCTestCase {
     private func selectTab(_ title: String, in app: XCUIApplication) {
         let tab = app.tabBars.buttons[title]
         #if !os(tvOS)
-        // The iOS search role collapses the other tabs; tapping restores them.
+        // The iOS search role collapses the other tabs. Tapping restores them.
         if !tab.exists, app.tabBars.buttons.firstMatch.exists {
             app.tabBars.buttons.firstMatch.tap()
         }

@@ -33,7 +33,7 @@ final class TrickplayLoader {
     private var sheetDataOrder: [Int] = []
     private var loading: Set<Int> = []
     @ObservationIgnored private var loadTasks: [Int: Task<Void, Never>] = [:]
-    /// Re-checked when a sheet lands; the playhead has usually moved on.
+    /// Re-checked when a sheet lands. The playhead has usually moved on.
     private var wanted: TrickplayTile?
 
     /// Two sheets ≈ 46 MB. A third buys almost nothing at 16 minutes each.
@@ -69,7 +69,7 @@ final class TrickplayLoader {
 
     private func load(sheet index: Int) {
         guard !loading.contains(index), source.sheetURLs.indices.contains(index) else { return }
-        // A rapid scrub crosses many sheets; keep only this transfer.
+        // A rapid scrub crosses many sheets. Keep only this transfer.
         for (other, task) in loadTasks where other != index {
             task.cancel()
             loadTasks.removeValue(forKey: other)
@@ -91,7 +91,7 @@ final class TrickplayLoader {
             self.loading.remove(index)
             self.loadTasks.removeValue(forKey: index)
             guard let image else {
-                // Unavailable only if nothing ever loaded; otherwise one
+                // Unavailable only if nothing ever loaded. Otherwise one
                 // bad sheet.
                 self.isUnavailable = self.sheets.isEmpty
                 return

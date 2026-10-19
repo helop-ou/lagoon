@@ -41,7 +41,7 @@ struct InlineRetryView: View {
 
 /// Full-screen error, or any other empty state built from the same glyph,
 /// message and optional action. A `retry` also keeps focus on-screen on
-/// tvOS; a screen that already has a focusable element nearby can omit it.
+/// tvOS. A screen that already has a focusable element nearby can omit it.
 struct ErrorStateView: View {
     var systemImage = "exclamationmark.triangle"
     let message: String

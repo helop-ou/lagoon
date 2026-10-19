@@ -50,7 +50,7 @@ nonisolated struct SyncPlayGroup: Decodable, Identifiable, Hashable, Sendable {
     let groupName: String
     let state: SyncPlayGroupState
     let participants: [String]
-    /// Server wall clock; see the file header.
+    /// Server wall clock. See the file header.
     let lastUpdatedAt: String
 
     var id: String { groupId }
@@ -81,7 +81,7 @@ nonisolated enum SyncPlayCommandKind: String, Codable, Hashable, Sendable {
 }
 
 /// `SendCommand`: what every member should do, and when. `when` is an
-/// instant on the server's clock, not a delay; act on it via `ServerClock`.
+/// instant on the server's clock, not a delay. Act on it via `ServerClock`.
 nonisolated struct SyncPlayCommand: Decodable, Hashable, Sendable {
     let groupId: String
     let playlistItemId: String
@@ -179,7 +179,7 @@ nonisolated struct SyncPlayQueueUpdate: Decodable, Hashable, Sendable {
 
 nonisolated struct SyncPlayStateUpdate: Decodable, Hashable, Sendable {
     let state: SyncPlayGroupState
-    /// The `PlaybackRequestType` behind the change. A label only; never
+    /// The `PlaybackRequestType` behind the change. A label only. Never
     /// branched on.
     let reason: String
 
@@ -290,7 +290,7 @@ nonisolated struct SyncPlayReadinessReport: Encodable, Hashable, Sendable {
 // MARK: - Access
 
 /// `UserPolicy.SyncPlayAccess`. `unknown` (new value or no answer) is not
-/// a denial; the UI says it could not check.
+/// a denial. The UI says it could not check.
 nonisolated enum SyncPlayAccess: String, Codable, Hashable, Sendable {
     case createAndJoinGroups = "CreateAndJoinGroups"
     case joinGroups = "JoinGroups"
@@ -385,7 +385,7 @@ extension JellyfinClient {
         try await postVoid("SyncPlay/NextItem", body: SyncPlayItemRequest(playlistItemId: playlistItemId))
     }
 
-    /// Tells the group this client is not ready; everyone else waits.
+    /// Tells the group this client is not ready. Everyone else waits.
     func syncPlayReportBuffering(_ report: SyncPlayReadinessReport) async throws {
         try await postVoid("SyncPlay/Buffering", body: report)
     }

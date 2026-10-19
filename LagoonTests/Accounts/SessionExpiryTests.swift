@@ -64,7 +64,7 @@ struct SessionExpiryTests {
         let fixture = try Fixture()
         defer { fixture.cleanUp() }
         let store = try await fixture.settledStore()
-        // Only the sign-in is refused; a background read with the live token
+        // Only the sign-in is refused. A background read with the live token
         // must not be what decides the outcome.
         SessionExpiryProtocol.setReply(.http(401, ""), forPathSuffix: "AuthenticateByName")
         do {
@@ -74,8 +74,8 @@ struct SessionExpiryTests {
         }
         #expect(store.phase == .signedIn)
         #expect(store.client.accessToken == "first-token")
-        // Activation also reads the profile with the live token;
-        // the request under test is the sign-in itself.
+        // Activation also reads the profile with the live token.
+        // The request under test is the sign-in itself.
         let signIn = try #require(SessionExpiryProtocol.requests.last { $0.url?.path.hasSuffix("AuthenticateByName") == true })
         #expect(signIn.value(forHTTPHeaderField: "Authorization")?.contains("Token=") == false)
     }
@@ -335,7 +335,7 @@ private nonisolated final class SessionExpiryProtocol: URLProtocol, @unchecked S
     static var requests: [URLRequest] { lock.withLock { recorded } }
     static var hasHeldRequest: Bool { lock.withLock { !held.isEmpty } }
     static func setReply(_ value: Reply) { lock.withLock { reply = value } }
-    /// Answers only requests whose path ends this way with `value`; every
+    /// Answers only requests whose path ends this way with `value`. Every
     /// other request gets an empty success.
     static func setReply(_ value: Reply, forPathSuffix suffix: String) {
         lock.withLock { scopedReply = (suffix, value); reply = .http(200, "{}") }

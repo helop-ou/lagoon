@@ -112,7 +112,7 @@ extension DownloadStore {
         }
     }
 
-    /// Uses the in-memory manifest for the active account; a fresh copy from
+    /// Uses the in-memory manifest for the active account. A fresh copy from
     /// disk would discard unsaved progress and positions.
     func reportFinished(info: DownloadTaskDescription, status: Int, location: URL) {
         withManifest(atAccountKey: info.accountKey) { manifest, directory in
@@ -126,7 +126,7 @@ extension DownloadStore {
 
     // MARK: - Playback reports
 
-    /// Oldest first; stops at the first failure. Rechecks the account after
+    /// Oldest first. Stops at the first failure. Rechecks the account after
     /// every await so a sign-out mid-flush never touches another manifest.
     func flushPendingReports(client: JellyfinClient) async {
         let account = accountKey

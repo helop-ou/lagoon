@@ -23,7 +23,7 @@ final class DownloadStore {
         let url: URL
         let item: MediaItem
         let source: MediaSource
-        /// Original carries the source's streams; a transcode is a different
+        /// Original carries the source's streams. A transcode is a different
         /// file, so its track metadata comes from probing, not the source.
         let quality: DownloadQuality
         let resumeTicks: Int64?
@@ -56,7 +56,7 @@ final class DownloadStore {
     @ObservationIgnored private(set) var accountGeneration = 0
     /// A newer start or delete invalidates an older start across its awaits.
     @ObservationIgnored var preparationTokens: [String: UUID] = [:]
-    /// Whether the account may download; nil until asked. Lives here, not in
+    /// Whether the account may download, nil until asked. Lives here, not in
     /// `DownloadControl`: a control with nothing to show renders no view, so
     /// its own task would never run to resolve the permission.
     private(set) var permitted: Bool?
@@ -66,7 +66,7 @@ final class DownloadStore {
     let session: URLSession
     let delegate: SessionDelegate
 
-    /// Row bodies call `snapshotItem(for:)` on every draw; decoding from disk
+    /// Row bodies call `snapshotItem(for:)` on every draw. Decoding from disk
     /// each time is too slow.
     @ObservationIgnored var snapshotCache: [String: MediaItem] = [:]
     @ObservationIgnored var lastProgressSaveDate: Date?
@@ -108,7 +108,7 @@ final class DownloadStore {
         configuration.sessionSendsLaunchEvents = true
         configuration.isDiscretionary = false
         // A progressive transcode is one response that lasts as long as the
-        // encode; the resource timeout must outlast a film.
+        // encode. The resource timeout must outlast a film.
         configuration.timeoutIntervalForResource = 12 * 60 * 60
         configuration.timeoutIntervalForRequest = 10 * 60
         return configuration
@@ -205,7 +205,7 @@ final class DownloadStore {
     }
 
     /// The item as saved at download time, for offline detail pages.
-    /// Memoized; `activate`, `delete` and `start` clear the cache.
+    /// Memoized. `activate`, `delete` and `start` clear the cache.
     func snapshotItem(for itemID: String) -> MediaItem? {
         if let cached = snapshotCache[itemID] { return cached }
         guard let accountDirectory else { return nil }
@@ -282,7 +282,7 @@ final class DownloadStore {
         case noSpace
         case unsupportedItem
         /// The server's proxy redirects the download to another host, which
-        /// would receive its headers; see `DownloadRedirectCheck`.
+        /// would receive its headers. See `DownloadRedirectCheck`.
         case redirectedOffServer
         case serverUnreachable
     }
@@ -314,13 +314,13 @@ final class DownloadStore {
 
     // MARK: - Playback
 
-    /// The resume point of local playback; nil once played through.
+    /// The resume point of local playback, nil once played through.
     func recordPosition(itemID: String, ticks: Int64?) {
         manifest.recordPosition(itemID, ticks: ticks)
         save()
     }
 
-    /// A stop report the server could not be given now; flushed later.
+    /// A stop report the server could not be given now. Flushed later.
     func enqueuePendingReport(_ report: PendingPlaybackReport) {
         manifest.enqueue(report)
         save()

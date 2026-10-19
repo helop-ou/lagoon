@@ -8,8 +8,8 @@ import LagoonEngine
 /// The bench hooks are not compiled out: the bench measures Release builds.
 struct PlaybackStartHooks {
     #if DEBUG
-    /// `debug.regressionStartNearEnd` applies to the fixture episode only;
-    /// applied to the successor, the hand-off test exits too early.
+    /// `debug.regressionStartNearEnd` applies to the fixture episode only.
+    /// Applied to the successor, the hand-off test exits too early.
     private var didApplyNearEnd = false
     #endif
 

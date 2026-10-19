@@ -197,7 +197,7 @@ struct HeroSection<Route: Hashable>: View {
             Color.clear.background(.thinMaterial)
 
             // `.id` per item makes a slide change an insertion the crossfade
-            // can animate; without it the picture just cuts.
+            // can animate. Without it the picture just cuts.
             backdrop(for: item)
                 .frame(width: width, height: panelHeight)
                 #if os(tvOS)
@@ -230,14 +230,14 @@ struct HeroSection<Route: Hashable>: View {
                 #if os(tvOS)
                 .id(item.id)
                 // The button stays outside this transitioning subtree so focus
-                // survives slide changes; a plain crossfade double-exposes text.
+                // survives slide changes. A plain crossfade double-exposes text.
                 .transition(reduceMotion ? .identity : .asymmetric(
                     insertion: .opacity.animation(.easeIn(duration: Motion.heroTextIn).delay(Motion.heroTextIn)),
                     removal: .opacity.animation(.easeOut(duration: Motion.fast))
                 ))
                 #endif
             }
-            // Card button labels get unbounded width; keep text in the panel.
+            // Card button labels get unbounded width. Keep text in the panel.
             .frame(maxWidth: max(0, min(textColumnWidth, width - Metrics.heroTextInset * 2)), alignment: .leading)
             .padding(.leading, Metrics.heroTextInset)
             #if os(iOS)
@@ -256,7 +256,7 @@ struct HeroSection<Route: Hashable>: View {
         #endif
     }
 
-    /// tvOS darkens only the text column; on a phone the text spans the full
+    /// tvOS darkens only the text column. On a phone the text spans the full
     /// width, so the wash does too.
     private static var washStops: [Gradient.Stop] {
         #if os(tvOS)

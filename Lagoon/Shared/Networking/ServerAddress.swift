@@ -28,7 +28,7 @@ nonisolated enum ServerAddress {
               components.user == nil, components.password == nil,
               components.query == nil, components.fragment == nil,
               components.port.map({ (1...65535).contains($0) }) ?? true else { return [] }
-        // Foundation reads "host:" as no port; treat it as incomplete.
+        // Foundation reads "host:" as no port. Treat it as incomplete.
         let authority = inputURL[inputURL.range(of: "://")!.upperBound...]
             .prefix { $0 != "/" && $0 != "?" && $0 != "#" }
         guard !authority.hasSuffix(":") else { return [] }
@@ -71,7 +71,7 @@ nonisolated enum ServerAddress {
 
     static func displayString(for url: URL) -> String {
         guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return "" }
-        // Old saved addresses may hold credentials or tokens; never show them.
+        // Old saved addresses may hold credentials or tokens. Never show them.
         components.user = nil
         components.password = nil
         components.query = nil

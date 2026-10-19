@@ -48,7 +48,7 @@ nonisolated struct PlayQueueList: Equatable {
     nonisolated struct Entry: Equatable {
         let media: MediaItem
         /// The server's id for this playlist entry, kept for editing later.
-        /// Nil in a collection; not unique (see the type).
+        /// Nil in a collection. Not unique (see the type).
         var playlistItemId: String?
     }
 

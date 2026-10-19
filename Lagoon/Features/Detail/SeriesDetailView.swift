@@ -73,7 +73,7 @@ final class SeriesDetailViewModel {
         return seasonId
     }
 
-    /// After playback, move the rail to the season now up next; a session
+    /// After playback, move the rail to the season now up next. A session
     /// can end seasons away from where it started.
     func followUpNext(client: JellyfinClient, seriesId: String) async {
         guard let seasonId = upNextSeasonId else { return }
@@ -336,7 +336,7 @@ struct SeriesDetailView: View {
                 .font(.title3.bold())
                 .padding(.leading, Metrics.screenGutter)
 
-            // Stays mounted across season switches; a spinner in its place
+            // Stays mounted across season switches. A spinner in its place
             // collapses the layout and makes focus jump.
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(spacing: Metrics.cardSpacing) {

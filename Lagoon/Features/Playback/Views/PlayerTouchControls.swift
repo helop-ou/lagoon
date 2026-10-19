@@ -6,7 +6,7 @@ import SwiftUI
 ///
 /// Holds the engine weakly via `@PlayerEngineRef`, never strongly, so a stale
 /// copy after a handoff cannot leak the drained engine. Reading `isPaused`
-/// here is fine; tick-rate state such as `timePosition` is not.
+/// here is fine. Tick-rate state such as `timePosition` is not.
 struct PlayerTouchTransportCluster: View {
     @PlayerEngineRef var engine: any PlayerEngine
     /// `true` for the forward button, `false` for back.
@@ -64,7 +64,7 @@ struct PlayerTouchTransportCluster: View {
 }
 
 /// Double-tap seek feedback: a repeat on the same side while the glyph is
-/// up adds a step (10, 20, 30 s); a direction change resets it.
+/// up adds a step (10, 20, 30 s). A direction change resets it.
 nonisolated enum TouchSeekPolicy {
     static let step: Double = 10
 

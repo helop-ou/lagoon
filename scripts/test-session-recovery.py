@@ -76,7 +76,7 @@ def main():
                 command = ["xcodebuild", "build-for-testing", "-scheme", "LagoonHardwareRegression",
                            "-destination", destination, "-derivedDataPath", str(derived)]
                 if platform == "iOS":
-                    # The UI target also holds tvOS-only remote tests; keep
+                    # The UI target also holds tvOS-only remote tests. Keep
                     # its checked-in platform scope.
                     command += ["SUPPORTED_PLATFORMS=iphonesimulator", "SDKROOT=iphonesimulator",
                                 "TARGETED_DEVICE_FAMILY=1,2", "IPHONEOS_DEPLOYMENT_TARGET=26.0",
@@ -98,7 +98,7 @@ def main():
                 expected = 1 if args.account_privacy or args.local_network or args.server_address or args.subtitle_downloads or args.subtitle_provider else 2
                 if f"Executed {expected} test" not in (results / "test.log").read_text():
                     raise RuntimeError("The selected UI cases did not execute")
-                # Each case resets the fixture; the final case must complete
+                # Each case resets the fixture. The final case must complete
                 # reauthentication, not merely return a passing skip result.
                 state = json.loads((directory / "fixture/requests.json").read_text())
                 if not (args.account_privacy or args.local_network or args.server_address or args.subtitle_downloads

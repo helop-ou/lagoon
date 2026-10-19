@@ -36,7 +36,7 @@ struct SeerrDiscoverLayoutTests {
     }
 
     /// Recently Added and Recent Requests duplicate Home and the Requests
-    /// chip; Studios and Networks are web-client-only logo shelves.
+    /// chip. Studios and Networks are web-client-only logo shelves.
     @Test @MainActor func theFourSkippedTypesProduceNoRow() throws {
         let rows = SeerrDiscoverLayout.rows(for: try sliders([
             (type: 1, order: 0, enabled: true),   // recently added
@@ -84,7 +84,7 @@ struct SeerrDiscoverLayoutTests {
         #expect(SeerrDiscoverLayout.rows(for: try sliders(defaultServerSliders)) == SeerrDiscoverLayout.fallback)
     }
 
-    /// Rail identity keys a `ForEach`; genres and popular of one media type
+    /// Rail identity keys a `ForEach`. Genres and popular of one media type
     /// are the near miss.
     @Test @MainActor func everyRowInTheDefaultLayoutHasADistinctIdentity() {
         let ids = SeerrDiscoverLayout.fallback.map(\.id)

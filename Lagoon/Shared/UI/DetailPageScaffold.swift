@@ -133,7 +133,7 @@ struct DetailBackdropView: View {
     @ViewBuilder
     private var readabilityWash: some View {
         #if os(tvOS)
-        // The layout uses only the leading half; keep the rest vivid.
+        // The layout uses only the leading half. Keep the rest vivid.
         ZStack {
             Theme.background.opacity(0.12)
             LinearGradient(
@@ -206,7 +206,7 @@ struct DetailBackdropView: View {
 /// covers the whole ramp and reads as a slam to black.
 struct DetailPageScaffold<Content: View>: View {
     let backdropURL: URL?
-    /// Portrait artwork for the compact touch hero; nil keeps the backdrop.
+    /// Portrait artwork for the compact touch hero, nil keeps the backdrop.
     var posterURL: URL? = nil
     @ViewBuilder let content: Content
 
@@ -231,7 +231,7 @@ struct DetailPageScaffold<Content: View>: View {
                         content
                     }
                     .padding(.bottom, Metrics.detailBottomPadding)
-                    // A loading rail reports its content's ideal width; without
+                    // A loading rail reports its content's ideal width. Without
                     // a fixed width the page grows to it and pushes the
                     // actions off-screen.
                     .frame(width: proxy.size.width, alignment: .leading)
@@ -283,7 +283,7 @@ struct DetailPageScaffold<Content: View>: View {
 }
 
 extension View {
-    /// Hides the tab bar on touch detail pages; it returns on Back.
+    /// Hides the tab bar on touch detail pages. It returns on Back.
     func detailPageChrome() -> some View {
         #if os(iOS)
         toolbarVisibility(.hidden, for: .tabBar)

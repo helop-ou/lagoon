@@ -20,7 +20,7 @@ struct ChangelogTests {
         )
     }
 
-    /// House style; see docs/release.md.
+    /// House style. See docs/release.md.
     @Test @MainActor func notesAvoidEmDashes() {
         let emDash = "\u{2014}"
         for entry in Changelog.entries {

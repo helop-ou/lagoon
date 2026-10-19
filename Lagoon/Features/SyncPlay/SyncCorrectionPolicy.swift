@@ -4,7 +4,7 @@ import Foundation
 /// small gaps, and seek only when far off, since a seek is visible.
 /// Pure, so the thresholds are pinned by tests.
 nonisolated enum SyncCorrectionPolicy {
-    /// Seconds. Below this, correcting would only oscillate; lip-sync
+    /// Seconds. Below this, correcting would only oscillate. Lip-sync
     /// tolerance is about 45 ms.
     static let deadband = 0.06
     /// Seconds. Beyond this, seek instead of nudging.
@@ -14,7 +14,7 @@ nonisolated enum SyncCorrectionPolicy {
     /// Outside this range the speed change is audible.
     static let minimumMultiplier = 0.75
     static let maximumMultiplier = 1.5
-    /// Seconds after a start instant while renderers settle; not drift.
+    /// Seconds after a start instant while renderers settle. Not drift.
     static let settleSeconds: Double = 1.5
     static var interval: Duration { .seconds(window) }
 

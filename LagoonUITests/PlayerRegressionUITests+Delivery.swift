@@ -178,7 +178,7 @@ extension PlayerRegressionUITests {
         // pool would otherwise look like a leak.
         Thread.sleep(forTimeInterval: 14)
         let warmed = state(in: app)
-        // The decoded-surface working set grows lazily; a later baseline makes
+        // The decoded-surface working set grows lazily. A later baseline makes
         // the leak gate measure steady-state slope.
         Thread.sleep(forTimeInterval: 30)
         let settled = state(in: app)
@@ -366,7 +366,7 @@ extension PlayerRegressionUITests {
     ///
     /// The simulator profile withdraws only HEVC and Dolby Vision, so the
     /// all-H.264 public demo direct-plays and never opens HLS. That lane
-    /// skips; on a supplied fixture server, `DirectPlay` is a failure.
+    /// skips. On a supplied fixture server, `DirectPlay` is a failure.
     private func requireNegotiatedTranscode(
         _ state: RegressionState,
         file: StaticString = #filePath,

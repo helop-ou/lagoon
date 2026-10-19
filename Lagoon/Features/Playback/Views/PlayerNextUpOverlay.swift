@@ -45,7 +45,7 @@ nonisolated enum NextUpPolicy {
 
 extension NextUpEpisode {
     /// An episode reads as its number and name, with its show's name when it
-    /// follows something else, as in a playlist; a movie as its title and
+    /// follows something else, as in a playlist. A movie as its title and
     /// year.
     init(_ media: MediaItem, after current: MediaItem?, imageURL: URL?) {
         let subtitle: String? = if media.type == .movie {
@@ -61,7 +61,7 @@ extension NextUpEpisode {
 
 /// Draws `PlaybackAutomation`'s state, which runs off the engine's clock so
 /// a locked phone still rolls into the next episode. Shares the corner with
-/// the skip pill; the two are never up together.
+/// the skip pill. The two are never up together.
 struct PlayerNextUpOverlay: View {
     let automation: PlaybackAutomation
     /// Nil for a lone movie, at the end of a series or list, and until the

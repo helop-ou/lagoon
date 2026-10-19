@@ -3,7 +3,7 @@ import LagoonEngine
 
 /// Where a failed Jellyfin or Seerr request becomes a diagnostic record.
 /// Expected conditions (unreachable, lost connection, 401/403) go to history
-/// only; the rest are incidents grouped by client, route and code. Only the
+/// only. The rest are incidents grouped by client, route and code. Only the
 /// method and route shape leave this function.
 nonisolated enum APIDiagnostics {
     static func transportFailed(

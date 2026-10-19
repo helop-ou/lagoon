@@ -1,7 +1,7 @@
 import Foundation
 
 /// `LagoonTopShelf/ContentProvider.swift` as text. The extension cannot
-/// import the app module, so it repeats the app's names by hand; reading its
+/// import the app module, so it repeats the app's names by hand. Reading its
 /// source is the only way to check both sides of that contract.
 struct TopShelfExtensionSource {
     let text: String

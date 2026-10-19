@@ -1,7 +1,7 @@
 import Foundation
 import LagoonEngine
 
-// Download URLs. No credential in the URL; the caller sends
+// Download URLs. No credential in the URL. The caller sends
 // `mediaRequestAuthorization()` as a header.
 extension JellyfinClient {
     /// The original file, via the route gated by "Allow media downloading".

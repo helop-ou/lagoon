@@ -3,7 +3,7 @@ import SwiftUI
 
 /// Bench hook (`debug.benchFlatCues`): skip `rasterizedCue()` for an
 /// on-device A/B. Cue shadow and background filtered every frame cost dropped
-/// frames on Apple TV HDR; rasterizing them fixes that.
+/// frames on Apple TV HDR. Rasterizing them fixes that.
 private let benchFlatCues = UserDefaults.standard.bool(forKey: "debug.benchFlatCues")
 
 private extension View {

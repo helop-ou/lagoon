@@ -27,7 +27,7 @@ struct SeerrRequestStatusTests {
         #expect(SeerrAvailabilityStatus(apiValue: 3) == .processing)
         #expect(SeerrAvailabilityStatus(apiValue: 4) == .partiallyAvailable)
         #expect(SeerrAvailabilityStatus(apiValue: 5) == .available)
-        // 6 is blocklisted; deleted is 7.
+        // 6 is blocklisted. Deleted is 7.
         #expect(SeerrAvailabilityStatus(apiValue: 6) == .blocklisted)
         #expect(SeerrAvailabilityStatus(apiValue: 7) == .deleted)
     }
@@ -148,7 +148,7 @@ struct SeerrRequestStatusTests {
 
 @Suite("Seerr quality profiles")
 struct SeerrQualityProfileTests {
-    /// Profile names come from `service/{radarr,sonarr}/{id}`; older servers
+    /// Profile names come from `service/{radarr,sonarr}/{id}`. Older servers
     /// may omit either side.
     @Test @MainActor func aRequestCarriesTheProfileAndServerItWasMadeAgainst() throws {
         let request = try JSONDecoder().decode(
@@ -191,8 +191,8 @@ struct SeerrQualityProfileTests {
         #expect(services[0].name == "Radarr")
     }
 
-    /// The request's own server wins; without one, the default for its
-    /// resolution; failing that, any default.
+    /// The request's own server wins. Without one, the default for its
+    /// resolution. Failing that, any default.
     @Test func theProfileComesFromTheServerTheRequestWasSentTo() throws {
         let services = try JSONDecoder().decode([SeerrService].self, from: Data("""
         [{"id":0,"isDefault":true,"is4k":false,"activeProfileId":1},

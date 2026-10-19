@@ -23,7 +23,7 @@ final class TouchPlayerUITests: PlayerUITestCase {
         let startTime = state(in: app).double("time")
         waitForState(in: app, timeout: 8) { $0.double("time") > startTime + 2 }
 
-        // The iOS state probe is a 1pt overlay; use the window for touches.
+        // The iOS state probe is a 1pt overlay. Use the window for touches.
         let surface = app.windows.allElementsBoundByIndex.first { $0.frame.width > 100 && $0.frame.height > 100 }!
         let playPause = app.buttons["player.playPause"]
 
@@ -91,7 +91,7 @@ final class TouchPlayerUITests: PlayerUITestCase {
         XCTAssertEqual(app.buttons["player.skipBack"].label, "Back 10 seconds")
         XCTAssertEqual(app.buttons["player.skipForward"].label, "Forward 10 seconds")
 
-        // Paused, the transport outlasts the 4 s dwell; resuming re-arms auto-hide.
+        // Paused, the transport outlasts the 4 s dwell. Resuming re-arms auto-hide.
         Thread.sleep(forTimeInterval: 4.5)
         XCTAssertTrue(playPause.isHittable, "paused transport should remain available")
         tapCenter(of: playPause)
@@ -99,7 +99,7 @@ final class TouchPlayerUITests: PlayerUITestCase {
 
         func assertTransportAutoHides() throws {
             // The cluster must not move as it fades. One snapshot reads both
-            // visibility and position; a fading button's hit point can fail.
+            // visibility and position. A fading button's hit point can fail.
             let centerY = playPause.frame.midY
             let fadeDeadline = Date().addingTimeInterval(6)
             while Date() < fadeDeadline {
@@ -115,7 +115,7 @@ final class TouchPlayerUITests: PlayerUITestCase {
             waitForState(in: app, timeout: 1) {
                 $0.int("transport") == 0 && $0.int("paused") == 0 && $0.int("panel") == 0
             }
-            // The toolbar leaves the hierarchy; the opacity overlays do not.
+            // The toolbar leaves the hierarchy. The opacity overlays do not.
             for identifier in ["player.close", "player.info"] {
                 XCTAssertTrue(app.buttons[identifier].waitForNonExistence(timeout: 1),
                               "\(identifier) should auto-hide during playback")
@@ -143,7 +143,7 @@ final class TouchPlayerUITests: PlayerUITestCase {
         XCTAssertFalse(probe.exists, "Close should dismiss the player and its probe")
     }
 
-    /// Swipe up opens the options panel; swipe down minimizes into Picture
+    /// Swipe up opens the options panel. Swipe down minimizes into Picture
     /// in Picture, or closes where PiP is unavailable (the simulator).
     func testSwipesOpenThePanelAndMinimize() throws {
         let app = launchPlayer(

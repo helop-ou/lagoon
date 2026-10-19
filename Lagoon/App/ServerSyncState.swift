@@ -23,7 +23,7 @@ nonisolated enum ServerRefreshTrigger: String {
     case manual
 }
 
-/// Five minutes; debug builds let UI tests shorten it.
+/// Five minutes. Debug builds let UI tests shorten it.
 nonisolated enum ServerRefreshPolicy {
     static let standardIntervalSeconds = 5 * 60.0
 
@@ -43,7 +43,7 @@ nonisolated enum ServerRefreshPolicy {
 /// One app-wide invalidation clock for Jellyfin content.
 ///
 /// Mounted trees do not re-run `task` or `onAppear` on foregrounding. Only
-/// `RootView` advances `generation`; visible screens observe it and
+/// `RootView` advances `generation`. Visible screens observe it and
 /// reconcile their own state.
 @Observable
 final class ServerSyncState {
@@ -65,7 +65,7 @@ final class ServerSyncState {
     }
 
     /// Returning to the foreground invalidates content only for a signed-in
-    /// session in an active scene; the sign-in screens have nothing to refresh.
+    /// session in an active scene. The sign-in screens have nothing to refresh.
     nonisolated static func foregroundAdvancesGeneration(sceneIsActive: Bool, isSignedIn: Bool) -> Bool {
         sceneIsActive && isSignedIn
     }

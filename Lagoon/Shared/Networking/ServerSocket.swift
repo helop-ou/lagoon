@@ -16,8 +16,8 @@ nonisolated struct ServerSocketMessage: Equatable, Sendable {
     }
 }
 
-/// Splits the envelope from its payload. Unknown message types parse fine;
-/// only malformed JSON returns nil. `JSONSerialization` because `Data` has
+/// Splits the envelope from its payload. Unknown message types parse fine.
+/// Only malformed JSON returns nil. `JSONSerialization` because `Data` has
 /// no fixed type.
 nonisolated enum ServerSocketEnvelope {
     static func parse(_ data: Data) -> ServerSocketMessage? {
@@ -94,7 +94,7 @@ final class ServerSocket {
 
     private(set) var state: State = .idle
 
-    /// Every non-keep-alive message. One consumer; survives reconnects.
+    /// Every non-keep-alive message. One consumer. Survives reconnects.
     let messages: AsyncStream<ServerSocketMessage>
 
     private let continuation: AsyncStream<ServerSocketMessage>.Continuation

@@ -63,7 +63,7 @@ struct DiagnosticsSettingsView: View {
             let status = TopShelfStore.status()
             TVSettingsSection(
                 "Top Shelf",
-                // A footer wraps; a row would truncate the underlying error.
+                // A footer wraps. A row would truncate the underlying error.
                 footer: """
                 Last result: \(status.lastResult ?? "not run yet").
 

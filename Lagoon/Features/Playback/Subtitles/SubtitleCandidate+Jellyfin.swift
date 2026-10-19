@@ -2,7 +2,7 @@ import Foundation
 import LagoonEngine
 
 /// Turns a Jellyfin remote-subtitle result into the engine's shape. The
-/// engine treats `providerID` as opaque; only this file knows it is
+/// engine treats `providerID` as opaque. Only this file knows it is
 /// Jellyfin's.
 nonisolated extension SubtitleCandidate {
     init(_ info: RemoteSubtitleInfo) {

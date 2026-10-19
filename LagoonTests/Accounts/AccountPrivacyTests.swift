@@ -187,8 +187,8 @@ struct AccountPrivacyTests {
         let captured = store.client.sessionSnapshot()
         store.switchTo(fixture.b)
         _ = try? await captured.resumeItems()
-        // Switching also refreshes the new account's profile;
-        // the request under test is the snapshot's own.
+        // Switching also refreshes the new account's profile.
+        // The request under test is the snapshot's own.
         let request = try #require(PrivacyProtocol.requests.last { $0.url?.path.hasSuffix("Users/Me") == false })
         #expect(request.url?.host == "a.privacy.test")
         #expect(request.value(forHTTPHeaderField: "Authorization")?.contains("token-a") == true)

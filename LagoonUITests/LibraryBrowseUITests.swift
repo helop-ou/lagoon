@@ -22,7 +22,7 @@ final class LibraryBrowseUITests: XCTestCase {
         if summary.exists { try chooseFilter(app, title: "Clear Filters") }
         XCTAssertTrue(app.staticTexts["library.count"].waitForExistence(timeout: 35), "The demo catalogue must finish loading before testing its genre filters")
 
-        // Decades the demo normally has; a missing one skips (see `chooseFilter`).
+        // Decades the demo normally has. A missing one skips (see `chooseFilter`).
         let firstDecade = "2000–2009"
         let secondDecade = "2010–2019"
 
@@ -268,7 +268,7 @@ final class LibraryBrowseUITests: XCTestCase {
     }
 
     private func ownsFocus(_ element: XCUIElement) -> Bool {
-        // A SwiftUI Menu's identifier is on a wrapper; focus is on a child.
+        // A SwiftUI Menu's identifier is on a wrapper. Focus is on a child.
         element.hasFocus || element.descendants(matching: .any)
             .allElementsBoundByIndex.contains(where: \.hasFocus)
     }

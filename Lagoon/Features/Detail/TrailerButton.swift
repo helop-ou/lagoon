@@ -8,7 +8,7 @@ import SwiftUI
 /// link opens the YouTube app when it is installed, the browser otherwise.
 nonisolated enum TrailerLink {
     /// An official trailer before any trailer, before other clips, before
-    /// teasers; otherwise the server's order.
+    /// teasers. Otherwise the server's order.
     static func preferred(_ trailers: [RemoteTrailer]) -> RemoteTrailer? {
         trailers.enumerated()
             .filter { destination(for: $0.element) != nil }

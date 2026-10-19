@@ -2,7 +2,7 @@ import Foundation
 
 /// Which items Home's hero shows, from tiers in priority order (see
 /// `HomeViewModel.heroTiers`). The first tier with anything eligible supplies
-/// the whole hero; tiers are never mixed to reach six.
+/// the whole hero. Tiers are never mixed to reach six.
 nonisolated enum HeroSelection {
     static let count = 6
 
@@ -29,7 +29,7 @@ nonisolated enum HeroSelection {
     }
 
     /// Shown items stay in place, with fresh records, while any tier still
-    /// has them; vacancies fill from the leading tier.
+    /// has them. Vacancies fill from the leading tier.
     static func refreshed(current: [MediaItem], tiers: [[MediaItem]]) -> [MediaItem] {
         let everywhere = Dictionary(
             tiers.flatMap { $0 }.filter(isEligible).map { ($0.id, $0) },

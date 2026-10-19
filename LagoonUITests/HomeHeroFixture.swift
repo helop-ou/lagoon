@@ -1,7 +1,7 @@
 import XCTest
 
 /// The hero comes from the "latest" rails, which the public demo can have
-/// empty. There a missing hero skips; on a supplied fixture server it fails.
+/// empty. There a missing hero skips. On a supplied fixture server it fails.
 extension XCTestCase {
     func requireHomeHero(
         in app: XCUIApplication,

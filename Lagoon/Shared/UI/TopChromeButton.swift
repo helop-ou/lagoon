@@ -199,7 +199,7 @@ final class TopChromeButton: UIButton {
         }
     }
 
-    /// SwiftUI focus items are not always views; the nearest view that
+    /// SwiftUI focus items are not always views. The nearest view that
     /// hosts one says where it sits.
     private func hostingView(of item: any UIFocusItem) -> UIView? {
         var environment: (any UIFocusEnvironment)? = item
@@ -236,7 +236,7 @@ final class TopChromeButton: UIButton {
 
     private func startTrackingTabBar() {
         guard tracksTopChrome, tabBar != nil, tabBarRestingMinY != nil else { return }
-        // Focus scrolling animates after the notification; sample the
+        // Focus scrolling animates after the notification. Sample the
         // presentation frame so the overlay follows the chrome.
         tabBarTrackingFramesRemaining = 120
         guard tabBarDisplayLink == nil else { return }

@@ -3,7 +3,7 @@ import SwiftUI
 
 extension View {
     /// tvOS presents full-screen from the calling screen. iOS only requests
-    /// playback; the one `playerPresentationHost` at the tab root presents
+    /// playback. The one `playerPresentationHost` at the tab root presents
     /// it. `onDismiss` still reaches the requesting screen, PiP included.
     func playerPresentation(item: Binding<PlayerItem?>, onDismiss: @escaping () -> Void) -> some View {
         #if os(iOS)
@@ -73,7 +73,7 @@ final class PlayerPresentationHub: PlayerCoverState {
         request = nil
     }
 
-    /// The host has closed the player; hand the outcome back to the screen.
+    /// The host has closed the player. Hand the outcome back to the screen.
     func finished() {
         let finished = request
         request = nil
@@ -104,7 +104,7 @@ private struct PlayerPresentationRequest: ViewModifier {
 private struct PlayerPresentationBridge: UIViewControllerRepresentable {
     let hub: PlayerPresentationHub
     @Environment(SessionStore.self) private var session
-    /// The hosted player is outside SwiftUI's environment; re-inject below.
+    /// The hosted player is outside SwiftUI's environment. Re-inject below.
     @Environment(SyncPlayStore.self) private var syncPlay
 
     func makeCoordinator() -> Coordinator { Coordinator() }

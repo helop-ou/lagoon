@@ -46,7 +46,7 @@ struct JellyfinURLResolutionTests {
         #expect(transcodeResult.method == .transcode)
         // A server-relative TranscodingUrl keeps the reverse-proxy base path.
         #expect(transcodeResult.url.path == "/jellyfin/Videos/item/master.m3u8")
-        // The legacy token is stripped; other query items survive.
+        // The legacy token is stripped. Other query items survive.
         #expect(queryValue("PlaySessionId", in: transcodeResult.url) == "session")
         #expect(queryValue("ApiKey", in: transcodeResult.url) == nil)
         #expect(queryValue("api_key", in: transcodeResult.url) == nil)

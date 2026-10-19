@@ -17,7 +17,7 @@ final class ServerAddressUITests: XCTestCase {
         let app = XCUIApplication()
         app.launchArguments = cleanLaunch(server: "")
         #if os(tvOS)
-        // tvOS starts at an interrupted sign-in; iOS types through setup.
+        // tvOS starts at an interrupted sign-in, and iOS types through setup.
         app.launchArguments = cleanLaunch(server: jellyfin)
         #endif
         app.launch()

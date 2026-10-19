@@ -5,7 +5,7 @@ import LagoonEngine
 import Observation
 import SwiftUI
 
-/// PiP over the same display layer used on screen; no AVPlayer path.
+/// PiP over the same display layer used on screen. No AVPlayer path.
 @MainActor
 @Observable
 final class SampleBufferPictureInPicture: NSObject {

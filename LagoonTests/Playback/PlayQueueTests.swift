@@ -44,7 +44,7 @@ struct PlayQueueTests {
     }
 
     @Test func aRepeatedTitleIsPlayedTwice() throws {
-        // The MCU in timeline order can list a title twice; the position,
+        // The MCU in timeline order can list a title twice. The position,
         // not the title, says which one is playing.
         var queue = PlayQueue.list(try list(["a", "b", "a", "c"]))
         var played: [String] = []

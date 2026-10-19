@@ -13,7 +13,7 @@ nonisolated final class SentryTransport: DiagnosticSink, Sendable {
     private let policy: SentryTransportPolicy
     private let directory: URL
     private let session: URLSession
-    /// Checked before every enqueue and upload; turning reporting off also
+    /// Checked before every enqueue and upload. Turning reporting off also
     /// discards the queue.
     private let isEnabled: @Sendable () -> Bool
     private let queue = DispatchQueue(label: "ee.helop.lagoon.diagnostics", qos: .utility)
@@ -188,7 +188,7 @@ nonisolated final class SentryTransport: DiagnosticSink, Sendable {
         }
     }
 
-    /// One timer at a time; an early retry finds `notBefore` ahead and
+    /// One timer at a time. An early retry finds `notBefore` ahead and
     /// reschedules.
     private func scheduleRetry(after delay: TimeInterval, state: inout State) {
         guard !state.retryScheduled else { return }

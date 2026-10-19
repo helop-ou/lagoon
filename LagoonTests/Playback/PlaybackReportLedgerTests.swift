@@ -66,7 +66,7 @@ struct PlaybackReportLedgerTests {
         #expect(!ledger.hasOpenSessions)
     }
 
-    /// The timeout keeps ticking after a close resumed the waiter; when it
+    /// The timeout keeps ticking after a close resumed the waiter. When it
     /// fires it must find nothing to resume rather than resume twice.
     @Test @MainActor func aLateTimeoutAfterACloseDoesNotResumeTwice() async {
         let ledger = PlaybackReportLedger()

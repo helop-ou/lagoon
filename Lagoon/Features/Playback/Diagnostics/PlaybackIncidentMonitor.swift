@@ -33,7 +33,7 @@ nonisolated struct PlaybackFreezeDetector: Equatable, Sendable {
     enum Verdict: Equatable, Sendable {
         case idle
         case watching(seconds: Double)
-        /// Reported once per freeze; progress resets it.
+        /// Reported once per freeze. Progress resets it.
         case frozen(seconds: Double, kind: Kind)
     }
 
@@ -41,7 +41,7 @@ nonisolated struct PlaybackFreezeDetector: Equatable, Sendable {
     static let positionTolerance: Double = 0.05
     /// The last moments belong to the finish observer.
     static let endGuard: Double = 2
-    /// A seek repositions optimistically and then refills; give it time.
+    /// A seek repositions optimistically and then refills. Give it time.
     static let seekSettle: Double = 3
 
     private(set) var lastPosition: Double?
@@ -101,8 +101,8 @@ nonisolated struct PlaybackFreezeDetector: Equatable, Sendable {
 }
 
 /// When a session that ended without an error still deserves a report.
-/// Thresholds are documented in docs/reference/playback/diagnostics.md;
-/// change both together.
+/// Thresholds are documented in docs/reference/playback/diagnostics.md.
+/// Change both together.
 nonisolated enum PlaybackDegradationPolicy {
     struct Counters: Equatable, Sendable {
         var playedSeconds: Double = 0
@@ -144,12 +144,12 @@ nonisolated enum PlaybackDegradationPolicy {
 
 /// Reports on one playback attempt after another: what the item is, how it
 /// is delivered, and what happened. Owns the sampling task and the freeze
-/// detector; the controller calls in at start, ready, failure, handoff and
+/// detector. The controller calls in at start, ready, failure, handoff and
 /// stop.
 @MainActor
 final class PlaybackIncidentMonitor {
     static let sampleInterval: Duration = .seconds(2)
-    /// Every n-th tick writes a `playback.sample` event; the freeze check
+    /// Every n-th tick writes a `playback.sample` event. The freeze check
     /// runs on every tick.
     static let sampleEveryTicks = 3
     /// Stalls within this many seconds of each other count as frequent.
@@ -340,7 +340,7 @@ final class PlaybackIncidentMonitor {
             variant.append("afterTrackSwitch")
         }
         hub.record(.playbackFailure, fields)
-        // A failure during a pending fallback is its verdict; report that first.
+        // A failure during a pending fallback is its verdict. Report that first.
         resolvePendingFallback(outcome: "failed")
         if let next {
             fields["to"] = .string(next.rawValue)
@@ -517,7 +517,7 @@ final class PlaybackIncidentMonitor {
     }
 
     /// Bits per second to the nearest 100 kbit/s, the unit of the title's
-    /// `bitrate`; nil before the engine has measured anything.
+    /// `bitrate`, nil before the engine has measured anything.
     nonisolated static func networkBitrate(_ bytesPerSecond: Double?) -> Int? {
         guard let bytesPerSecond, bytesPerSecond.isFinite, bytesPerSecond > 0,
               bytesPerSecond < Double(Int.max / 16) else { return nil }
@@ -562,7 +562,7 @@ final class PlaybackIncidentMonitor {
         var fields = facts
             .merging(displayFields) { _, display in display }
             .merging(linkFields) { _, link in link }
-        // Negotiation failures precede the attempt; the schema rejects an empty
+        // Negotiation failures precede the attempt. The schema rejects an empty
         // token.
         if !attempt.isEmpty {
             fields["attempt"] = .string(attempt)

@@ -28,7 +28,7 @@ nonisolated struct AudioLayoutStream: Equatable, TrackLayoutEntry {
 }
 
 /// An audio choice the viewer made, kept across player presentations.
-/// `language`/`title` survive a layout change; `ordinal` is the fallback for
+/// `language`/`title` survive a layout change, and `ordinal` is the fallback for
 /// tracks that cannot be told apart, valid only against its `layout`.
 nonisolated struct RememberedAudioChoice: RememberedTrackChoice {
     static let memoryNamespace = "audioTrackMemory"
@@ -134,7 +134,7 @@ nonisolated enum AudioTrackMemoryPolicy {
     ///
     /// Landing back on the automatic choice drops the override, or the show
     /// would stay frozen against later preference changes. `automatic` is nil
-    /// when policy named no track; the engine then starts on the first track.
+    /// when policy named no track. The engine then starts on the first track.
     typealias Outcome = TrackMemoryOutcome
 
     static func outcome(chosen ordinal: Int, automatic: Int?) -> Outcome {

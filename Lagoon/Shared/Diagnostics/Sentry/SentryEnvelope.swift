@@ -47,7 +47,7 @@ nonisolated struct SentryEnvelope: Equatable, Sendable {
         return SentryEnvelope(eventID: eventID, data: data)
     }
 
-    /// Grouping is by `fingerprint`; the exception block only titles the
+    /// Grouping is by `fingerprint`. The exception block only titles the
     /// issue.
     static func eventJSONObject(
         incident: DiagnosticIncident,

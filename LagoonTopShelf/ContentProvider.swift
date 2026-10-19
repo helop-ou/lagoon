@@ -108,10 +108,10 @@ class ContentProvider: TVTopShelfContentProvider {
             entry.setImageURL(url, for: scale)
             hasImage = true
         }
-        // No artwork means no title either; drop the entry.
+        // No artwork means no title either. Drop the entry.
         guard hasImage else { return nil }
 
-        // Play resumes; More Info opens the detail page.
+        // Play resumes. More Info opens the detail page.
         if let play = actionURL("play", item: item, snapshot: snapshot) {
             entry.playAction = TVTopShelfAction(url: play)
         }

@@ -14,10 +14,10 @@ struct QueueContext: Equatable {
 /// What a stored list entry means now, from the server's watch state.
 enum QueueProgressResolver {
     enum Outcome: Equatable {
-        /// The title is part-watched; its Continue Watching card continues
+        /// The title is part-watched. Its Continue Watching card continues
         /// the list.
         case inProgress(QueueContext)
-        /// Between titles; the next one joins Next Up. `lastPlayed` is when
+        /// Between titles. The next one joins Next Up. `lastPlayed` is when
         /// the list was last watched, as the server wrote it.
         case upNext(QueueContext, lastPlayed: String?)
         /// Nothing left, or the list no longer holds the title.
@@ -61,7 +61,7 @@ enum QueueProgressResolver {
 
     /// The server's Next Up with the lists' next titles mixed in, most
     /// recently watched first. A server episode takes its show's last-watched
-    /// time from `seriesLastPlayed`; anything without a time keeps its place
+    /// time from `seriesLastPlayed`. Anything without a time keeps its place
     /// after those with one. A title in both appears once.
     static func mergedNextUp(
         server: [MediaItem],

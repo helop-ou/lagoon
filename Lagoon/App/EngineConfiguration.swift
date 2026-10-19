@@ -26,7 +26,7 @@ nonisolated enum EngineConfiguration {
         tuning.rendererRetirementDelaySeconds = defaults.double(
             forKey: "debug.regressionRendererRetirementDelaySeconds"
         )
-        // Absent means "let the decoder choose", not false; keep nil unless set.
+        // Absent means "let the decoder choose", not false. Keep nil unless set.
         tuning.softwareDecodeOutputMode = defaults.string(forKey: "debug.softwareDecodeOutputMode")
         if defaults.object(forKey: "debug.softwareDecodeCompressedOutput") != nil {
             tuning.softwareDecodeCompressedOutput = defaults.bool(
@@ -34,7 +34,7 @@ nonisolated enum EngineConfiguration {
             )
         }
         #if DEBUG
-        // Debug builds only; the engine would honour it in any build.
+        // Debug builds only. The engine would honour it in any build.
         tuning.cacheCapacityMegabytes = defaults.integer(forKey: "debug.playbackCacheCapMB")
         #endif
         return tuning

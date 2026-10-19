@@ -3,7 +3,7 @@
 # Regenerates CHANGELOG.md from Changelog.entries, the source of truth.
 #
 # The renderer is a test (ChangelogDocTests), the only place with access to
-# Changelog. It writes to its own tmp and prints the path; this copies it.
+# Changelog. It writes to its own tmp and prints the path. This copies it.
 #
 #   scripts/generate-changelog.sh             # regenerate the document
 #   scripts/generate-changelog.sh --check     # fail if it is out of date

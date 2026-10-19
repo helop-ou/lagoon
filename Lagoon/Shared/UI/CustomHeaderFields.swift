@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Rows for the custom HTTP headers a server behind a forward-auth proxy
-/// needs, such as a Cloudflare Access service token. Empty by default; the
+/// needs, such as a Cloudflare Access service token. Empty by default. The
 /// caller validates and stores them when it connects.
 struct CustomHeaderFields: View {
     @Binding var headers: [CustomHTTPHeader]

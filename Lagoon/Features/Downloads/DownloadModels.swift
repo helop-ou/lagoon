@@ -1,7 +1,7 @@
 import Foundation
 import os
 
-/// Original is the stored file; the others are a capped server transcode, so
+/// Original is the stored file. The others are a capped server transcode, so
 /// a 30 GB 4K remux never lands on a phone unless asked for by name.
 nonisolated enum DownloadQuality: String, Codable, CaseIterable, Identifiable, Sendable {
     case original
@@ -250,9 +250,9 @@ nonisolated struct DownloadManifest: Codable, Equatable, Sendable {
         update(itemID) { $0.localPositionTicks = ticks }
     }
 
-    /// After a relaunch: live tasks are re-adopted; a file already in
-    /// `completedFiles` finished while suspended and becomes `.complete`;
-    /// the rest become paused if they hold resume data, else failed.
+    /// After a relaunch: live tasks are re-adopted. A file already in
+    /// `completedFiles` finished while suspended and becomes `.complete`.
+    /// The rest become paused if they hold resume data, else failed.
     /// Returns only the lost ids.
     @discardableResult
     mutating func reconcile(

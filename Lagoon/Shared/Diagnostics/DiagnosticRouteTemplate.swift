@@ -1,7 +1,7 @@
 import Foundation
 import LagoonEngine
 
-/// Letters-only and API version segments survive; everything else becomes
+/// Letters-only and API version segments survive. Everything else becomes
 /// `{id}`: `Users/{id}/Items/{id}/PlaybackInfo`. A reverse-proxy base path
 /// is removed first so routes group across servers.
 nonisolated enum DiagnosticRouteTemplate {
@@ -48,7 +48,7 @@ nonisolated enum DiagnosticRouteTemplate {
 }
 
 /// Which request failures are worth a report: not an unreachable server, a
-/// lost connection or a cancel; yes to TLS failures, bad URLs and rejected
+/// lost connection or a cancel. Yes to TLS failures, bad URLs and rejected
 /// responses.
 nonisolated enum DiagnosticNetworkClassifier {
     static func isExpectedTransportFailure(_ error: Error) -> Bool {

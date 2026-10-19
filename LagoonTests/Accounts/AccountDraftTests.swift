@@ -155,7 +155,7 @@ struct AccountDraftTests {
     }
 }
 
-/// Fails every request without leaving the process; activation's profile
+/// Fails every request without leaving the process. Activation's profile
 /// read would otherwise reach the real network.
 private nonisolated final class OfflineProtocol: URLProtocol, @unchecked Sendable {
     static func configuration() -> URLSessionConfiguration {

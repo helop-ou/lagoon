@@ -80,7 +80,7 @@ struct SeerrMediaDetailModelTests {
 }
 
 /// Serves one Seerr title, its recommendations and its Jellyfin item across
-/// both hosts, recording paths in call order; can go dark on command.
+/// both hosts, recording paths in call order. Can go dark on command.
 private enum SeerrMediaFixture {
     struct Script {
         var details: String

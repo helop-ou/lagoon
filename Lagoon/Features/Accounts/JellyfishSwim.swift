@@ -47,7 +47,7 @@ struct JellyfishSwimLayer: View {
                     ),
                 ]
             case .besideTheRail:
-                // The rail may span the middle third's full width; keep above and below it.
+                // The rail may span the middle third's full width. Keep above and below it.
                 [
                     Swimmer(
                         home: CGPoint(x: 0.15, y: 0.20),
@@ -98,7 +98,7 @@ struct JellyfishSwimLayer: View {
                 }
             }
         } else {
-            // Read in the body so Observation tracks the theme; the Canvas
+            // Read in the body so Observation tracks the theme. The Canvas
             // closure only sees the resolved color.
             let ink = Theme.accent
             TimelineView(.animation) { timeline in

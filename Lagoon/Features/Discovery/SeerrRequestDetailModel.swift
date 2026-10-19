@@ -69,7 +69,7 @@ final class SeerrRequestDetailModel {
         }
     }
 
-    /// Live state rides on the request; TMDB data is static. A poll re-reads
+    /// Live state rides on the request, and TMDB data is static. A poll re-reads
     /// TMDB only when `jellyfinMediaId` appears, which gates "Open in Lagoon".
     private func mediaDetails(
         for request: SeerrMediaRequest,
@@ -113,8 +113,8 @@ final class SeerrRequestDetailModel {
             ?? services.first { $0.isDefault && $0.is4k == wants4k }
             ?? services.first(where: \.isDefault)
 
-        // `profileId` is set only by an explicit choice (REQUEST_ADVANCED);
-        // otherwise the server's active profile applies.
+        // `profileId` is set only by an explicit choice (REQUEST_ADVANCED).
+        // Otherwise the server's active profile applies.
         guard let service, let profileID = request.profileId ?? service.activeProfileId else {
             return nil
         }

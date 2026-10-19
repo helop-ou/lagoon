@@ -25,7 +25,7 @@ struct VideoPlayerView: View {
     @State private var panelOpen = false
     #if os(iOS)
     /// Swipe down drags the player and past the threshold minimizes it into
-    /// PiP; swipe up opens the options panel.
+    /// PiP. Swipe up opens the options panel.
     @State private var minimizeDrag: CGFloat = 0
     #endif
     @State private var openPanelRequest = 0
@@ -190,7 +190,7 @@ struct VideoPlayerView: View {
 
     var body: some View {
         playerStack
-        // Background hands the display mode back; active re-requests it.
+        // Background hands the display mode back. Active re-requests it.
         // tvOS only in effect: under the iOS UIKit host scenePhase never
         // changes, so the controller uses app notifications there.
         .onChange(of: scenePhase) { _, phase in

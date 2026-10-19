@@ -7,7 +7,7 @@ nonisolated enum GhostGeometry {
     /// Width to height.
     static let aspect: Double = 5.0 / 6.0
 
-    /// `wave` moves the hem, in radians; animate it for a ghost that floats.
+    /// `wave` moves the hem, in radians. Animate it for a ghost that floats.
     static func path(in rect: CGRect, wave: Double = 0) -> Path {
         let w = rect.width, h = rect.height
         func point(_ x: Double, _ y: Double) -> CGPoint {
@@ -126,7 +126,7 @@ nonisolated enum CobwebGeometry {
 
 /// A spider seen from above, head up: a small head with palps, a round
 /// abdomen, and four jointed legs a side, the front pairs reaching forward and
-/// the back pairs trailing. Drawn about the head, in units of `size`; it
+/// the back pairs trailing. Drawn about the head, in units of `size`. It
 /// spans about 1.25 across and 1.15 from palps to feet.
 nonisolated enum SpiderGeometry {
     static func body(at center: CGPoint, size: Double) -> Path {
@@ -279,7 +279,7 @@ nonisolated enum GhostFlight {
     }
 
     /// Where `ghost` is, `elapsed` seconds into the flight, on a page `size`
-    /// for a ghost `height` tall; nil before it sets off and after it leaves.
+    /// for a ghost `height` tall, nil before it sets off and after it leaves.
     /// It enters and leaves wholly off the page, bobbing and rising a little.
     static func pose(of ghost: Ghost, elapsed: TimeInterval, crossing: TimeInterval, in size: CGSize, height: Double) -> Pose? {
         let progress = (elapsed - ghost.start) / crossing

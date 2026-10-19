@@ -1,7 +1,7 @@
 import Foundation
 import LagoonEngine
 
-/// The playback side of a SyncPlay group; `SyncPlayStore` is membership.
+/// The playback side of a SyncPlay group. `SyncPlayStore` is membership.
 ///
 /// Holds the controller **weakly** and the engine not at all. Transport goes
 /// through `PlaybackController`'s group entry points, so a handoff or
@@ -14,7 +14,7 @@ import LagoonEngine
 @MainActor
 final class GroupPlaybackDriver: GroupTransportRequests {
     /// Seconds off target before a group start re-seeks. Below it the start
-    /// anchor absorbs the difference; a seek would re-prime for nothing.
+    /// anchor absorbs the difference. A seek would re-prime for nothing.
     nonisolated static let resyncThreshold = 0.5
     /// Same at a pause, which has no anchor. 0.1 s is two to three frames.
     nonisolated static let pauseThreshold = 0.1
@@ -43,7 +43,7 @@ final class GroupPlaybackDriver: GroupTransportRequests {
     private var driftLoop: Task<Void, Never>?
     private var correctionHold: Task<Void, Never>?
     private var isCorrecting = false
-    /// Last state sent; re-sending it only adds group latency.
+    /// Last state sent. Re-sending it only adds group latency.
     private var reportedReady: Bool?
 
     init(client: JellyfinClient, clock: ServerClock) {
@@ -147,7 +147,7 @@ final class GroupPlaybackDriver: GroupTransportRequests {
     /// A group start names a future instant for every member to present
     /// `positionTicks` at. Nothing waits: seek first, then
     /// `playGroup(atHostTime:)` at once. The engine anchors on the instant
-    /// when the first frame is ready; a seek issued *after* the start call
+    /// when the first frame is ready. A seek issued *after* the start call
     /// drops it. Keep this order.
     private func unpause(_ command: SyncPlayCommand, at when: Double) {
         guard let controller else { return }
@@ -287,7 +287,7 @@ final class GroupPlaybackDriver: GroupTransportRequests {
             return
         }
         let now = clock.serverSeconds()
-        // Measure only a running clock after the anchor settles; a
+        // Measure only a running clock after the anchor settles. A
         // buffering member is stalled, not drifting.
         guard now > when + SyncCorrectionPolicy.settleSeconds,
               controller.isClockRunning else { return }

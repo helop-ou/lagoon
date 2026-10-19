@@ -1,7 +1,7 @@
 import Foundation
 import LagoonEngine
 
-// Jellyfin JSON is PascalCase; the client's coders convert it globally, so
+// Jellyfin JSON is PascalCase. The client's coders convert it globally, so
 // never add CodingKeys for casing.
 
 // MARK: - Server & auth
@@ -34,7 +34,7 @@ nonisolated struct UserPolicy: Codable {
     /// as `unknown`, not a denial.
     let syncPlayAccess: SyncPlayAccess?
 
-    /// Pre-flight check only; the server decides. Block only on a known
+    /// Pre-flight check only. The server decides. Block only on a known
     /// denial and let anything ambiguous through.
     ///
     /// Admins always pass: the dashboard hides the flag for them, so it is
@@ -79,7 +79,7 @@ nonisolated struct UserItemData: Decodable, Hashable {
     let playedPercentage: Double?
     let played: Bool?
     let isFavorite: Bool?
-    /// Kept as the server's string; see `JellyfinTimestamp`.
+    /// Kept as the server's string. See `JellyfinTimestamp`.
     let lastPlayedDate: String?
 }
 
@@ -100,13 +100,13 @@ nonisolated struct MediaItem: Decodable, Identifiable {
     /// A collection's order as its owner set it, such as `SortName` or
     /// `PremiereDate`. Nil for everything else.
     let displayOrder: String?
-    /// `Video` or `Audio`; a playlist takes its first entry's.
+    /// `Video` or `Audio`. A playlist takes its first entry's.
     let mediaType: String?
     /// Set on a playlist's entries. Not unique: Jellyfin 12 returns the
     /// title's own id, so a title listed twice repeats it.
     let playlistItemId: String?
     let indexNumber: Int?
-    /// The last number of a double episode (`E1–2`); nil for a single one.
+    /// The last number of a double episode (`E1–2`), nil for a single one.
     let indexNumberEnd: Int?
     let parentIndexNumber: Int?
     let seriesId: String?
@@ -120,10 +120,10 @@ nonisolated struct MediaItem: Decodable, Identifiable {
     let seriesPrimaryImageTag: String?
     let providerIds: [String: String]?
     let mediaSources: [MediaSource]?
-    /// Only the single-item endpoint returns these; rail items have none.
+    /// Only the single-item endpoint returns these. Rail items have none.
     let people: [Person]?
     /// Trailers hosted elsewhere, mostly YouTube, from the metadata provider.
-    /// The single-item endpoint returns them; lists only when asked.
+    /// The single-item endpoint returns them. Lists only when asked.
     let remoteTrailers: [RemoteTrailer]?
 
     init(from decoder: Decoder) throws {
@@ -195,7 +195,7 @@ nonisolated struct RemoteTrailer: Decodable, Hashable {
     }
 }
 
-// Synthesized value equality; never an id-only `==`. SwiftUI drops a state
+// Synthesized value equality. Never an id-only `==`. SwiftUI drops a state
 // write whose new value compares equal, so an id-only `==` hides a refreshed
 // resume point. Navigation identity lives on `ContentNavigationRoute`.
 nonisolated extension MediaItem: Hashable {}
@@ -249,7 +249,7 @@ nonisolated struct MediaSource: Decodable, Identifiable, Hashable {
     /// disc image or folder: Jellyfin reports the inner container (`ts`) and
     /// still claims `SupportsDirectPlay`.
     let videoType: String?
-    /// `BluRay` or `Dvd` when `videoType` is `Iso`; nil otherwise.
+    /// `BluRay` or `Dvd` when `videoType` is `Iso`, nil otherwise.
     let isoType: String?
     let supportsDirectPlay: Bool?
     let supportsDirectStream: Bool?
@@ -259,7 +259,7 @@ nonisolated struct MediaSource: Decodable, Identifiable, Hashable {
     let bitrate: Int?
     let size: Int64?
     let eTag: String?
-    // The server's own language preference; Lagoon may override it.
+    // The server's own language preference. Lagoon may override it.
     let defaultAudioStreamIndex: Int?
     let defaultSubtitleStreamIndex: Int?
     let mediaStreams: [MediaStream]?
@@ -270,7 +270,7 @@ nonisolated struct MediaSource: Decodable, Identifiable, Hashable {
 nonisolated struct Person: Decodable, Identifiable, Hashable {
     let id: String
     let name: String?
-    /// The character for actors; nil for crew.
+    /// The character for actors, nil for crew.
     let role: String?
     /// "Actor", "Director", "Writer", …
     let type: String?
@@ -299,7 +299,7 @@ nonisolated struct PersonDetails: Decodable, Hashable {
     let endDate: String?
     let productionLocations: [String]?
     let providerIds: [String: String]?
-    /// A cast entry often omits its headshot tag; the person's own item has it.
+    /// A cast entry often omits its headshot tag. The person's own item has it.
     let imageTags: [String: String]?
 
     init(from decoder: Decoder) throws {
@@ -522,7 +522,7 @@ nonisolated enum PlayMethod: String {
     case directStream = "DirectStream"
     case transcode = "Transcode"
 
-    /// Direct play and direct stream are one stable file; a transcode is a
+    /// Direct play and direct stream are one stable file. A transcode is a
     /// manifest the server writes as playback advances.
     var delivery: MediaDelivery {
         switch self {

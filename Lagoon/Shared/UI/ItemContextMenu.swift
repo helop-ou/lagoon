@@ -63,7 +63,7 @@ private struct ItemUserDataMenu: ViewModifier {
             }
     }
 
-    /// A hierarchy without a signed-in account has no client; the
+    /// A hierarchy without a signed-in account has no client. The
     /// optimistic state then reverts.
     private func requireClient() throws -> JellyfinClient {
         guard let client else { throw CancellationError() }

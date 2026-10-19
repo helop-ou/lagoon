@@ -2,7 +2,7 @@ import Foundation
 import LagoonEngine
 
 // Capability profile sent with PlaybackInfo so the server can choose direct
-// play or transcode. It mirrors what the engine plays; anything outside it
+// play or transcode. It mirrors what the engine plays. Anything outside it
 // arrives as the fMP4 HLS transcode. The generated table is
 // docs/codec-support.md.
 nonisolated enum DeviceProfile {
@@ -128,7 +128,7 @@ nonisolated enum DeviceProfile {
                     ProfileCondition(
                         condition: "EqualsAny",
                         property: "VideoProfile",
-                        // High 10 (Hi10P) has no hardware decoder; the engine
+                        // High 10 (Hi10P) has no hardware decoder. The engine
                         // decodes it in software.
                         value: "high|main|baseline|constrained baseline|high 10",
                         isRequired: false
@@ -235,17 +235,17 @@ nonisolated enum DeviceProfile {
             // only reaches WMV3 in mkv/avi.
             softwareDecoded("wmv3"),
             // MPEG-4 Part 2 (Xvid/DivX): software decode like VC-1. Its real
-            // profiles are 8-bit 4:2:0; anything else transcodes.
+            // profiles are 8-bit 4:2:0. Anything else transcodes.
             softwareDecoded("mpeg4"),
             // No interlace guard: the MPEG-2 software path deinterlaces.
-            // Hardware-decoded codecs keep the guard; they have no
+            // Hardware-decoded codecs keep the guard. They have no
             // deinterlacing stage.
             softwareDecoded("mpeg2video", rejectsInterlaced: false),
         ],
         subtitleProfiles: [
             SubtitleProfile(format: "vtt", method: "Hls"),
             SubtitleProfile(format: "vtt", method: "External"),
-            // Sidecar scripts as they are, for libass; converted to vtt they
+            // Sidecar scripts as they are, for libass. Converted to vtt they
             // lose their styles and placement.
             SubtitleProfile(format: "ass", method: "External"),
             SubtitleProfile(format: "ssa", method: "External"),
@@ -321,7 +321,7 @@ nonisolated enum DeviceProfile {
         return capped
     }
 
-    /// The largest picture worth encoding at `bitrate`; nil above the
+    /// The largest picture worth encoding at `bitrate`, nil above the
     /// realtime transcode ceiling.
     static func resolutionCeiling(forBitrate bitrate: Int) -> (width: Int, height: Int)? {
         if bitrate < MeteredPathPolicy.maxBitrate + 1_000_000 {
@@ -331,7 +331,7 @@ nonisolated enum DeviceProfile {
         return nil
     }
 
-    /// Bounds a profile on a metered path; untouched otherwise. Only iOS
+    /// Bounds a profile on a metered path. Untouched otherwise. Only iOS
     /// applies it, in `lagoon(for:maxBitrate:)`.
     static func cappedForMeteredPath(
         _ profile: Profile,
@@ -473,7 +473,7 @@ nonisolated enum DeviceProfile {
         return CodecProfile(type: profile.type, codec: profile.codec, conditions: conditions)
     }
 
-    /// nil when nothing is left; callers then drop the profile.
+    /// nil when nothing is left. Callers then drop the profile.
     private static func withoutHEVC(_ codecs: String) -> String? {
         let kept = codecs.split(separator: ",").filter { $0 != "hevc" }
         return kept.isEmpty ? nil : kept.joined(separator: ",")

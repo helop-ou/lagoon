@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// A Seerr status as icon and word; the icon animates only while its
+/// A Seerr status as icon and word. The icon animates only while its
 /// container holds focus, so a grid does not all spin at once.
 /// `\.isFocused` reads the nearest focusable ancestor, card or button.
 struct SeerrStatusLabel: View {
@@ -37,7 +37,7 @@ private struct SeerrStatusMotionModifier: ViewModifier {
 }
 
 extension View {
-    /// Callers' `isActive` must already account for Reduce Motion; symbol
+    /// Callers' `isActive` must already account for Reduce Motion. Symbol
     /// effects are not assumed to honour it.
     func seerrStatusMotion(_ motion: SeerrStatusMotion, isActive: Bool) -> some View {
         modifier(SeerrStatusMotionModifier(motion: motion, isActive: isActive))

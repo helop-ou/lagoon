@@ -35,7 +35,7 @@ struct ServerSocketTests {
         #expect(abs((when - emitted) - 1) < 1e-3)
     }
 
-    /// Unknown types are handed on; only the caller ignores them.
+    /// Unknown types are handed on. Only the caller ignores them.
     @Test func anUnknownTypeStillParses() throws {
         let message = try #require(envelope(#"{"MessageType":"SomethingNew","MessageId":"abc","Data":{"A":1}}"#))
         #expect(message.messageType == "SomethingNew")

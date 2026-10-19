@@ -98,7 +98,7 @@ struct PlaybackFallbackTests {
             allowAudioStreamCopy: true
         ))
         // Transcode: refuse video copy too, or the server copies the bitstream
-        // that just failed. Audio copy stays; bad audio never reaches the ladder.
+        // that just failed. Audio copy stays. Bad audio never reaches the ladder.
         #expect(PlaybackDelivery.transcode.flags == PlaybackDeliveryFlags(
             enableDirectPlay: false,
             enableDirectStream: false,
@@ -151,7 +151,7 @@ struct PlaybackFallbackTests {
     }
 
     /// A delivery failure on the first rung costs a remux, never a straight
-    /// re-encode; only the engine's verdict on the samples skips to one.
+    /// re-encode. Only the engine's verdict on the samples skips to one.
     @Test func aLiveSessionDescendsOneRungForTheEnginesVerdict() {
         #expect(retry(.delivery) == .remux)
         #expect(retry(.undecodable) == .transcode)
@@ -217,7 +217,7 @@ struct PlaybackFallbackTests {
         #expect(hdBound(DeviceProfile.lagoon(for: .remux), codec: "hevc").width == nil)
     }
 
-    /// Several codecs already carry a 1080p ceiling; bounding again must not
+    /// Several codecs already carry a 1080p ceiling. Bounding again must not
     /// duplicate the condition.
     @Test func aCodecTheEnvelopeAlreadyBoundsDoesNotCollectADuplicate() {
         let once = DeviceProfile.boundedForRealtimeTranscode(DeviceProfile.everything)

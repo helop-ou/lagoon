@@ -284,7 +284,7 @@ struct DeveloperSettingsView: View {
     }
 
     /// `MediaItem` is decode-only, so build one from JSON. The sheet only
-    /// needs an argument; nothing it draws reads it.
+    /// needs an argument. Nothing it draws reads it.
     static let previewMediaItem: MediaItem? = {
         let json = Data(#"{"Id":"developer-preview","Name":"Rick and Morty","Type":"Episode"}"#.utf8)
         return try? JellyfinClient.decoder.decode(MediaItem.self, from: json)
@@ -321,7 +321,7 @@ struct DeveloperSettingsView: View {
 }
 
 /// The production transport over varied luminance. Right/Left enters the real
-/// tvOS scrub; touch platforms drag the same bar.
+/// tvOS scrub. Touch platforms drag the same bar.
 private struct PlayerTransportComponentPreviewScreen: View {
     @Environment(\.dismiss) private var dismiss
     @State private var engine = PlayerPanelPreviewEngine()
@@ -432,7 +432,7 @@ private struct PlayerPanelComponentPreview: View {
     @State private var engine = PlayerPanelPreviewEngine()
     @State private var isPictureInPictureActive = false
     @State private var ignoresWait = false
-    // Opens on the subtitle results browser; Done reveals the track list.
+    // Opens on the subtitle results browser. Done reveals the track list.
     @State private var subtitleSearch = SubtitleSearchCoordinator
         .previewingResults(PlayerPanelComponentPreview.subtitleResults)
     @FocusState private var panelFocus: PlayerControlFocus?

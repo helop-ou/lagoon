@@ -84,7 +84,7 @@ enum SeerrLiveRefreshLoop {
 
 /// One sequential refresh loop, only while the detail page is visible and
 /// active. Changing the task id cancels it, so pushed routes and background
-/// scenes never keep a poller. Foregrounding refreshes at once; appearing
+/// scenes never keep a poller. Foregrounding refreshes at once. Appearing
 /// waits one interval after the page's own load.
 private struct SeerrLiveRefreshModifier: ViewModifier {
     let cadence: SeerrLiveRefreshCadence?

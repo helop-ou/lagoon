@@ -210,7 +210,7 @@ struct LaunchFixtureResolver {
             print("RegressionResolve failed multi-audio library scan")
             return .unresolved(probe: "error:multi-audio library scan failed")
         }
-        // Direct play keeps every embedded audio stream; asking the
+        // Direct play keeps every embedded audio stream. Asking the
         // server avoids hard-coding a private-library title.
         for item in page.items {
             guard let info = try? await client.playbackInfo(itemId: item.id),

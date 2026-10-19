@@ -43,7 +43,7 @@ nonisolated enum MeteredPathPolicy {
 }
 
 /// The current path cost, kept live by `NWPathMonitor`. Read once per
-/// `PlaybackInfo`; a path change mid-title deliberately does not
+/// `PlaybackInfo`. A path change mid-title deliberately does not
 /// re-negotiate.
 nonisolated final class NetworkPathObserver: Sendable {
     static let shared = NetworkPathObserver()
@@ -96,7 +96,7 @@ nonisolated final class NetworkPathObserver: Sendable {
         state.withLock { $0.generation }
     }
 
-    /// Testing seam; the monitor overwrites this on its next update.
+    /// Testing seam. The monitor overwrites this on its next update.
     func override(_ cost: NetworkPathCost) {
         state.withLock { $0.cost = cost }
     }

@@ -206,7 +206,7 @@ extension JellyfinClient {
     }
 
     /// Home's unstarted episodes. A series with an episode in progress stays
-    /// in Continue Watching; excluding it must not skip ahead in that series.
+    /// in Continue Watching. Excluding it must not skip ahead in that series.
     func nextUp(limit: Int = 12) async throws -> [MediaItem] {
         let userId = try requireUserId()
         let page: ItemsPage = try await get("Shows/NextUp", query: [
@@ -216,7 +216,7 @@ extension JellyfinClient {
             URLQueryItem(name: "EnableResumable", value: "false"),
             URLQueryItem(name: "EnableRewatching", value: "false"),
         ])
-        // The server filters before Limit; this guards servers that still
+        // The server filters before Limit. This guards servers that still
         // return resumable or watched episodes.
         return page.items.filter {
             ($0.userData?.playbackPositionTicks ?? 0) <= 0
@@ -298,7 +298,7 @@ extension JellyfinClient {
         return page.items
     }
 
-    /// Every collection (`BoxSet`) this user can see. Most are empty stubs;
+    /// Every collection (`BoxSet`) this user can see. Most are empty stubs.
     /// `ChildCount` lets callers drop them (`CollectionShelf.minimumTitles`).
     ///
     /// Keep `EnableUserData=false`: with user data the server walks every
@@ -349,7 +349,7 @@ extension JellyfinClient {
         return latest
     }
 
-    /// The viewer's video playlists by name; audio ones are left out. User
+    /// The viewer's video playlists by name. Audio ones are left out. User
     /// data off for the same reason as `collections`: a playlist is a folder.
     func playlists(limit: Int = 100) async throws -> [MediaItem] {
         try await items(
@@ -388,7 +388,7 @@ extension JellyfinClient {
     // MARK: - User data
 
     /// Marks an item played or unplayed. Marking played is the only way off
-    /// Continue Watching; Jellyfin has no "dismiss".
+    /// Continue Watching. Jellyfin has no "dismiss".
     func setPlayed(_ played: Bool, itemId: String) async throws {
         let userId = try requireUserId()
         let path = "Users/\(userId)/PlayedItems/\(itemId)"
@@ -450,7 +450,7 @@ extension JellyfinClient {
     ///
     /// Not `Shows/NextUp`: when an episode ends its stop report has not
     /// landed, so NextUp returns the same episode and autoplay loops.
-    /// `startItemId` with Limit 2 yields [this, next]; no season filter lets
+    /// `startItemId` with Limit 2 yields [this, next]. No season filter lets
     /// it cross seasons.
     func episodeAfter(_ episode: MediaItem) async throws -> MediaItem? {
         guard let seriesId = episode.seriesId else { return nil }
@@ -503,7 +503,7 @@ extension JellyfinClient {
         case .poster:
             if item.type == .episode, let seriesId = item.seriesId {
                 // An episode's Primary is a screen grab. Use the series even
-                // without its tag; the image route does not need one.
+                // without its tag. The image route does not need one.
                 itemId = seriesId
                 tag = item.seriesPrimaryImageTag
             } else if let primaryTag = item.imageTags?["Primary"] {
