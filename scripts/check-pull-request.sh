@@ -1,19 +1,12 @@
 #!/usr/bin/env bash
 #
-# Checks a pull request against Lagoon's conventions: branch name, title,
-# description and every commit in it. CI runs it on each pull request; see
-# docs/standards.md, "Pull requests".
-#
-# Reads the pull request from the environment, so it runs locally too:
+# See docs/standards.md, "Pull requests". Locally:
 #
 #   BRANCH=fix/home-rows TITLE="fix: show the rows" BODY=$'Changes:\n- Show the rows' \
 #   BASE=origin/main HEAD=HEAD scripts/check-pull-request.sh
-#
-# Prints every problem it finds, then fails if there was one.
 set -uo pipefail
 
 types='feat|fix|docs|test|refactor|perf|build|chore|ci|style|revert'
-# Sentry issue ids and Jira keys stay out of pull requests and commits.
 references='(^|[^A-Za-z0-9])(HEL|LAGOON)-[0-9]+|sentry\.io|atlassian\.net'
 
 problems=0
@@ -22,13 +15,11 @@ problem() {
     problems=$((problems + 1))
 }
 
-# <type>/<words-in-kebab-case>
 branch="${BRANCH:-}"
 if ! [[ "$branch" =~ ^($types)/[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
     problem "Branch \"$branch\" should be <type>/<kebab-case-words>, with a type of: ${types//|/, }"
 fi
 
-# Like a commit subject: "<type>: <lowercase start>", short, no full stop.
 title="${TITLE:-}"
 if ! [[ "$title" =~ ^($types):\ [^A-Z\ ] ]]; then
     problem "Title \"$title\" should start with \"<type>: \" and a lowercase word, like a commit subject"
@@ -40,7 +31,6 @@ if [[ "$title" == *. ]]; then
     problem "Title ends with a full stop"
 fi
 
-# "Changes:" and one "- " line per change, nothing else.
 body="$(printf '%s' "${BODY:-}" | tr -d '\r' | sed -e '/^[[:space:]]*$/d')"
 if [[ "$(printf '%s\n' "$body" | head -n 1)" != "Changes:" ]]; then
     problem "Description should start with a \"Changes:\" line"
@@ -56,8 +46,6 @@ if printf '%s\n%s\n' "$title" "$body" | grep -qE "$references"; then
     problem "Title or description mentions a Sentry issue or Jira ticket"
 fi
 
-# Every commit: a conventional subject and nothing else. Merge commits from
-# updating a branch are skipped.
 if [[ -n "${BASE:-}" && -n "${HEAD:-}" ]]; then
     commits="$(git rev-list --no-merges "$BASE..$HEAD")" || {
         problem "Could not list the commits between $BASE and $HEAD"
