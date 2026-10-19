@@ -83,4 +83,6 @@ jobs:
           path: |
             build/TestResults.xcresult
             build/xcodebuild.log
+            Snapshots/**/*.failed.png
+          if-no-files-found: ignore
           retention-days: 14
