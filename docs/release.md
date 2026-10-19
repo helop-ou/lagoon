@@ -283,11 +283,13 @@ release](#public-release).
 ## Releasing from CI
 
 `.github/workflows/release.yml` runs only when started by hand (Actions,
-Release, Run workflow), and only from `main`. It has three actions:
+Release, Run workflow). Its jobs use the `release` environment, which only
+`main` may use, so a run from any other branch never gets the secrets. It has
+three actions:
 
-- **trial** archives and signs both platforms with `--export-only` and keeps
-  the signed apps as an artifact for three days. Nothing is uploaded. Run it
-  after a signing or Xcode change.
+- **trial** archives and signs both platforms with `--export-only`. Nothing
+  is uploaded or kept, since artifacts of a public repository are public. Run
+  it after a signing or Xcode change.
 - **upload** runs `scripts/upload-testflight.sh both --external`, then pushes
   `refs/archived/<build>` to record the revision it archived. The upload
   script's checks all apply, including the [release guard](#release-tags).
@@ -295,7 +297,8 @@ Release, Run workflow), and only from `main`. It has three actions:
   tags the recorded revision. Run it once the build is accepted.
 
 Signing goes through the App Store Connect API key, so the runner needs no
-certificates. Repository secrets (Settings, Secrets and variables, Actions):
+certificates. The secrets belong to the `release` environment (Settings,
+Environments, release), never to the repository:
 
 | Secret | Value |
 | --- | --- |
