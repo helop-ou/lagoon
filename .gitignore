@@ -40,6 +40,7 @@ art/
 # The template is committed; the real file is not.
 !.env.example
 
-# A snapshot test writes the image it rendered beside a reference it no
+# A snapshot test writes what it rendered and a diff beside a reference it no
 # longer matches; see docs/design-system.md, "Snapshot tests".
 *.failed.png
+*.diff.png
