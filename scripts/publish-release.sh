@@ -147,8 +147,9 @@ fi
 
 # 10. The archived revision is not recorded, so show the commits since the
 #     build-number bump and let a human confirm.
+# The oldest match: the newest is the next bump, which removed the number.
 bump="$(git -C "$root" log --format=%H -S"CURRENT_PROJECT_VERSION = ${want_build};" \
-    --pickaxe-regex -1 -- Lagoon.xcodeproj/project.pbxproj 2>/dev/null || true)"
+    --pickaxe-regex -- Lagoon.xcodeproj/project.pbxproj 2>/dev/null | tail -1 || true)"
 if [ "$recorded" = false ] && [ -n "$bump" ] && [ "$bump" != "$sha" ]; then
     ahead="$(git -C "$root" rev-list --count "${bump}..${sha}" 2>/dev/null || echo "?")"
     echo
