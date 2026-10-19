@@ -2,23 +2,9 @@ import SwiftUI
 import Testing
 import UIKit
 
-/// Renders a view and compares it with a reference PNG, so a change to how
-/// a component looks fails the unit suite like a change to what it does.
-///
-/// References live in `Snapshots/<Suite>/<name>.<platform>.png` at the
-/// repository root, outside the test target so they are never bundled. A
-/// missing reference is recorded and the test fails; recording is deleting
-/// the PNG and running once, then looking at what was written before
-/// committing it. A mismatch writes `<name>.<platform>.failed.png` (what
-/// rendered) and `<name>.<platform>.diff.png` (the reference dimmed, changed
-/// pixels red) beside the reference, attaches both and the reference to the
-/// result, and names the changed region. Both runtimes CI uses are the
-/// ones developers run, so references compare exactly; the tolerance only
-/// absorbs anti-aliasing noise.
+/// See docs/design-system.md, "Snapshot tests".
 @MainActor
 enum Snapshot {
-    /// Renders at one pixel per point, so references stay small and do not
-    /// depend on the simulator's screen.
     static let scale: CGFloat = 1
 
     static func verify(
@@ -69,13 +55,10 @@ enum Snapshot {
         )
     }
 
-    /// Draws the view in an off-screen window, not with `ImageRenderer`,
-    /// which leaves `ScrollView` and `NavigationStack` blank. The stack is
-    /// there because an iOS `NavigationLink` outside one draws as disabled.
+    /// Not `ImageRenderer`: it leaves `ScrollView` and `NavigationStack`
+    /// blank. An iOS `NavigationLink` outside a stack draws as disabled.
     private static func render(_ view: some View, size: CGSize) async -> CGImage? {
-        // No safe area (tvOS insets for overscan) and no scroll-edge blur
-        // (iOS softens content under the hidden bar): a component is drawn
-        // as it is, not as the screen it sits on would frame it.
+        // tvOS overscan insets and iOS scroll-edge blur belong to screens.
         let host = UIHostingController(rootView: NavigationStack {
             framed(view, size: size)
                 .ignoresSafeArea()
@@ -109,8 +92,6 @@ enum Snapshot {
         }.cgImage
     }
 
-    /// The fixed surroundings every snapshot renders in: dark, English,
-    /// default text size, one point per pixel.
     private static func framed(_ view: some View, size: CGSize) -> some View {
         view
             .frame(width: size.width, height: size.height, alignment: .topLeading)
@@ -141,15 +122,9 @@ enum Snapshot {
             .appending(path: "\(name).\(platform).png")
     }
 
-    /// What differs between a rendering and its reference.
     struct Comparison {
-        /// The share of pixels that differ; 1 when the sizes do.
         let fraction: Double
-        /// The smallest rectangle holding every changed pixel, from the top
-        /// left. Nil when nothing changed or the sizes differ.
         let bounds: CGRect?
-        /// The reference dimmed to a third, with every changed pixel red.
-        /// Nil when the sizes differ, as there is nothing to lay one on.
         let diff: CGImage?
 
         func summary(actual: CGImage, expected: CGImage) -> String {
@@ -164,7 +139,6 @@ enum Snapshot {
         }
     }
 
-    /// A pixel differs when any channel moves by more than a rounding step.
     nonisolated static func compare(_ actual: CGImage, with expected: CGImage) -> Comparison {
         guard actual.width == expected.width, actual.height == expected.height else {
             return Comparison(fraction: 1, bounds: nil, diff: nil)
@@ -191,8 +165,7 @@ enum Snapshot {
                     marked[pixel + 2] = 0
                     marked[pixel + 3] = 255
                 } else {
-                    // Premultiplied, so dimming the colour channels keeps
-                    // alpha valid.
+                    // Premultiplied, so dimming colour keeps alpha valid.
                     for channel in 0..<3 { marked[pixel + channel] /= 3 }
                 }
             }
@@ -222,7 +195,6 @@ enum Snapshot {
         )
     }
 
-    /// Top row first, as `compare` reports positions.
     private nonisolated static func rgba(_ image: CGImage) -> [UInt8] {
         var bytes = [UInt8](repeating: 0, count: image.width * image.height * 4)
         bytes.withUnsafeMutableBytes { buffer in

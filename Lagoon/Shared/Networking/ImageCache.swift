@@ -45,8 +45,7 @@ final class ImageCache {
         return cache.object(forKey: key as NSString)
     }
 
-    /// Puts decoded artwork in the memory cache, as a finished load does.
-    /// Snapshot tests seed it so a card draws its artwork on the first frame.
+    /// Lets snapshot tests show artwork on the first frame.
     func store(_ image: UIImage, for url: URL, maxPixelSize: Int) {
         remember(image, forKey: key(url, maxPixelSize: maxPixelSize))
     }

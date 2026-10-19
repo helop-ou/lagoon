@@ -3,8 +3,6 @@ import Testing
 import UIKit
 @testable import Lagoon
 
-/// How Home's cards and rows look. Artwork is drawn here and put in the image
-/// cache, so nothing touches the network and every run renders the same.
 @Suite("Home card snapshots", .serialized)
 @MainActor
 struct HomeCardSnapshotTests {
@@ -19,8 +17,6 @@ struct HomeCardSnapshotTests {
         ArtworkSizing.pixels(for: Metrics.landscapeWidth, displayScale: Snapshot.scale)
     }
 
-    /// Upcoming and Discover titles: Seerr backdrops, and a cropped plugin
-    /// poster for the one Seerr has no record of.
     @Test func sonarrRadarrAndSeerrTitlesAreLandscapeCards() async throws {
         let items = try decodeItems(#"""
         [
@@ -49,7 +45,6 @@ struct HomeCardSnapshotTests {
         )
     }
 
-    /// Continue Watching: the title, episode line and progress over the art.
     @Test func aLandscapeCardWithProgressAndMetadata() async throws {
         let item = try decodeItem(#"""
         {"Id":"ep","Name":"Pilot","Type":"Episode","SeriesName":"Silo","SeriesId":"silo","ParentIndexNumber":1,"IndexNumber":1,"ImageTags":{"Thumb":"t"},"UserData":{"PlayedPercentage":40}}
@@ -65,7 +60,6 @@ struct HomeCardSnapshotTests {
         )
     }
 
-    /// Name and year sit under the poster, never over it.
     @Test func aPosterCardKeepsItsCaptionUnderTheArt() async throws {
         let item = try decodeItem(#"{"Id":"arrival","Name":"Arrival","Type":"Movie","ProductionYear":2016,"ImageTags":{"Primary":"p"}}"#)
         let layout = PosterLayout()
@@ -82,7 +76,6 @@ struct HomeCardSnapshotTests {
 
     // MARK: - Fixtures
 
-    /// A screen's width, so the row clips where it would on the device.
     private static var railSize: CGSize {
         #if os(tvOS)
         CGSize(width: 1920, height: Metrics.landscapeHeight + 200)
@@ -108,8 +101,6 @@ struct HomeCardSnapshotTests {
     }
 }
 
-/// Stand-in artwork: bands of colour with a shape, distinct per seed, so a
-/// crop or a missing image shows in the snapshot.
 @MainActor
 private enum Artwork {
     static func landscape(seed: Int) -> UIImage { draw(CGSize(width: 640, height: 360), seed: seed) }
