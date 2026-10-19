@@ -1,0 +1,80 @@
+# Unit tests on both platforms for every pull request and every push to main.
+# See docs/standards.md, "Continuous integration".
+name: Tests
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A newer push to the same branch or pull request supersedes the older run.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  unit-tests:
+    name: Unit tests (${{ matrix.platform }})
+    # Xcode 27 is a GitHub preview image; macos-26 tops out at Xcode 26.
+    runs-on: xcode-27
+    timeout-minutes: 60
+    strategy:
+      # One platform failing must not cancel the other's verdict.
+      fail-fast: false
+      matrix:
+        include:
+          - platform: tvOS
+            destination: platform=tvOS Simulator,name=Apple TV 4K (3rd generation)
+          # The image has no iPhone 17 Pro.
+          - platform: iOS
+            destination: platform=iOS Simulator,name=iPhone 17
+    env:
+      # The Xcode Lagoon is developed with. Move it when the local one moves.
+      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v5
+
+      # The engine and its native libraries, keyed by the pinned versions.
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: build/SourcePackages
+          key: spm-${{ hashFiles('Lagoon.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          xcrun simctl list devices available | grep -E "iPhone 17 \(|Apple TV 4K \(3rd generation\) \("
+
+      # Without -collect-test-diagnostics never a failing run spends ten
+      # minutes collecting simulator diagnostics.
+      - name: Test
+        # The full log is thousands of lines; the step shows errors, failures
+        # and the verdict, and a failed run keeps the rest.
+        run: |
+          mkdir -p build
+          status=0
+          xcodebuild test \
+            -scheme Lagoon \
+            -destination "${{ matrix.destination }}" \
+            -clonedSourcePackagesDirPath build/SourcePackages \
+            -derivedDataPath build/DerivedData \
+            -resultBundlePath build/TestResults.xcresult \
+            -collect-test-diagnostics never \
+            > build/xcodebuild.log 2>&1 || status=$?
+          grep -E ": error: |^error: |✘|\*\* (BUILD|TEST) |Test run with" build/xcodebuild.log || true
+          exit "$status"
+
+      - name: Keep results of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.platform }}
+          path: |
+            build/TestResults.xcresult
+            build/xcodebuild.log
+          retention-days: 14
