@@ -143,10 +143,19 @@ these mistakes are silent and a published tag is hard to withdraw. It refuses:
 - a tag already in use
 - a revision the remote does not have yet
 
-If the revision is ahead of the commit that set the build number, it asks,
-because which revision was archived is not recorded. Pass `--rev` when the
-archive came from something other than `HEAD`. It asks even then, so run it
-in a terminal; piped or from an agent, it stops.
+It tags the revision `scripts/upload-testflight.sh` recorded when it archived
+the build (`build/archived-<build>.sha`, local to the machine that uploaded).
+Without a record it tags `HEAD`, and if that is past the commit that set the
+build number, it asks. Pass `--rev` to name the archived revision yourself.
+It asks even then, so run it in a terminal. Piped or from an agent, it stops.
+The version and build come from the tagged revision, so an earlier build can
+be published after the project has moved on.
+
+**A shipped build without a release blocks the next upload.**
+`scripts/upload-testflight.sh` lists every changelog entry newer than the
+newest published release, other than the build being uploaded, and refuses to
+start while there is one. Publish it first. `--dry-run` shows the list and
+carries on.
 
 It **warns** without stopping when the website's generated facts are behind
 the build, or could not be checked. The fix is
