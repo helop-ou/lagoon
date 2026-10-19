@@ -609,8 +609,13 @@ id in `ProviderIds` (`SonarrEpisodeId`, `RadarrMovieId`, `LidarrAlbumId`,
     finds them: same kind, same title once case, accents and punctuation are
     dropped, and for a Radarr movie the same year. The first such result
     wins, as Seerr ranks by popularity; no match leaves no page.
-  - Each title is looked up once per Seerr session. Without one, a card shows
-    the plugin's poster cropped and has nothing to open.
+  - Each title is looked up once per Seerr session.
+  - Signed out, Seerr shows no title at all (`movie/{id}` answers 401), so a
+    card shows the plugin's poster cropped and opens `SeerrSignInGate`:
+    Seerr's sign-in, its address field filled from `ProviderIds.JellyseerrRoot`
+    when the account has no Seerr server yet (Seerr's own titles carry it;
+    Sonarr's and Radarr's do not), then the title's page in its place. Music
+    and books, which Seerr does not hold, open nothing.
 
 On a plain movies/TV server this correctly shows **nothing** new; it matters
 with Jellyseerr requests, My List, Discover or custom collection sections. All
