@@ -119,7 +119,11 @@ struct SubtitleSearchBrowseStateTests {
         let good = try #require(coordinator.results.first { $0.providerID == "good" })
 
         coordinator.startDownload(good)
-        try await waitUntil { coordinator.phase == .downloaded }
+        // The engine adds the track after the coordinator reports the download.
+        try await waitUntil {
+            coordinator.phase == .downloaded
+                && engine.subtitleTracks.contains { $0.isSelected && $0.source == .downloaded }
+        }
 
         // The result is a track now, so return to the list where it is selected.
         #expect(!coordinator.isBrowsingResults)
