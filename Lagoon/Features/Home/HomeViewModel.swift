@@ -19,10 +19,12 @@ final class HomeViewModel {
 
     /// Plugin sections Lagoon already draws natively. Servers offer several
     /// overlapping ones at once, so showing them would repeat the same titles.
-    /// `MyMedia` is the tab bar here.
+    /// `MyMedia` is the tab bar here; `RecentlyAddedInLibrary` is one row per
+    /// library, as Lagoon's own Recently Added rows are.
     static let nativelyCoveredSections: Set<String> = [
         "ContinueWatching", "NextUp", "ContinueWatchingNextUp", "MyMedia",
         "LatestMovies", "LatestShows", "RecentlyAddedMovies", "RecentlyAddedShows",
+        "RecentlyAddedInLibrary",
     ]
 
     var resume: [MediaItem] = []
