@@ -115,9 +115,7 @@ struct HomeView: View {
     private var rowOrder: [String] {
         HomeSectionPreferenceResolver.renderOrder(
             preferences: savedHomePreferences,
-            pluginSections: viewModel.pluginRails.map {
-                HomeRowID.section(forPluginRailID: $0.id)
-            }
+            pluginSections: viewModel.pluginRails.compactMap(\.pluginSection)
         )
     }
 
@@ -199,11 +197,10 @@ struct HomeView: View {
         }
     }
 
+    /// Every rail of one section kind, such as one per `Starring` actor.
     @ViewBuilder
     private func pluginRail(_ section: String) -> some View {
-        if let rail = viewModel.pluginRails.first(
-            where: { $0.id == HomeRowID.pluginRailID(forSection: section) }
-        ) {
+        ForEach(viewModel.pluginRails.filter { $0.pluginSection == section }) { rail in
             // A section holds one kind or the other; library titles win.
             if rail.items.isEmpty {
                 ExternalSectionRail(title: rail.title, items: rail.externalItems)
