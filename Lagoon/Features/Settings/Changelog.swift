@@ -63,7 +63,8 @@ nonisolated enum Changelog {
                     "The player's glass timeline is slightly thinner, so it sits lighter over the picture while staying easy to scrub.",
                 ]),
                 ChangelogSection(category: .bugFixes, changes: [
-                    "Home Screen Sections rows from Sonarr, Radarr and Seerr show their posters, and a Seerr title opens its Seerr page instead of an error.",
+                    "Home Screen Sections rows from Sonarr, Radarr and Seerr show their artwork like Home's other rows, and their titles open the same Seerr page as Discover.",
+                    "Seerr search finds titles with a colon or an apostrophe, such as Law & Order: Special Victims Unit.",
                     "Home Screen Sections rows such as Starring, Directed By, Because You Watched and Genre are no longer missing, with one row for each actor, title or genre the server picks.",
                 ]),
             ]
