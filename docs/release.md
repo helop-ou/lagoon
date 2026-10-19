@@ -304,8 +304,11 @@ certificates. Repository secrets (Settings, Secrets and variables, Actions):
 | `ASC_KEY_P8` | The full contents of the `.p8` file |
 | `LAGOON_SENTRY_DSN` | As in `.env` |
 
-The key needs the App Manager role or higher, as uploading and creating
-profiles do. The workflow runs on the same `xcode-27` image and Xcode as the
+The key needs the Admin role. App Manager can upload, but the runner has no
+certificates, so the key must also create the development certificate the
+archive signs with and use the cloud-managed distribution certificate. Each run
+may leave another "Created via API" development certificate in the account, so
+check the Certificates list now and then. The workflow runs on the same `xcode-27` image and Xcode as the
 [tests](standards.md#continuous-integration), so move both together.
 
 ## Project declarations and native inputs
