@@ -441,6 +441,10 @@ A Seerr title page reads `movie/{id}` or `tv/{id}`:
 - Discovery titles use their name in type unless a matching Jellyfin item has
   a Logo image.
 
+**Query encoding.** Seerr answers 400 to a query value with any reserved
+character left raw (`:` or `'` in a title), which Foundation's query items
+allow, so `SeerrClient` encodes everything but RFC 3986's unreserved set.
+
 ## Seerr people
 
 A person page reads `person/{tmdbId}` for a TMDB person's biography and
@@ -593,10 +597,20 @@ id in `ProviderIds` (`SonarrEpisodeId`, `RadarrMovieId`, `LidarrAlbumId`,
 - `FormattedDate` is the plugin's own countdown text; Seerr titles carry
   `SourceType` (`movie`/`tv`) and a `PremiereDate` of `1970-01-01` when Seerr
   has none.
-- They become `ExternalSectionItem`s, drawn as posters by
-  `ExternalSectionRail`, and never join the hero. A Seerr title opens Lagoon's
-  Seerr page when Lagoon is signed in to Seerr; anything else is a card with
-  nothing to open.
+- They become `ExternalSectionItem`s and never join the hero.
+  `ExternalSectionRail` draws them 16:9 like Home's other rails, and each
+  opens the same Seerr page as Discover once `HomeViewModel` has found it in
+  Seerr:
+  - Seerr's own titles carry their TMDB id; the backdrop comes from the list
+    the plugin read (`Discover` is `discover/trending`, `DiscoverMovies` and
+    `DiscoverTV` are `discover/movies` and `discover/tv`), or from
+    `movie/{id}` / `tv/{id}` for a title that list no longer holds.
+  - Sonarr's and Radarr's carry only their own ids, so Seerr's `search`
+    finds them: same kind, same title once case, accents and punctuation are
+    dropped, and for a Radarr movie the same year. The first such result
+    wins, as Seerr ranks by popularity; no match leaves no page.
+  - Each title is looked up once per Seerr session. Without one, a card shows
+    the plugin's poster cropped and has nothing to open.
 
 On a plain movies/TV server this correctly shows **nothing** new; it matters
 with Jellyseerr requests, My List, Discover or custom collection sections. All
