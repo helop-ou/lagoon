@@ -58,6 +58,10 @@ struct HomeView: View {
                 seerr: session.seerr.client
             )
         }
+        // Again once Seerr signs in, or when the plugin's titles change.
+        .task(id: externalLookupKey) {
+            await viewModel.matchExternalTitles(seerr: session.seerr.client)
+        }
         .onAppear {
             Task {
                 await viewModel.refreshProgress(client: session.client)
@@ -105,6 +109,11 @@ struct HomeView: View {
                 route: .item(item)
             )
         }
+    }
+
+    private var externalLookupKey: String {
+        let ids = viewModel.pluginRails.flatMap(\.externalItems).map(\.id)
+        return "\(session.seerr.user?.id ?? -1)|\(ids.joined(separator: ","))"
     }
 
     private var savedHomePreferences: HomeSectionPreferenceValues {
@@ -203,7 +212,11 @@ struct HomeView: View {
         ForEach(viewModel.pluginRails.filter { $0.pluginSection == section }) { rail in
             // A section holds one kind or the other; library titles win.
             if rail.items.isEmpty {
-                ExternalSectionRail(title: rail.title, items: rail.externalItems)
+                ExternalSectionRail(
+                    title: rail.title,
+                    items: rail.externalItems,
+                    seerrTitles: viewModel.externalSeerrTitles
+                )
             } else {
                 MediaRail(
                     title: rail.title,
