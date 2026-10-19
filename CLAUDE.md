@@ -60,7 +60,7 @@ clean" in docs/README.md.
   breaks: break the code once and watch it fail. UI journeys run under the
   `LagoonHardwareRegression` scheme; see the [regression
   lane](docs/reference/regression-lane.md). CI runs the same unit suites on
-  every pull request and push to `main`
+  every pull request, and `main` takes only pull requests that passed
   ([standards](docs/standards.md#continuous-integration)); it reports after
   the push, so it never replaces a local run.
 - Build numbers belong to the repo. Never let Xcode manage them at upload; see
