@@ -9,8 +9,10 @@ import UIKit
 /// repository root, outside the test target so they are never bundled. A
 /// missing reference is recorded and the test fails; recording is deleting
 /// the PNG and running once, then looking at what was written before
-/// committing it. A mismatch writes `<name>.<platform>.failed.png` beside the
-/// reference and attaches it to the result. Both runtimes CI uses are the
+/// committing it. A mismatch writes `<name>.<platform>.failed.png` (what
+/// rendered) and `<name>.<platform>.diff.png` (the reference dimmed, changed
+/// pixels red) beside the reference, attaches both and the reference to the
+/// result, and names the changed region. Both runtimes CI uses are the
 /// ones developers run, so references compare exactly; the tolerance only
 /// absorbs anti-aliasing noise.
 @MainActor
@@ -32,7 +34,9 @@ enum Snapshot {
 
         let reference = referenceURL(for: name, filePath: filePath)
         let failed = reference.deletingPathExtension().appendingPathExtension("failed.png")
+        let diff = reference.deletingPathExtension().appendingPathExtension("diff.png")
         try? FileManager.default.removeItem(at: failed)
+        try? FileManager.default.removeItem(at: diff)
 
         guard let expected = UIImage(contentsOfFile: reference.path)?.cgImage else {
             try FileManager.default.createDirectory(
@@ -46,18 +50,23 @@ enum Snapshot {
             return
         }
 
-        let difference = differingFraction(image, expected)
-        if difference > tolerance {
-            try? png.write(to: failed)
-            Attachment.record(png, named: failed.lastPathComponent)
-            Issue.record(
-                Comment(rawValue: String(
-                    format: "%@ differs from its reference in %.2f%% of pixels; see %@.",
-                    name, difference * 100, failed.lastPathComponent
-                )),
-                sourceLocation: sourceLocation
-            )
+        let comparison = compare(image, with: expected)
+        guard comparison.fraction > tolerance else { return }
+        try? png.write(to: failed)
+        Attachment.record(png, named: failed.lastPathComponent)
+        if let referencePNG = try? Data(contentsOf: reference) {
+            Attachment.record(referencePNG, named: reference.lastPathComponent)
         }
+        var files = failed.lastPathComponent
+        if let diffPNG = comparison.diff.flatMap({ UIImage(cgImage: $0).pngData() }) {
+            try? diffPNG.write(to: diff)
+            Attachment.record(diffPNG, named: diff.lastPathComponent)
+            files += " and \(diff.lastPathComponent)"
+        }
+        Issue.record(
+            Comment(rawValue: "\(name) \(comparison.summary(actual: image, expected: expected)); see \(files)."),
+            sourceLocation: sourceLocation
+        )
     }
 
     /// Draws the view in an off-screen window, not with `ImageRenderer`,
@@ -132,22 +141,89 @@ enum Snapshot {
             .appending(path: "\(name).\(platform).png")
     }
 
-    /// The share of pixels whose channels differ by more than a rounding
-    /// step; a size change differs everywhere.
-    static func differingFraction(_ lhs: CGImage, _ rhs: CGImage) -> Double {
-        guard lhs.width == rhs.width, lhs.height == rhs.height else { return 1 }
-        let a = rgba(lhs), b = rgba(rhs)
-        var differing = 0
-        for pixel in stride(from: 0, to: a.count, by: 4) {
-            for channel in 0..<4 where abs(Int(a[pixel + channel]) - Int(b[pixel + channel])) > 8 {
-                differing += 1
-                break
+    /// What differs between a rendering and its reference.
+    struct Comparison {
+        /// The share of pixels that differ; 1 when the sizes do.
+        let fraction: Double
+        /// The smallest rectangle holding every changed pixel, from the top
+        /// left. Nil when nothing changed or the sizes differ.
+        let bounds: CGRect?
+        /// The reference dimmed to a third, with every changed pixel red.
+        /// Nil when the sizes differ, as there is nothing to lay one on.
+        let diff: CGImage?
+
+        func summary(actual: CGImage, expected: CGImage) -> String {
+            guard let bounds else {
+                return "is \(actual.width)×\(actual.height) but its reference is \(expected.width)×\(expected.height)"
             }
+            return String(
+                format: "differs from its reference in %.2f%% of pixels, within x %d–%d, y %d–%d",
+                fraction * 100,
+                Int(bounds.minX), Int(bounds.maxX) - 1, Int(bounds.minY), Int(bounds.maxY) - 1
+            )
         }
-        return Double(differing) / Double(lhs.width * lhs.height)
     }
 
-    private static func rgba(_ image: CGImage) -> [UInt8] {
+    /// A pixel differs when any channel moves by more than a rounding step.
+    nonisolated static func compare(_ actual: CGImage, with expected: CGImage) -> Comparison {
+        guard actual.width == expected.width, actual.height == expected.height else {
+            return Comparison(fraction: 1, bounds: nil, diff: nil)
+        }
+        let width = actual.width, height = actual.height
+        let rendered = rgba(actual)
+        var marked = rgba(expected)
+        var differing = 0
+        var minX = width, minY = height, maxX = -1, maxY = -1
+        for y in 0..<height {
+            for x in 0..<width {
+                let pixel = (y * width + x) * 4
+                var differs = false
+                for channel in 0..<4 where abs(Int(rendered[pixel + channel]) - Int(marked[pixel + channel])) > 8 {
+                    differs = true
+                    break
+                }
+                if differs {
+                    differing += 1
+                    minX = min(minX, x); maxX = max(maxX, x)
+                    minY = min(minY, y); maxY = max(maxY, y)
+                    marked[pixel] = 255
+                    marked[pixel + 1] = 0
+                    marked[pixel + 2] = 0
+                    marked[pixel + 3] = 255
+                } else {
+                    // Premultiplied, so dimming the colour channels keeps
+                    // alpha valid.
+                    for channel in 0..<3 { marked[pixel + channel] /= 3 }
+                }
+            }
+        }
+        let bounds = maxX < 0 ? nil : CGRect(x: minX, y: minY, width: maxX - minX + 1, height: maxY - minY + 1)
+        return Comparison(
+            fraction: Double(differing) / Double(width * height),
+            bounds: bounds,
+            diff: image(from: marked, width: width, height: height)
+        )
+    }
+
+    private nonisolated static func image(from bytes: [UInt8], width: Int, height: Int) -> CGImage? {
+        guard let provider = CGDataProvider(data: Data(bytes) as CFData) else { return nil }
+        return CGImage(
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bitsPerPixel: 32,
+            bytesPerRow: width * 4,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+            provider: provider,
+            decode: nil,
+            shouldInterpolate: false,
+            intent: .defaultIntent
+        )
+    }
+
+    /// Top row first, as `compare` reports positions.
+    private nonisolated static func rgba(_ image: CGImage) -> [UInt8] {
         var bytes = [UInt8](repeating: 0, count: image.width * image.height * 4)
         bytes.withUnsafeMutableBytes { buffer in
             let context = CGContext(
