@@ -98,6 +98,26 @@ EOF
     exit 1
 fi
 
+# A build that went out without a GitHub release leaves its binary with no
+# findable source, which the vendored FFmpeg licence requires.
+command -v gh >/dev/null 2>&1 || { echo "error: gh is not installed, so the published releases cannot be checked" >&2; exit 1; }
+released="$(gh release list --limit 200 --json tagName,isDraft \
+    --jq '.[] | select(.isDraft | not) | .tagName' 2>/dev/null)" \
+    || { echo "error: could not list the GitHub releases (is gh signed in?)" >&2; exit 1; }
+newest_released="$(printf '%s\n' "$released" | grep -oE -- '-[0-9]+$' | tr -d '-' | sort -n | tail -1)"
+unpublished="$(grep -A 1 'version: "' "$changelog" | grep -oE '"[0-9.]+"' | tr -d '"' | paste - - \
+    | awk -v newest="${newest_released:-0}" -v current="$build" '$2 > newest && $2 != current { print $1 " (" $2 ")" }')"
+if [ -n "$unpublished" ]; then
+    {
+        echo "error: these builds went out but have no GitHub release:"
+        printf '%s\n' "$unpublished" | sed 's/^/  /'
+        echo
+        echo "Publish each with scripts/publish-release.sh <build> before uploading ${version} (${build})."
+    } >&2
+    [ "$dry_run" = "--dry-run" ] || exit 1
+    echo
+fi
+
 echo "Lagoon ${version} (${build}) → TestFlight internal, for: ${targets}"
 echo
 
@@ -124,6 +144,13 @@ run() {
 # The Organizer lists what is in its own archive directory.
 organizer_dir="$HOME/Library/Developer/Xcode/Archives/$(date +%Y-%m-%d)"
 [ "$archive_only" = true ] && [ "$dry_run" != "--dry-run" ] && mkdir -p "$organizer_dir"
+
+if [ "$dry_run" != "--dry-run" ]; then
+    mkdir -p "$build_dir"
+    git -C "$root" rev-parse HEAD > "$build_dir/archived-${build}.sha"
+    [ -z "$(git -C "$root" status --porcelain)" ] \
+        || echo "warning: the tree has uncommitted changes, so the archive is not exactly $(git -C "$root" rev-parse --short HEAD)" >&2
+fi
 
 for platform in $targets; do
     if [ "$archive_only" = true ]; then
