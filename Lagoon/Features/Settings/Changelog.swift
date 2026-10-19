@@ -43,7 +43,7 @@ nonisolated struct ChangelogEntry: Identifiable, Equatable, Sendable {
 }
 
 nonisolated enum Changelog {
-    /// Newest first. Add an entry at the top when a build goes out; the About
+    /// Newest first. Add an entry at the top when a build goes out. The About
     /// screen highlights whichever one matches the running bundle.
     static let entries: [ChangelogEntry] = [
         ChangelogEntry(
