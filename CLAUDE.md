@@ -84,7 +84,9 @@ clean" in docs/README.md.
   application "System Events" to key code …'` (125/126/123/124 are the
   arrows, 36 select, 53 menu, and `keystroke "…"` types into the tvOS
   keyboard), then `simctl io <udid> screenshot`. Exercise focus paths and
-  deep scrolls, not just the landing state.
+  deep scrolls, not just the landing state. A component that changes look
+  gets a snapshot test, and its reference images are looked at before they
+  are committed ([Design system](docs/design-system.md#snapshot-tests)).
 - For end-to-end work, the public demo server supports the full flow including
   playback: `demo.jellyfin.org/stable`, user `demo`, empty password.
 - Report only what was verified. Before saying a change is done, run the

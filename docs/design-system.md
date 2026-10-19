@@ -336,3 +336,34 @@ validated input.
 
 Brand artwork, icons, detailed compositions and the reasoning behind focus
 decisions are in the [design notes](reference/design-system.md).
+
+## Snapshot tests
+
+A component's look is pinned like its behaviour: a snapshot test renders it
+and compares the result with a reference PNG, so a card turning portrait or a
+caption moving over the art fails the unit suite, and so CI, on every pull
+request. `HomeCardSnapshotTests` is the pattern.
+
+- `Snapshot.verify(view, named:size:)` (`LagoonTests/Support/Snapshot.swift`)
+  draws the view in an off-screen window inside a `NavigationStack`, dark, in
+  English, at the default text size, one pixel per point, with no safe area.
+  Not `ImageRenderer`: it leaves `ScrollView` and `NavigationStack` blank, and
+  an iOS `NavigationLink` outside a stack draws at half opacity.
+- References live in `Snapshots/<Suite>/<name>.<platform>.png` at the
+  repository root, outside the test target. Each platform has its own.
+- Artwork never comes from the network. Draw a stand-in and put it in
+  `ImageCache.shared.store(_:for:maxPixelSize:)` under the URL and pixel size
+  the view asks for, so the card shows it on its first frame. The fixed
+  `displayScale` of 1 makes those sizes predictable.
+- A missing reference is recorded and the test fails. To record or
+  re-record, delete the PNG, run the suite on both platforms, and look at
+  every image written before committing it: a reference is only as right as
+  the look it captured.
+- A mismatch over the tolerance (0.2 % of pixels) writes
+  `<name>.<platform>.failed.png` beside the reference, which git ignores, and
+  attaches it to the test result. On CI it is in the failed run's `.xcresult`.
+- References depend on the simulator runtime. CI and local runs use the same
+  tvOS 27.0 and iOS 27.0 runtimes; when Xcode moves, re-record in the same
+  change.
+- Snapshot views that render synchronously. A `.task` that fills `@State`
+  may not have run when the window is drawn.
