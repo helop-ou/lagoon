@@ -28,6 +28,19 @@ struct ExternalSeerrMatcherTests {
         #expect(ExternalSeerrMatcher.match(movie, in: found) == nil)
     }
 
+    @Test func aCardOpensSignInWhileSignedOutAndThePageOnceFound() throws {
+        let show = try item(#"{"Name":"Abbott Elementary","ProviderIds":{"SonarrEpisodeId":"1"}}"#)
+        let album = try item(#"{"Name":"Album","ProviderIds":{"LidarrAlbumId":"7"}}"#)
+        let found = ExternalSeerrTitle(id: 125935, mediaType: .tv, backdropPath: nil)
+
+        #expect(ExternalSeerrMatcher.route(for: show, seerrTitle: nil, isSignedIn: false) == .signIn(then: show))
+        #expect(ExternalSeerrMatcher.route(for: show, seerrTitle: found, isSignedIn: true) == .media(id: 125935, type: .tv))
+        // Signed in but not found: Seerr has no page to open.
+        #expect(ExternalSeerrMatcher.route(for: show, seerrTitle: nil, isSignedIn: true) == nil)
+        // Seerr has no music, signed in or not.
+        #expect(ExternalSeerrMatcher.route(for: album, seerrTitle: nil, isSignedIn: false) == nil)
+    }
+
     /// Seerr's own titles already carry their id; music and books have no
     /// Seerr kind to search for.
     @Test func onlySonarrAndRadarrTitlesAreSearched() throws {
