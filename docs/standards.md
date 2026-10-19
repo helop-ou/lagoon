@@ -118,9 +118,11 @@ here.
 ### Continuous integration
 
 `.github/workflows/tests.yml` runs the unit suite on tvOS and iOS for every
-pull request and every push to `main`, the same `xcodebuild test` as a local
-run. It is a backstop, not a replacement: run the tests before committing,
-because CI only reports after the push.
+pull request, the same `xcodebuild test` as a local run, and `main` accepts
+only pull requests whose two test jobs passed. Nothing runs on a schedule: a
+run with no new code can only fail because of the runner or a server. CI is a
+backstop, not a replacement: run the tests before pushing, because CI only
+reports after the push.
 
 - It uses GitHub's `xcode-27` runner image (a preview) with Xcode 27.1, the
   version Lagoon is developed with. When the local Xcode moves, move
