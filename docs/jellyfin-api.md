@@ -535,20 +535,32 @@ An optional server plugin. Without it the route 404s and Home uses Lagoon's
 own rails.
 
 - `GET HomeScreen/Sections?userId=` returns the section **catalogue**.
-- `GET HomeScreen/Section/{sectionKey}?userId=` returns one section's items as
-  an ordinary `ItemsPage`.
+- `GET HomeScreen/Section/{sectionKey}?userId=&additionalData=` returns one
+  section's items as an ordinary `ItemsPage`.
 
-**The catalogue is not a layout.** It returns all 28 section types the plugin
+**The catalogue is not a layout.** It returns every section type the plugin
 knows (Books, Music and Jellyseerr included, even on a movies-and-TV server),
-each with `OrderIndex` 999 and `Limit` 1. The admin's enabled set is not
-readable anywhere (`HomeScreen/UserSettings`, `/Settings`, `/Config` and
-`/Users/{id}/Settings` 404; `DisplayPreferences/usersettings` has no
-`homesection*` keys).
+each with `OrderIndex` 999. The admin's enabled set is not readable anywhere
+(`HomeScreen/UserSettings`, `/Settings`, `/Config` and `/Users/{id}/Settings`
+404; `DisplayPreferences/usersettings` has no `homesection*` keys).
+
+**A section can have several instances.** `Starring`, `DirectedBy`,
+`BecauseYouWatched`, `Genre`, `Studio`, `Decade` and `RecentlyAddedInLibrary`
+each come once per person, title, genre or library, told apart by
+`AdditionalData` (a person's or library's id, a genre name, a decade) and
+named by their own `DisplayText` ("Starring Mark Hamill"). Without
+`additionalData` the section fetch returns nothing. The plugin picks the
+instances and can repeat one (two identical `Genre`/`Drama` entries), so
+`HomeSection.id` is the section plus its data, and duplicates of it are
+dropped. Home draws one rail per instance; Settings shows one row per section
+type, named from its key ("Because You Watched"), and that row's place and
+switch cover all its instances, since which actors appear changes.
 
 Rendering it wholesale would repeat rows: the same server offers
-`ContinueWatching`, `NextUp` and `ContinueWatchingNextUp`, plus `LatestMovies`
-and `RecentlyAddedMovies`. So `HomeViewModel.nativelyCoveredSections` drops
-every section Lagoon already draws, and only the rest is appended.
+`ContinueWatching`, `NextUp` and `ContinueWatchingNextUp`, plus `LatestMovies`,
+`RecentlyAddedMovies` and `RecentlyAddedInLibrary` (one per library, like
+Lagoon's own Recently Added rows). So `HomeViewModel.nativelyCoveredSections`
+drops every section Lagoon already draws, and only the rest is appended.
 
 Arrangement (Settings › Home Rows):
 
