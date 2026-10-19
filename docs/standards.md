@@ -128,6 +128,8 @@ because CI only reports after the push.
   [image's list](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md)
   has it.
 - iOS runs on iPhone 17, as the image has no iPhone 17 Pro.
+- The image lacks the Metal toolchain, a separate Xcode download Lagoon's
+  shaders need, so each run installs it first.
 - The engine resolves from `Package.resolved` and is cached by its hash, so
   a pin move refetches it once.
 - A failed run keeps its `.xcresult` and full log for 14 days, under the
