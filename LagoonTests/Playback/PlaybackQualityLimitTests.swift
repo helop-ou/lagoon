@@ -167,9 +167,7 @@ struct PlaybackQualityLimitTests {
         let sizes = StubURLProtocol.requests(host: host)
             .filter { $0.url?.path.hasSuffix("BitrateTest") == true }
             .compactMap { URLComponents(url: $0.url!, resolvingAgainstBaseURL: false)?.queryItems?.first?.value }
-        // Small first, then large only when the small one was fast. A stub is
-        // fast on a quiet machine, not on a loaded CI runner, so the large
-        // step may or may not follow; `continueAbove` pins when it does.
+        // A stub is fast on a quiet machine but not on a loaded runner.
         #expect(sizes.first == "1000000")
         #expect(Array(["1000000", "8000000"].prefix(sizes.count)) == sizes)
     }

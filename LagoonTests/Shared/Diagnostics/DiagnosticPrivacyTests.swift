@@ -6,8 +6,8 @@ import Testing
 /// Drives the production reporting paths with synthetic sensitive values and
 /// asserts none reach the outgoing bytes. The token charset is only a
 /// backstop (`nas.local` passes it); the guarantee is that these paths hand
-/// the schema identifiers only. Ids are Jellyfin's 32 hex characters: a short
-/// one turns up by chance in an envelope's random `event_id`.
+/// the schema identifiers only. Ids are full length: a short one can turn up
+/// in a random `event_id`.
 @MainActor
 @Suite("Diagnostic privacy")
 struct DiagnosticPrivacyTests {
