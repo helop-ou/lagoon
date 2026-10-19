@@ -9,6 +9,9 @@ final class HomeViewModel {
         let items: [MediaItem]
         /// Files the rail under movies or shows. Nil for curated and plugin rails.
         var collectionType: String?
+        /// A plugin rail's titles from Sonarr, Radarr or Seerr. Never in
+        /// `items`: they have no Jellyfin page, so the hero must not pick them.
+        var externalItems: [JellyfinClient.ExternalSectionItem] = []
     }
 
     /// Plugin sections Lagoon already draws natively. Servers offer several
@@ -843,14 +846,15 @@ final class HomeViewModel {
         return await withTaskGroup(of: (index: Int, rail: LibraryRail)?.self) { group in
             for (index, section) in sections.enumerated() {
                 group.addTask {
-                    let items = await client.homeSectionItems(section.section)
-                    guard !items.isEmpty else { return nil }
+                    let contents = await client.homeSectionContents(section.section)
+                    guard !contents.isEmpty else { return nil }
                     return (
                         index: index,
                         rail: LibraryRail(
                             id: HomeRowID.pluginRailID(forSection: section.section),
                             title: section.displayText ?? section.section,
-                            items: items
+                            items: contents.items,
+                            externalItems: contents.externalItems
                         )
                     )
                 }

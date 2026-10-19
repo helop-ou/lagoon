@@ -204,12 +204,17 @@ struct HomeView: View {
         if let rail = viewModel.pluginRails.first(
             where: { $0.id == HomeRowID.pluginRailID(forSection: section) }
         ) {
-            MediaRail(
-                title: rail.title,
-                items: rail.items,
-                style: .landscape,
-                onUserDataChange: refreshUserData
-            )
+            // A section holds one kind or the other; library titles win.
+            if rail.items.isEmpty {
+                ExternalSectionRail(title: rail.title, items: rail.externalItems)
+            } else {
+                MediaRail(
+                    title: rail.title,
+                    items: rail.items,
+                    style: .landscape,
+                    onUserDataChange: refreshUserData
+                )
+            }
         }
     }
 

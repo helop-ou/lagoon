@@ -46,13 +46,132 @@ extension JellyfinClient {
         return legacy.filter { seen.insert($0.section).inserted }
     }
 
+    /// A title the plugin fetched from Sonarr, Radarr, Lidarr, Readarr or
+    /// Seerr. It is not in the library: its `Id` is random on every request,
+    /// or all zeros, so it has no Jellyfin artwork or page, and fetching
+    /// either 404s. What there is sits in `ProviderIds`.
+    nonisolated struct ExternalSectionItem: Decodable, Identifiable, Equatable, Sendable {
+        /// The source and its own id, stable across requests.
+        let id: String
+        let title: String
+        let subtitle: String?
+        /// `/HomeScreen/CachedImage/…` from the server, or an absolute URL.
+        let posterPath: String?
+        /// Set for Seerr's titles, which open on Lagoon's Seerr page.
+        let seerrID: Int?
+        let seerrType: SeerrMediaType?
+
+        /// Each source's id key. The plugin names the poster `<source>Poster`.
+        private static let sources = [
+            (name: "Sonarr", idKey: "SonarrEpisodeId"),
+            (name: "Radarr", idKey: "RadarrMovieId"),
+            (name: "Lidarr", idKey: "LidarrAlbumId"),
+            (name: "Readarr", idKey: "ReadarrBookId"),
+            (name: "Jellyseerr", idKey: "Jellyseerr"),
+        ]
+
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: AnyCodingKey.self)
+            let providerIds = (try? c.decodeIfPresent([String: String].self, forKey: "providerIds")) ?? [:]
+            // The key strategy lowercases the first letter of these keys too.
+            func value(_ key: String) -> String? {
+                providerIds.first { $0.key.caseInsensitiveCompare(key) == .orderedSame }
+                    .map(\.value).flatMap { $0.isEmpty ? nil : $0 }
+            }
+            guard let (source, sourceID) = Self.sources.lazy
+                .compactMap({ source in value(source.idKey).map { (source.name, $0) } })
+                .first
+            else {
+                throw DecodingError.dataCorruptedError(
+                    forKey: "providerIds", in: c, debugDescription: "A library item"
+                )
+            }
+            let name = try? c.decodeIfPresent(String.self, forKey: "name")
+            title = name ?? ""
+            posterPath = value("\(source)Poster")
+
+            let formattedDate = value("FormattedDate")
+            switch source {
+            case "Sonarr":
+                let episode = EpisodeLabel.text(
+                    season: try? c.decodeIfPresent(Int.self, forKey: "parentIndexNumber"),
+                    episode: try? c.decodeIfPresent(Int.self, forKey: "indexNumber"),
+                    episodeEnd: nil
+                )
+                subtitle = [episode, formattedDate].compactMap { $0 }.joined(separator: " · ")
+            case "Jellyseerr":
+                // A date string, read for its year only. The plugin writes
+                // 1970-01-01 when Seerr has no date.
+                let premiere = (try? c.decodeIfPresent(String.self, forKey: "premiereDate")) ?? ""
+                let year = String(premiere.prefix(4))
+                subtitle = year.count == 4 && year != "1970" ? year : nil
+            default:
+                subtitle = formattedDate
+            }
+
+            let mediaType = (try? c.decodeIfPresent(String.self, forKey: "sourceType"))
+                .flatMap(SeerrMediaType.init(rawValue:))
+            if source == "Jellyseerr", let mediaType, mediaType != .person {
+                seerrID = Int(sourceID)
+                seerrType = mediaType
+                // A movie and a show can share a TMDB id.
+                id = "\(source):\(mediaType.rawValue):\(sourceID)"
+            } else {
+                seerrID = nil
+                seerrType = nil
+                id = "\(source):\(sourceID)"
+            }
+        }
+    }
+
+    /// What one section holds. The plugin returns either kind of title in
+    /// the same `BaseItemDto` shape.
+    nonisolated struct HomeSectionContents: Sendable {
+        var items: [MediaItem] = []
+        var externalItems: [ExternalSectionItem] = []
+
+        var isEmpty: Bool { items.isEmpty && externalItems.isEmpty }
+    }
+
+    private nonisolated enum HomeSectionEntry: Decodable {
+        case library(MediaItem)
+        case external(ExternalSectionItem)
+
+        init(from decoder: Decoder) throws {
+            if let external = try? ExternalSectionItem(from: decoder) {
+                self = .external(external)
+            } else {
+                self = .library(try MediaItem(from: decoder))
+            }
+        }
+    }
+
+    private nonisolated struct HomeSectionEntriesPage: Decodable {
+        let items: [HomeSectionEntry]
+        init(from decoder: Decoder) throws {
+            let c = try decoder.container(keyedBy: AnyCodingKey.self)
+            items = try c.decodeIfPresent([HomeSectionEntry].self, forKey: "items") ?? []
+        }
+    }
+
     /// A section's contents. Empty on failure, so one bad section costs
     /// nothing else.
-    func homeSectionItems(_ section: String) async -> [MediaItem] {
-        guard let userId else { return [] }
-        let page: ItemsPage? = try? await get("HomeScreen/Section/\(section)", query: [
+    func homeSectionContents(_ section: String) async -> HomeSectionContents {
+        guard let userId else { return HomeSectionContents() }
+        let page: HomeSectionEntriesPage? = try? await get("HomeScreen/Section/\(section)", query: [
             URLQueryItem(name: "userId", value: userId),
         ], probe: true)
-        return page?.items ?? []
+        var contents = HomeSectionContents()
+        var seen = Set<String>()
+        for entry in page?.items ?? [] {
+            switch entry {
+            case .library(let item):
+                contents.items.append(item)
+            case .external(let item):
+                // Seerr's pages can repeat a title.
+                if seen.insert(item.id).inserted { contents.externalItems.append(item) }
+            }
+        }
+        return contents
     }
 }
