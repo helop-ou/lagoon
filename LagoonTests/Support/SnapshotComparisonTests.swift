@@ -2,8 +2,6 @@ import Testing
 import UIKit
 @testable import Lagoon
 
-/// What a failing snapshot reports: how much changed, where, and an image
-/// that marks it.
 @Suite("Snapshot comparison")
 struct SnapshotComparisonTests {
     @Test func aChangeIsMeasuredLocatedAndMarkedRed() throws {
@@ -17,7 +15,6 @@ struct SnapshotComparisonTests {
         let diff = try pixels(#require(comparison.diff))
         #expect(diff[5][4] == [255, 0, 0])
         #expect(diff[6][6] == [255, 0, 0])
-        // Unchanged pixels are the reference at a third.
         #expect(diff[0][0] == [0, 0, 255 / 3])
         #expect(diff[5][7] == [0, 0, 255 / 3])
         #expect(comparison.summary(actual: changed, expected: reference)
@@ -46,7 +43,6 @@ struct SnapshotComparisonTests {
 
     // MARK: - Fixtures
 
-    /// Blue, with an optional red rectangle measured from the top left.
     private func image(width: Int, height: Int, red: CGRect? = nil) throws -> CGImage {
         let format = UIGraphicsImageRendererFormat()
         format.scale = 1
@@ -62,7 +58,6 @@ struct SnapshotComparisonTests {
         }.cgImage)
     }
 
-    /// RGB rows, top first.
     private func pixels(_ image: CGImage) -> [[[UInt8]]] {
         var bytes = [UInt8](repeating: 0, count: image.width * image.height * 4)
         bytes.withUnsafeMutableBytes { buffer in
