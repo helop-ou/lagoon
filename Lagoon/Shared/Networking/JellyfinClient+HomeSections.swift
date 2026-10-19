@@ -66,9 +66,14 @@ extension JellyfinClient {
         let subtitle: String?
         /// `/HomeScreen/CachedImage/…` from the server, or an absolute URL.
         let posterPath: String?
-        /// Set for Seerr's titles, which open on Lagoon's Seerr page.
+        /// Seerr's TMDB id, set for Seerr's own titles. Sonarr's and Radarr's
+        /// are looked up in Seerr by `title`, `seerrType` and `year`.
         let seerrID: Int?
+        /// What Seerr would call it: Seerr's own kind, a show for Sonarr, a
+        /// movie for Radarr. Nil for music and books, which Seerr lacks.
         let seerrType: SeerrMediaType?
+        /// A Radarr movie's year, which tells remakes apart.
+        let year: Int?
 
         /// Each source's id key. The plugin names the poster `<source>Poster`.
         private static let sources = [
@@ -97,6 +102,7 @@ extension JellyfinClient {
             }
             let name = try? c.decodeIfPresent(String.self, forKey: "name")
             title = name ?? ""
+            year = try? c.decodeIfPresent(Int.self, forKey: "productionYear")
             posterPath = value("\(source)Poster")
 
             let formattedDate = value("FormattedDate")
@@ -127,7 +133,11 @@ extension JellyfinClient {
                 id = "\(source):\(mediaType.rawValue):\(sourceID)"
             } else {
                 seerrID = nil
-                seerrType = nil
+                seerrType = switch source {
+                case "Sonarr": .tv
+                case "Radarr": .movie
+                default: nil
+                }
                 id = "\(source):\(sourceID)"
             }
         }

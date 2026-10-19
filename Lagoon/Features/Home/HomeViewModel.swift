@@ -32,6 +32,13 @@ final class HomeViewModel {
     var favorites: [MediaItem] = []
     /// Rails from the Home Screen Sections plugin, deduped, empties removed.
     var pluginRails: [LibraryRail] = []
+    /// Seerr's record of each plugin title from Sonarr, Radarr or Seerr, by
+    /// item id. A title missing here has nothing to open.
+    var externalSeerrTitles: [String: ExternalSeerrTitle] = [:]
+    /// Titles already looked up for `externalLookupCookie`'s Seerr session,
+    /// found or not, so a refresh does not search for them again.
+    private var externalLookups: Set<String> = []
+    private var externalLookupCookie: String?
     var latestRails: [LibraryRail] = []
     /// Kept separate so a genre name shared by movies and shows never opens
     /// a mixed grid.
@@ -873,6 +880,85 @@ final class HomeViewModel {
         }
     }
 
+    /// Looks the plugin's Sonarr, Radarr and Seerr titles up in Seerr, for a
+    /// backdrop and a page to open. Without a Seerr session they stay cards
+    /// with nothing to open.
+    func matchExternalTitles(seerr: SeerrClient?) async {
+        guard let seerr, seerr.serverURL != nil, let cookie = seerr.sessionCookie else { return }
+        if cookie != externalLookupCookie {
+            externalLookups = []
+            externalLookupCookie = cookie
+        }
+        let generation = loadGeneration
+        for rail in pluginRails {
+            let pending = rail.externalItems.filter { externalLookups.insert($0.id).inserted }
+            guard !pending.isEmpty else { continue }
+            let found = await lookUpExternalTitles(pending, section: rail.pluginSection, seerr: seerr)
+            guard generation == loadGeneration, cookie == seerr.sessionCookie else { return }
+            externalSeerrTitles.merge(found) { _, new in new }
+        }
+    }
+
+    private func lookUpExternalTitles(
+        _ items: [JellyfinClient.ExternalSectionItem],
+        section: String?,
+        seerr: SeerrClient
+    ) async -> [String: ExternalSeerrTitle] {
+        var found: [String: ExternalSeerrTitle] = [:]
+
+        // Seerr's own titles: the list the plugin read carries backdrops for
+        // twenty at a time. A title it no longer holds costs one request.
+        var unlisted = items.filter { $0.seerrID != nil }
+        if let list = ExternalSeerrMatcher.list(forSection: section) {
+            for page in 1...3 where !unlisted.isEmpty {
+                let listType: SeerrMediaType?
+                let results: SeerrDiscoverPage?
+                switch list {
+                case .trending:
+                    listType = nil
+                    results = try? await seerr.trending(page: page)
+                case .discover(let type):
+                    listType = type
+                    results = try? await seerr.discover(type, page: page)
+                }
+                guard let results, !results.results.isEmpty else { break }
+                let listed = Dictionary(
+                    results.results.compactMap { ExternalSeerrTitle($0, listType: listType) }
+                        .map { ("\($0.mediaType.rawValue):\($0.id)", $0) },
+                    uniquingKeysWith: { first, _ in first }
+                )
+                unlisted.removeAll { item in
+                    guard let id = item.seerrID, let type = item.seerrType,
+                          let title = listed["\(type.rawValue):\(id)"] else { return false }
+                    found[item.id] = title
+                    return true
+                }
+                if page >= results.totalPages { break }
+            }
+        }
+
+        await withTaskGroup(of: (String, ExternalSeerrTitle?).self) { group in
+            for item in unlisted {
+                guard let id = item.seerrID, let type = item.seerrType else { continue }
+                group.addTask {
+                    let details = try? await seerr.details(id: id, mediaType: type)
+                    return (item.id, details.map { ExternalSeerrTitle($0, mediaType: type) })
+                }
+            }
+            // Sonarr and Radarr name a title; Seerr's search finds its id.
+            for item in items where item.seerrID == nil && item.seerrType != nil {
+                group.addTask {
+                    let results = (try? await seerr.search(query: item.title))?.results ?? []
+                    return (item.id, ExternalSeerrMatcher.match(item, in: results))
+                }
+            }
+            for await (id, title) in group {
+                if let title { found[id] = title }
+            }
+        }
+        return found
+    }
+
     private func clearForAccountChange() {
         cancelDiscoveryTasks()
         loadGeneration &+= 1
@@ -883,6 +969,9 @@ final class HomeViewModel {
         movieGenreShelf = []
         showGenreShelf = []
         pluginRails = []
+        externalSeerrTitles = [:]
+        externalLookups = []
+        externalLookupCookie = nil
         latestRails = []
         heroItems = []
         librarySample = []
