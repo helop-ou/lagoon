@@ -1,0 +1,44 @@
+name: Feature request
+description: Suggest something Lagoon could do, or do better.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. Lagoon aims to stay simple, so not every
+        suggestion will fit. Search the open issues first in case someone has
+        asked already.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The situation or problem, rather than the solution.
+      placeholder: When a series has many seasons, I have to scroll a long way to find where I left off.
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like Lagoon to do?
+    validations:
+      required: true
+
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      multiple: true
+      options:
+        - tvOS (Apple TV)
+        - iOS (iPhone)
+        - iPadOS (iPad)
+    validations:
+      required: true
+
+  - type: textarea
+    id: extra
+    attributes:
+      label: Anything else
+      description: How another client handles it, screenshots or mock-ups.
