@@ -7,6 +7,7 @@
   <img src="https://img.shields.io/badge/iOS-26-0B1D28?logo=apple&logoColor=white" alt="iOS 26">
   <img src="https://img.shields.io/badge/Jellyfin-10.8%2B-0D4A57?logo=jellyfin&logoColor=white" alt="Jellyfin 10.8+">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-MPL--2.0-0D4A57" alt="MPL-2.0"></a>
+  <a href="FAQ.md#was-ai-used-in-this-project"><img src="https://img.shields.io/badge/AI-assisted-0D4A57" alt="AI-assisted"></a>
   <a href="https://github.com/helop-ou/lagoon/actions/workflows/tests.yml"><img src="https://github.com/helop-ou/lagoon/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
 </p>
 
