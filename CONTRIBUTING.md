@@ -84,13 +84,14 @@ focus paths, not just the landing state.
 
 ## Commits
 
-- Work goes straight to `main`.
+- Work reaches `main` through a pull request from a feature branch, as
+  [Pull requests](docs/standards.md#pull-requests) describes.
 - Subjects are conventional, lowercase imperative, with no scope:
   `feat: add app icon and top shelf artwork`, `fix:`, `chore:`, `docs:`.
 - Many small thematic commits, usually one file each, ordered so every
   intermediate state builds.
-- A substantial `fix:` gets a body explaining the mechanism, and a mechanical one
-  is subject-only.
+- Subject line only. Reasoning that needs a paragraph goes in the guide that
+  owns the area.
 - Keep structural moves separate from behaviour changes.
 
 ## Dependencies
