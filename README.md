@@ -1,154 +1,51 @@
-# Lagoon
+<p align="center">
+  <img src=".github/readme/banner.png" alt="Lagoon, a native Jellyfin client for Apple TV, iPhone and iPad" width="100%">
+</p>
 
-A native Jellyfin client for Apple TV (and iPhone/iPad), with the goal of being as simple to
-use as possible and following Apple's SwiftUI guidelines.
+<p align="center">
+  <img src="https://img.shields.io/badge/tvOS-26-0B1D28?logo=apple&logoColor=white" alt="tvOS 26">
+  <img src="https://img.shields.io/badge/iOS-26-0B1D28?logo=apple&logoColor=white" alt="iOS 26">
+  <img src="https://img.shields.io/badge/Jellyfin-10.8%2B-0D4A57?logo=jellyfin&logoColor=white" alt="Jellyfin 10.8+">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licence-MPL--2.0-0D4A57" alt="MPL-2.0"></a>
+  <a href="https://github.com/helop-ou/lagoon/actions/workflows/tests.yml"><img src="https://github.com/helop-ou/lagoon/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
+</p>
 
-Lagoon is in public beta: [join it on
-TestFlight](https://testflight.apple.com/join/PwjnXuAt), or read more at
-[lagoon.helop.dev](https://lagoon.helop.dev).
+<p align="center">
+  <a href="https://testflight.apple.com/join/PwjnXuAt"><img src="https://img.shields.io/badge/Join_the_beta-TestFlight-2ED4C7?style=for-the-badge&logo=apple&logoColor=0B1D28&labelColor=E9F1F2" alt="Join the beta on TestFlight"></a>
+  <a href="https://lagoon.helop.dev"><img src="https://img.shields.io/badge/lagoon.helop.dev-0B1D28?style=for-the-badge&logo=safari&logoColor=2ED4C7" alt="lagoon.helop.dev"></a>
+</p>
+
+<p align="center">
+  <img src=".github/readme/screens/tvos-movie-detail.webp" width="49%" alt="Movie detail page">
+  <img src=".github/readme/screens/tvos-library.webp" width="49%" alt="Library">
+  <img src=".github/readme/screens/tvos-player-video-panel.webp" width="49%" alt="Player with the video panel open">
+  <img src=".github/readme/screens/tvos-watch-together.webp" width="49%" alt="Watch Together">
+</p>
 
 ## Features
 
-- Connect by address (schemeless input works: Lagoon probes https/http and
-  Jellyfin's default `:8096`), sign in with password or **Quick Connect**
-- Featured banners on Home and Discover: swipe between titles on iPhone/iPad,
-  or use Left/Right on Apple TV
-- Native home rows, so Home wouldn't feel empty without Home Screen Sections plugin
-- Unified Library with Movies/Shows, sorting, library/genre/decade/watch-state
-  filters, a 4K movie filter, and selections remembered per account
-- Movie and series detail pages - seasons, episode rail, resume points
-- Native playback: direct play when the file allows it, server-side HLS
-  transcode when it doesn't
-- Search your Jellyfin library and Seerr, with recent searches, See All, and
-  paginated full results
-- Multiple accounts and servers with keychain-persisted sessions
-- tvOS 26 Liquid Glass design, dark-locked on both platforms
-- Jellyfin Syncplay support
-- Subtitle fetching from your server
-- Offline playback (via Downloads)
+- **Sign in** by address, without a scheme or port, with a password or Quick Connect
+- **Home and Discover** with featured banners and native rows, no Home Screen Sections plugin needed
+- **Library** of Movies and Shows with sorting and filters, remembered per account
+- **Detail pages** with seasons, an episode rail and resume points
+- **Playback** that plays the file directly when it can and asks the server to transcode when it can't ([codec support](docs/codec-support.md))
+- **Search** across your library and Seerr
+- **SyncPlay** to watch together
+- **Subtitles** fetched from your server
+- **Downloads** for offline playback on iPhone and iPad
+- **Multiple accounts and servers**, with sessions kept in the keychain
+- **Liquid Glass** on tvOS 26, dark on both platforms
 
-## Building
+## More
 
-Open `Lagoon.xcodeproj` in Xcode 26 and run the `Lagoon` scheme on an Apple TV
-or iOS destination, or:
-
-```sh
-xcodebuild -scheme Lagoon -destination 'generic/platform=tvOS Simulator' build
-xcodebuild -scheme Lagoon -destination 'generic/platform=iOS Simulator' build
-```
-
-The app is one multiplatform target with tvOS/iOS 26.0 deployment targets,
-plus tvOS Top Shelf and test targets. The
-[`LagoonEngine`](https://github.com/helop-ou/lagoon-engine) package is the
-single dependency, resolved at a tagged version and carrying the FFmpeg
-libraries the custom sample-buffer player decodes with.
-
-To try it without a home server, connect to the public Jellyfin demo:
-`demo.jellyfin.org/stable`, user `demo`, empty password.
+- [FAQ](FAQ.md): why another client, AI use, formats, Jellyfin versions, telemetry
+- [Contributing](CONTRIBUTING.md): building, tests and the public demo server
+- [Documentation](docs/README.md): architecture, design, Jellyfin API, playback and release
+- [Security](SECURITY.md) reports go privately by email, and taking part means keeping to the [Code of Conduct](CODE_OF_CONDUCT.md)
 
 ## Licence
 
-Lagoon's own code is under the **Mozilla Public License 2.0**
-([LICENSE](LICENSE)). Fork it, change it, ship it, publish your changes to the
-files it covers, and say where they came from.
-
-The Lagoon name and brand artwork are not part of that grant. Give a fork its
-own name and icon - [TRADEMARKS.md](TRADEMARKS.md) explains what is carved out
-and why.
-
-### Third-party notices
-
-The native libraries Lagoon links carry their own licences. The bundled texts
-are in [`Lagoon/Resources/Licenses`](Lagoon/Resources/Licenses), and the app
-shows the same list under Settings → About → Acknowledgements with the version
-and source each binary was built from. The artifacts themselves belong to the
-[`LagoonEngine`](https://github.com/helop-ou/lagoon-engine) package, which
-keeps each one's provenance and rebuild instructions beside it.
-
-## Documentation
-
-Start with the [documentation index](docs/README.md) and [coding
-standards](docs/standards.md). The guides cover architecture, design, the
-Jellyfin API, playback and release.
-
-[Contributing](CONTRIBUTING.md) has the prerequisites, build and test
-commands, and repository conventions. [Security reports](SECURITY.md) go
-privately by email rather than into an issue. Taking part here means keeping
-to the [Code of Conduct](CODE_OF_CONDUCT.md).
-
-## Compatibility
-
-Uses Jellyfin's user-scoped HTTP API, which Jellyfin 10.8 and later expose, so
-Lagoon works against 10.8 through current. Jellyfin 10.11.11, 12.0.0 and 12.1 have been tested thoroughly.
-
-## AI Disclaimer
-
-Even though this info is also in the FAQ, but just in case, AI has been used in the development and documentation process of this project.
-I am a full-time SWE and I do review and test the changes made by Claude, or Codex.
-
-## FAQ
-
-### Why another client?
-
-Fair question, and I understand. It is also why I am not advertising Lagoon
-anywhere (also because I'm quite bad at marketing).
-
-I built it for myself and for the people using my own Jellyfin server, who
-kept telling me there was nothing that just worked unless they paid for
-Infuse. The second reason is the engine: the sample-buffer player underneath
-Lagoon took most of the effort here, and I would rather it existed as
-something others can build on than not exist at all.
-
-### Was AI used in this project?
-
-Yes. I review and test everything it writes, and every change goes through me
-and through an internal TestFlight build before it reaches anyone else. I am a
-full-time senior SWE and my time outside work is limited and without AI this project
-would've taken me quite a while longer to get it ready for a release.
-
-### How is this better than other clients?
-
-For a specific need you already have covered, probably it is not. Lagoon aims
-to be simple enough that you can point a non-techy friend at it, have them
-sign in, and have it play, ideally without the server re-encoding anything.
-
-There are some very good clients out there and I won't be here, trying to
-advertise that my client is better than the other ones.
-
-### What formats are supported?
-
-[**Codec support**](docs/codec-support.md) has the full table: containers,
-video and audio codecs, subtitle formats, and the conditions attached to each.
-
-It is generated from the capability profile the app sends the server, so it is
-accurate by construction rather than by me remembering to update it.
-
-I won't throw in promises that this will play anything and will never transcode, but 
-I do try to have as wide as a support for most stuff as possible.
-
-### Does it work offline?
-
-On iPhone and iPad, yes. Films and episodes can be downloaded and played back.
-Whether your account may download is decided by your Jellyfin
-server, not by Lagoon.
-
-### Does it work with Jellyseerr?
-
-Yes, optionally. Connect it and requests and discovery appear alongside your
-library. Without it, Lagoon works exactly as before.
-
-## Does it have any telemetry?
-In a sense, yes, it has a custom Sentry diagnostic chain built-in.
-The reason for that is because reporting issues is always the point that has the most
-friction, and I wanted to have something that would automatically send some basic info to me if
-any issues are detected. The Sentry info is completely anonymous though, no info about your server,
-connection, or anything like that is ever sent to me (you can check the code). It is also possible to trun
-it off completely in settings.
-
-### Why target tvOS and iOS 26?
-
-Because most iOS devices are kept up to date and since I made the project mostly for me,
-I don't know anyone who uses OS versions older than those.
-
-This is not set in stone and may change in the future, although I doubt I will be supporting anything older
-than 26 proactively.
+Lagoon's code is [MPL-2.0](LICENSE). The name and brand artwork are not part
+of that grant, see [TRADEMARKS.md](TRADEMARKS.md). The native libraries carry
+their own licences, in [`Lagoon/Resources/Licenses`](Lagoon/Resources/Licenses)
+and in the app under Settings → About → Acknowledgements.
