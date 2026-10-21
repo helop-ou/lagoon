@@ -398,6 +398,36 @@ struct PlaybackAutomationTests {
         #expect(played)
     }
 
+    @Test func inAListTheBarFollowsThePlayheadThroughTheCredits() {
+        let automation = automation(segments: [Self.intro, Self.outro], countdownWaitsForEnd: true)
+
+        automation.tick(position: 1_100, duration: 1_320)
+        #expect(automation.nextUpListFill == nil)
+        automation.tick(position: 1_200, duration: 1_320)
+        #expect(automation.nextUpListFill == 0)
+        automation.tick(position: 1_260, duration: 1_320)
+        #expect(automation.nextUpListFill == 0.5)
+        // The final countdown must not restart the bar from empty.
+        automation.tick(position: 1_317, duration: 1_320)
+        #expect(automation.isCountingDown)
+        #expect(automation.nextUpListFill == 117.0 / 120)
+    }
+
+    @Test func outsideAListTheBarIsTheCountdownsOwn() {
+        let automation = automation(segments: [Self.intro, Self.outro])
+        automation.tick(position: 1_201, duration: 1_320)
+        #expect(automation.showsNextUp)
+        #expect(automation.nextUpListFill == nil)
+        #expect(automation.nextUpTiming != nil)
+    }
+
+    @Test func inAListWithoutCountdownsTheCardHasNoBar() {
+        let automation = automation(autoplay: .card, segments: [Self.intro, Self.outro], countdownWaitsForEnd: true)
+        automation.tick(position: 1_260, duration: 1_320)
+        #expect(automation.showsNextUp)
+        #expect(automation.nextUpListFill == nil)
+    }
+
     @Test func inAListThePlayNowOfferStillTakesTheViewerOnAtTheCredits() {
         let automation = automation(segments: [Self.intro, Self.outro], countdownWaitsForEnd: true)
         var played = false

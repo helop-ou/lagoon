@@ -91,6 +91,14 @@ final class PlaybackAutomation {
         defaults.string(forKey: AutoplayMode.defaultsKey).flatMap(AutoplayMode.init) ?? .autoDelay
     }
 
+    /// The card's fill in a list, where it tracks the playhead to the end of
+    /// the file. Nil elsewhere, where `nextUpTiming` draws it.
+    var nextUpListFill: Double? {
+        guard countdownWaitsForEnd, showsNextUp, autoplayMode == .autoDelay,
+              let nextUpCardStart else { return nil }
+        return NextUpPolicy.listFill(position: position, cardStart: nextUpCardStart, duration: duration)
+    }
+
     var autoplaysOnFinish: Bool {
         autoplayMode == .autoDelay && nextUpAnswer != .stay && hasNextUp
     }
