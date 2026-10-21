@@ -173,6 +173,9 @@ reports after the push.
   run's artifacts.
 - UI journeys do not run in CI: they need a server and minutes per test. See
   the [regression lane](reference/regression-lane.md).
+- SonarCloud's automatic analysis also checks every pull request, through
+  its GitHub app rather than a workflow. `.sonarcloud.properties` says which
+  folders are app code and which are tests. It reads no coverage.
 
 [Design system](design-system.md) owns tokens, controls, focus, artwork and
 accessibility, [Jellyfin API](jellyfin-api.md) owns wire contracts, and
