@@ -168,7 +168,7 @@ struct PlayerNextUpCard: View {
     }
 }
 
-private nonisolated enum NextUpMetrics {
+nonisolated enum NextUpMetrics {
     #if os(tvOS)
     static let width: CGFloat = 520
     static let thumbnailWidth: CGFloat = 150
