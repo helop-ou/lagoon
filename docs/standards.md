@@ -173,9 +173,15 @@ reports after the push.
   run's artifacts.
 - UI journeys do not run in CI: they need a server and minutes per test. See
   the [regression lane](reference/regression-lane.md).
-- SonarCloud's automatic analysis also checks every pull request, through
-  its GitHub app rather than a workflow. `.sonarcloud.properties` says which
-  folders are app code and which are tests. It reads no coverage.
+- Both test jobs collect coverage, and `scripts/coverage-to-sonar.py` turns
+  each result bundle into Sonar's format. A third job then runs the SonarCloud
+  scan with both reports, using the `SONAR_TOKEN` secret, and SonarCloud's
+  app reports the quality gate on the pull request.
+  `sonar-project.properties` says which folders are app code and which are
+  tests, and leaves SwiftUI views out of coverage: snapshots and the
+  simulator check those. Automatic analysis in SonarCloud must stay off, or
+  the two analyses collide. A fork's pull request has no secrets, so it skips
+  the scan.
 
 [Design system](design-system.md) owns tokens, controls, focus, artwork and
 accessibility, [Jellyfin API](jellyfin-api.md) owns wire contracts, and
