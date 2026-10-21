@@ -46,7 +46,11 @@ nonisolated enum Changelog {
     /// Notes merged since the last release. The release workflow's prepare
     /// action moves them into a new entry, so a pull request never bumps the
     /// build or edits a shipped entry.
-    static let unreleased: [ChangelogSection] = []
+    static let unreleased: [ChangelogSection] = [
+        ChangelogSection(category: .bugFixes, changes: [
+            "In a collection or playlist, the Up Next bar fills as the credits roll instead of staying empty until the last seconds.",
+        ]),
+    ]
 
     /// Newest first. The prepare action adds the top one. The About screen
     /// highlights whichever one matches the running bundle.
