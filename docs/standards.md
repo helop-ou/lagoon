@@ -178,7 +178,9 @@ reports after the push.
 - Both test jobs collect coverage, and `scripts/coverage-to-sonar.py` turns
   each result bundle into Sonar's format. A third job then runs the SonarCloud
   scan with both reports, using the `SONAR_TOKEN` secret, and SonarCloud's
-  app reports the quality gate on the pull request.
+  app reports the quality gate on the pull request. The scan action is the
+  one action from outside GitHub that the repository allows, pinned to a
+  commit. Move the pin and its version comment together.
   `sonar-project.properties` says which folders are app code and which are
   tests, and leaves SwiftUI views out of coverage: snapshots and the
   simulator check those. Automatic analysis in SonarCloud must stay off, or
