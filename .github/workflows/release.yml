@@ -5,9 +5,17 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: "trial: sign both apps, upload nothing. upload: send an external-eligible build to App Store Connect. publish: create the GitHub release of a build that went out."
+        description: "prepare: open the release pull request for the unreleased notes. trial: sign both apps, upload nothing. upload: send an external-eligible build to App Store Connect. publish: create the GitHub release of a build that went out."
         type: choice
-        options: [trial, upload, publish]
+        options: [prepare, trial, upload, publish]
+      bump:
+        description: "Version bump, for prepare only. Major for a significant rework, minor for new features, patch for fixes only."
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+      headline:
+        description: "The release's one-line headline, for prepare only."
+        required: false
       build:
         description: "Build to publish, for publish only. Empty publishes the build main declares."
         required: false
@@ -17,9 +25,39 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  prepare:
+    name: prepare
+    if: inputs.action == 'prepare'
+    environment: release
+    runs-on: xcode-27
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
+      BUMP: ${{ inputs.bump }}
+      HEADLINE: ${{ inputs.headline }}
+      # Not github.token: a pull request it opens never starts the checks main requires.
+      GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.RELEASE_TOKEN }}
+
+      # CHANGELOG.md is rendered by a test, which builds.
+      - name: Install the Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
+
+      - name: Prepare
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          scripts/prepare-release.sh "$BUMP" "$HEADLINE" --open-pr
+
   archive:
     name: ${{ inputs.action }}
-    if: inputs.action != 'publish'
+    if: inputs.action == 'trial' || inputs.action == 'upload'
     # Holds the secrets, and only main may use it.
     environment: release
     runs-on: xcode-27
