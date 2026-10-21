@@ -41,6 +41,13 @@ nonisolated enum NextUpPolicy {
         guard duration > 0 else { return nil }
         return max(duration - AutoplayMode.countdownSeconds, 0)
     }
+
+    /// A list's countdown waits for the end of the file, so its bar follows
+    /// the playhead from the card to the end rather than sitting empty.
+    static func listFill(position: Double, cardStart: Double, duration: Double) -> Double {
+        guard duration > cardStart else { return 1 }
+        return min(max((position - cardStart) / (duration - cardStart), 0), 1)
+    }
 }
 
 extension NextUpEpisode {
@@ -74,10 +81,12 @@ struct PlayerNextUpOverlay: View {
         let isCardVisible = automation.showsNextUp
         Group {
             if isCardVisible, let episode {
+                let listFill = automation.nextUpListFill
                 PlayerNextUpCard(
                     episode: episode,
                     showsCountdown: automation.autoplayMode == .autoDelay,
-                    countdown: automation.nextUpTiming,
+                    fill: listFill ?? 0,
+                    countdown: listFill == nil ? automation.nextUpTiming : nil,
                     hint: hint
                 )
                 .playerCornerPrompt(reduceMotion: reduceMotion)

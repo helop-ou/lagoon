@@ -364,7 +364,9 @@ integration](reference/playback/system-integration.md).
   inside the segment. Select and a tap go straight through.
 - In a list queue (a collection or playlist) the Up Next card still appears
   at the credits, but its countdown waits for the file's last seconds, so a
-  scene after a movie's credits plays.
+  scene after a movie's credits plays. Its bar follows the playhead from the
+  card to the end of the file instead of the deadline, so it never sits empty
+  through the credits or restarts when the final countdown begins.
 - An accepted hand-off keeps its card through `playNext` while the successor
   prepares, so the offer never looks withdrawn.
 
