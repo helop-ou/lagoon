@@ -154,8 +154,10 @@ requests on each pull request.
 
 `.github/workflows/tests.yml` runs the unit suite on tvOS and iOS for every
 pull request, the same `xcodebuild test` as a local run, and `main` accepts
-only pull requests whose two test jobs passed. Nothing runs on a schedule: a
-run with no new code can only fail because of the runner or a server. CI is a
+only pull requests whose two test jobs passed. It runs again on each merge
+to `main`, so SonarCloud's dashboard for `main` stays current. Nothing runs on
+a schedule: a run with no new code can only fail because of the runner or a
+server. CI is a
 backstop, not a replacement: run the tests before pushing, because CI only
 reports after the push.
 

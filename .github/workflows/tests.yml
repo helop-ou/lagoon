@@ -3,6 +3,9 @@ name: Tests
 
 on:
   pull_request:
+  # Keeps SonarCloud's main dashboard and its coverage current.
+  push:
+    branches: [main]
 
 concurrency:
   group: tests-${{ github.ref }}
@@ -93,7 +96,7 @@ jobs:
     name: SonarCloud scan
     needs: unit-tests
     # A fork's pull request gets no secrets.
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
