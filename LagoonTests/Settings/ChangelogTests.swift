@@ -14,8 +14,8 @@ struct ChangelogTests {
             Changelog.runningBuildIsListed(),
             """
             No Changelog entry for \(version) (\(build)).
-            Add one at the top of Changelog.entries in \
-            Lagoon/Features/Settings/Changelog.swift before shipping this build.
+            The release workflow's prepare action adds it from \
+            Changelog.unreleased. See docs/release.md.
             """
         )
     }
@@ -80,6 +80,21 @@ struct ChangelogTests {
             for section in entry.sections {
                 #expect(!section.changes.isEmpty,
                         "\(entry.id) has an empty \(section.category.rawValue) section")
+            }
+        }
+    }
+
+    /// They become an entry as they are, so they meet the same rules now.
+    @Test func unreleasedNotesAreReadyToShip() {
+        let emDash = "\u{2014}"
+        let categories = Changelog.unreleased.map(\.category)
+        #expect(categories == ChangelogCategory.allCases.filter { categories.contains($0) },
+                "Unreleased categories are repeated or out of order")
+        for section in Changelog.unreleased {
+            #expect(!section.changes.isEmpty, "Unreleased has an empty \(section.category.rawValue) section")
+            for change in section.changes {
+                #expect(!change.trimmingCharacters(in: .whitespaces).isEmpty)
+                #expect(!change.contains(emDash), "Em-dash in an unreleased note: \(change)")
             }
         }
     }
