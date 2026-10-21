@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
-"""Writes an Xcode result bundle's app coverage as SonarQube generic coverage.
+"""Writes a test run's app coverage as SonarQube generic coverage.
 
-    scripts/coverage-to-sonar.py build/TestResults.xcresult build/coverage.xml
+    scripts/coverage-to-sonar.py tvOS   # build/TestResults.xcresult to build/coverage-tvOS.xml
+
+Paths are fixed and the platform comes from a list, so nothing from the
+command line reaches the file system or xccov.
 
 Only the app and Top Shelf sources are kept. Sonar ignores coverage for test
 files, and the engine package lives in its own repository.
@@ -13,15 +16,21 @@ from pathlib import Path
 from xml.sax.saxutils import quoteattr
 
 SOURCE_ROOTS = ("Lagoon", "LagoonTopShelf")
+ROOT = Path(__file__).resolve().parent.parent
+RESULT = ROOT / "build" / "TestResults.xcresult"
+OUTPUTS = {
+    "tvOS": ROOT / "build" / "coverage-tvOS.xml",
+    "iOS": ROOT / "build" / "coverage-iOS.xml",
+}
 
 
 def main() -> None:
-    if len(sys.argv) != 3:
-        sys.exit("usage: coverage-to-sonar.py <result bundle> <output xml>")
-    result, output = sys.argv[1:]
-    root = Path(__file__).resolve().parent.parent
+    platform = sys.argv[1] if len(sys.argv) == 2 else ""
+    if platform not in OUTPUTS:
+        sys.exit(f"usage: coverage-to-sonar.py <{'|'.join(OUTPUTS)}>")
+    output = OUTPUTS[platform]
     archive = json.loads(subprocess.run(
-        ["xcrun", "xccov", "view", "--archive", "--json", result],
+        ["xcrun", "xccov", "view", "--archive", "--json", str(RESULT)],
         check=True, capture_output=True, text=True,
     ).stdout)
 
@@ -29,7 +38,7 @@ def main() -> None:
     files = 0
     for path in sorted(archive):
         try:
-            relative = Path(path).resolve().relative_to(root)
+            relative = Path(path).resolve().relative_to(ROOT)
         except ValueError:
             continue
         if relative.parts[0] not in SOURCE_ROOTS:
@@ -46,9 +55,9 @@ def main() -> None:
     lines.append("</coverage>")
 
     if files == 0:
-        sys.exit(f"error: {result} has no coverage for {', '.join(SOURCE_ROOTS)}")
-    Path(output).write_text("\n".join(lines) + "\n", encoding="utf-8")
-    print(f"wrote {output} ({files} files)")
+        sys.exit(f"error: {RESULT} has no coverage for {', '.join(SOURCE_ROOTS)}")
+    output.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    print(f"wrote {output.relative_to(ROOT)} ({files} files)")
 
 
 if __name__ == "__main__":
