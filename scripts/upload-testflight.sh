@@ -101,9 +101,9 @@ if ! grep -A 2 "version: \"${version}\"" "$changelog" | grep -q "build: \"${buil
     cat >&2 <<EOF
 error: no Changelog entry for ${version} (${build}).
 
-Add one at the top of Lagoon/Features/Settings/Changelog.swift, then commit it with the
-build-number bump. Shipping a build nobody wrote notes for is the thing this
-whole setup exists to prevent.
+Run the release workflow's prepare action and merge the pull request it opens.
+It turns the unreleased notes into this entry. Shipping a build nobody wrote
+notes for is the thing this whole setup exists to prevent.
 EOF
     exit 1
 fi
@@ -235,6 +235,6 @@ Uploaded. App Store Connect should show ${version} (${build}) once processing
 finishes — if it shows a higher build, something renumbered it and
 ExportOptions.plist is not being honoured.
 
-Then run scripts/bump-build.sh for the next one.
+The next release starts from the release workflow's prepare action.
 EOF
 fi
