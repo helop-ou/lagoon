@@ -10,80 +10,69 @@ The whole sequence. Read the linked sections before doing it the first time.
 [Public release](#public-release) has further gates this list does not cover.
 
 ```sh
-scripts/bump-build.sh                             #  1. next build number
-#  2. write the entry in Changelog.swift, by hand
-scripts/generate-changelog.sh                     #  3. regenerate CHANGELOG.md
+#  1. pull requests add viewer-visible lines to Changelog.unreleased
+#  2. Actions, Release, prepare: pick the bump, write the headline
+#  3. merge the release pull request it opens, once its checks pass
 scripts/generate-site-facts.sh                    #  4. the website's facts
-xcodebuild -scheme Lagoon -destination 'generic/platform=tvOS Simulator' build
-xcodebuild -scheme Lagoon -destination 'generic/platform=iOS Simulator' build
-xcodebuild test -scheme Lagoon \                  #  5. both builds, then tests
-  -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)' \
-  -collect-test-diagnostics never
-xcodebuild test -scheme Lagoon \
-  -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
-  -collect-test-diagnostics never
-#  6. commit, one change per commit, and push
-cp .env.example .env                              #  7. once: fill in the DSN
-scripts/upload-testflight.sh both --archive-only  #  8. archive with the DSN
-#  9. upload in Xcode's Organizer, add to the external group, wait for review
-scripts/publish-release.sh <build>                # 10. tag and publish
+#  5. Actions, Release, upload
+#  6. add the build to the external group, wait for review
+#  7. Actions, Release, publish
 ```
 
-1. **[Bump the build](#version-and-changelog)**, only for something you will
-   distribute. Decide the marketing version here: minor for new features,
-   patch for fixes only.
-2. **Write the changelog entry** for a viewer, not a reader of the diff.
-   `ChangelogTests` fails until the declared build has one.
-3. **[Regenerate `CHANGELOG.md`](#the-published-changelog).** It becomes the
-   release body in step 10.
-4. **[Regenerate the website's facts](#version-and-changelog)** and commit
-   them in `lagoon-website`. The site serves the old version until its own,
-   separate deploy.
-5. **Build both platforms and run the unit suite on both.** Archiving runs no tests.
-6. **Commit and push.** Step 10 refuses a revision the remote lacks.
-7. **Fill in `.env`**, once per checkout. See
-   [`.env.example`](../.env.example). The shell still overrides it.
-8. **[Archive](#internal-testflight)** with `--archive-only` when uploading
-   through Xcode, because an Xcode-made archive has diagnostics off.
-9. **Upload** as **App Store Connect**, not TestFlight Internal Only, with
-   **Automatically manage version and build number** unticked. Add the build
-   to the external group and wait for [Beta App Review](#external-testflight).
-10. **[Publish the release](#release-tags)**, after acceptance.
+1. **[Collect the notes](#version-and-changelog)** as work lands. A pull
+   request adds its lines to `Changelog.unreleased` and never touches the
+   build number, the version or a shipped entry.
+2. **[Prepare](#releasing-from-ci).** Choose patch for fixes only, minor for
+   new features, major for a significant rework, and write the headline. The
+   action opens a pull request that turns the unreleased notes into the new
+   entry, advances the build and version, and regenerates `CHANGELOG.md`.
+3. **Merge it.** Its checks build both platforms and run both unit suites.
+   Once merged, `main` declares the build that will ship.
+4. **[Regenerate the website's facts](#version-and-changelog)** from `main`
+   and commit them in `lagoon-website`. The site serves the old version until
+   its own, separate deploy.
+5. **[Upload](#releasing-from-ci)** from `main`. It records the revision it
+   archived.
+6. **Add the build to the external group** in App Store Connect and wait for
+   [Beta App Review](#external-testflight).
+7. **[Publish the release](#release-tags)**, after acceptance.
+
+Without the workflow, `scripts/prepare-release.sh <bump> "<headline>"` stamps
+the same files locally for you to commit through a pull request, and
+[Internal TestFlight](#internal-testflight) covers uploading from a Mac.
 
 ## Version and changelog
 
-**Build number.** Lagoon owns its build numbers. Bump only for a build you
-will distribute, not per commit. `scripts/bump-build.sh` advances all
-configurations and the app and Top Shelf together, and `--set <number>` picks an
-explicit higher number. It rejects backwards numbering and configuration
-drift. The build number, not the version, identifies a binary. About shows
-both as `0.2.0 (107)`.
+**Build number.** Lagoon owns its build numbers, and only the prepare step
+advances them, once per build that will be distributed. It calls
+`scripts/bump-build.sh`, which moves all configurations and the app and Top
+Shelf together and rejects backwards numbering and configuration drift. The
+build number, not the version, identifies a binary. About shows both as
+`0.2.0 (107)`.
 
 **Marketing version.** Always `MAJOR.MINOR.PATCH`: major for a significant
 rework, minor for new features, patch for fixes only. It borrows semantic
 versioning's shape, not its promise, since Lagoon has no API. (A package
-extracted from this repo would use real semver.)
+extracted from this repo would use real semver.) Prepare takes the bump and
+writes `MARKETING_VERSION` in both configurations of
+`Lagoon.xcodeproj/project.pbxproj`. **Never use `xcrun agvtool
+new-marketing-version`**: with `GENERATE_INFOPLIST_FILE = YES` the version
+keys come from build settings, so agvtool reports success and changes
+nothing.
 
-Change it by editing `MARKETING_VERSION` in both configurations of
-`Lagoon.xcodeproj/project.pbxproj`, or in Xcode's target editor. **Never with
-`xcrun agvtool new-marketing-version`**: with `GENERATE_INFOPLIST_FILE = YES`
-the version keys come from build settings, so agvtool reports success and
-changes nothing.
+**Unreleased notes.** A change a viewer would notice adds its line to
+`Changelog.unreleased` in
+[`Changelog.swift`](../Lagoon/Features/Settings/Changelog.swift), in the pull
+request that makes the change. Anything there has not shipped, so nobody has
+to ask whether the top entry is still open. Prepare moves the lines into a new
+entry with the version, build, release month and headline, and empties the
+list. Entries are newest first. Tests require the installed version and
+build to have an entry, and hold unreleased lines to the same rules. Builds
+from before the changelog are not reconstructed.
 
-**Changelog entry.** Write it in
-[`Changelog.swift`](../Lagoon/Features/Settings/Changelog.swift) before
-archiving. Entries are newest first, with version, build, release month,
-headline and viewer-visible changes. Tests require the installed version and
-build to have an entry. Builds from before the changelog are not
-reconstructed.
-
-**Check the top entry is still open.** The repository cannot tell you. A
-build goes out at upload but is tagged only after acceptance, and nothing
-records the archive in between, so an untagged top entry may already be on
-testers' devices. Ask whoever cuts builds before adding a line to it. If it
-has shipped, run `scripts/bump-build.sh` and open a new entry, moving any
-unshipped lines into it so the shipped entry describes only what that build
-carried.
+Prepare refuses while the build `main` declares has never been uploaded,
+since that build is still the next release. It also refuses when there are no
+unreleased notes.
 
 - One line per noticeable improvement, most useful first. Describe the fixed
   symptom and any setup needed.
@@ -91,15 +80,17 @@ carried.
   why or how. Causes and caveats go in the commit.
 - No ticket keys, filenames, internal refactors, tests, docs, or fixes to
   work that never shipped. No em dashes. `ChangelogTests` enforces this.
-- Notes are written per release, not generated per commit.
+- Notes are written per change and collected per release, not generated from
+  commits.
 - About groups each build's notes as **New features**, **Improvements** or
   **Bug fixes**. Keep related notes under the category a viewer would
-  notice. About badges the installed build.
+  notice, in that order. About badges the installed build.
 
 ### The published changelog
 
-[`CHANGELOG.md`](../CHANGELOG.md) is generated from `Changelog.swift` by
-`scripts/generate-changelog.sh`. Never edit it by hand. The About screen, the
+[`CHANGELOG.md`](../CHANGELOG.md) is generated from `Changelog.entries` by
+`scripts/generate-changelog.sh`, which prepare runs. Unreleased notes are not
+in it. Never edit it by hand. The About screen, the
 Markdown file and the GitHub release body are three renderings of one source,
 so they cannot disagree. `ChangelogTests` checks what it can: the declared
 build has an entry, categories are in order, no em dashes.
@@ -179,7 +170,8 @@ One-time setup: the team in `DEVELOPMENT_TEAM` in the project file, bundle ID
 both platforms. Xcode may need a registered physical device (connected, or its
 UDID in the portal) to create the first development profiles.
 
-1. Choose the revision, bump the build and write its changelog entry.
+1. Merge the release pull request from prepare, so `main` declares the build
+   and has its changelog entry.
 2. Run the iOS and tvOS unit suites, including `ChangelogTests`, plus the UI
    and physical journeys relevant to the changes. Archive runs no tests.
 3. Archive separately for generic tvOS and iOS devices. Use the internal-only
@@ -285,8 +277,13 @@ release](#public-release).
 `.github/workflows/release.yml` runs only when started by hand (Actions,
 Release, Run workflow). Its jobs use the `release` environment, which only
 `main` may use, so a run from any other branch never gets the secrets. It has
-three actions:
+four actions:
 
+- **prepare** runs `scripts/prepare-release.sh` with the chosen bump and
+  headline, which stamps the release as [above](#version-and-changelog),
+  then pushes `chore/release-<version>` and opens its pull request. It acts
+  through `RELEASE_TOKEN`, because a pull request opened with the workflow's
+  own token never starts the checks `main` requires.
 - **trial** archives and signs both platforms with `--export-only`. Nothing
   is uploaded or kept, since artifacts of a public repository are public. Run
   it after a signing or Xcode change.
@@ -307,6 +304,10 @@ Environments, release), never to the repository:
 | `ASC_ISSUER_ID` | The issuer id from the same page |
 | `ASC_KEY_P8` | The full contents of the `.p8` file |
 | `LAGOON_SENTRY_DSN` | As in `.env` |
+| `RELEASE_TOKEN` | A fine-grained token for this repository with Contents and Pull requests read and write |
+
+`RELEASE_TOKEN` expires. When prepare fails to push or open its pull request,
+renew it first.
 
 The key needs the Admin role. App Manager can upload, but the runner has no
 certificates, so the key must also create the development certificate the
