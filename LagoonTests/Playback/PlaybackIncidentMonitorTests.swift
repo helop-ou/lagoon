@@ -229,6 +229,24 @@ struct PlaybackIncidentMonitorTests {
         }
     }
 
+    @Test func anAbandonedStartSaysWhereItWasHeadedAndWhatArrived() throws {
+        let sink = CapturingSink()
+        let hub = DiagnosticsHub(sink: sink, reportingEnabled: { true })
+        let monitor = PlaybackIncidentMonitor(hub: hub)
+        monitor.beginAttempt(delivery: .negotiated, method: .transcode, source: try Self.source(), cached: false, disc: false, resumeSeconds: 1_200)
+        monitor.startStalled(.noProgress, waitedSeconds: 34.2, startSeconds: 1_200, bytesRead: 0, delivery: .negotiated, engine: nil)
+        let incident = try #require(sink.incidents.first)
+        #expect(sink.incidents.count == 1)
+        #expect(incident.code == .playbackStartStalled)
+        #expect(incident.fingerprint == ["playback.startStalled", "noProgress"])
+        #expect(incident.fields["position"] == .double(1_200))
+        #expect(incident.fields["elapsedMs"] == .double(34_200))
+        #expect(incident.fields["bytesRead"] == .int(0))
+        #expect(incident.fields["method"] == .string("Transcode"))
+        #expect(incident.fields["stage"] == .string("start"))
+        #expect(incident.fields["schemaRejected"] == nil)
+    }
+
     /// The source names the title and its path, and the engine's message
     /// carries a stream URL with the access token. None of it may leave the
     /// device, in an incident's own fields or in the history riding along.
