@@ -353,6 +353,30 @@ final class PlaybackIncidentMonitor {
         }
     }
 
+    /// The engine never presented a first frame and the start was abandoned.
+    /// `startSeconds` is where it was asked to start: the engine's own
+    /// position reads 0 until its first frame.
+    func startStalled(
+        _ reason: PlaybackStartWatchdog.Reason,
+        waitedSeconds: Double,
+        startSeconds: Double,
+        bytesRead: Int64,
+        delivery: PlaybackDelivery,
+        engine: DiagnosableEngine?
+    ) {
+        var fields = incidentFields(extra: engine.map { Self.pipelineFields($0) } ?? [:])
+        fields["delivery"] = .string(delivery.rawValue)
+        fields["stage"] = .string("start")
+        fields["position"] = .double(startSeconds.rounded(toPlaces: 1))
+        fields["elapsedMs"] = .double((waitedSeconds * 1_000).rounded())
+        fields["bytesRead"] = .int(Int(bytesRead))
+        fields["outcome"] = .string("failed")
+        hub.record(.playbackFailure, fields)
+        // A stalled fallback rung is that fallback's verdict.
+        resolvePendingFallback(outcome: "failed")
+        hub.report(.playbackStartStalled, level: .error, variant: [reason.rawValue], fields: fields)
+    }
+
     /// `elapsedMs` runs from the failure to the verdict.
     private func resolvePendingFallback(outcome: String) {
         guard let pending = pendingFallback else { return }

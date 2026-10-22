@@ -22,6 +22,8 @@ nonisolated enum DiagnosticIncidentCode: String, Sendable, CaseIterable {
     case playbackSubtitleLoadFailed = "playback.subtitleLoadFailed"
     /// The next episode did not take over.
     case playbackHandoffFailed = "playback.handoffFailed"
+    /// The engine never presented a first frame and the start was abandoned.
+    case playbackStartStalled = "playback.startStalled"
     /// A request failed for a reason other than offline or auth.
     case apiRequestFailed = "api.requestFailed"
     /// A response the app could not decode.
