@@ -94,6 +94,9 @@ nonisolated enum DiagnosticSchema {
         /// What the link delivered while busy, in bit/s like `bitrate`, so a
         /// slow link reads as one rather than as an engine problem.
         "networkBitrate": .int,
+        /// What the cache served before a start was abandoned. Zero for HLS,
+        /// which reads around it.
+        "bytesRead": .int,
         "audioLead": .double,
         "stalls": .int,
         "audioStalls": .int,
