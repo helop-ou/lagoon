@@ -56,6 +56,11 @@ failure-driven delivery ladder go direct play → remux → video transcode.
 - **A `.delivery` verdict never skips to the re-encode.** It goes to remux
   first, and only a remux that fails too, for either cause, falls to the
   transcode.
+- **A start that stops getting anywhere ends in an error, not a rung.** The
+  engine has no stall detection before its first frame, so the controller's
+  start watchdog gives up and reports `playback.startStalled`. It is not a
+  verdict on the samples. See the [diagnostics
+  reference](reference/playback/diagnostics.md#detectors-and-thresholds).
 
 The engine guards its own verdicts: a reclaimed decode session is rebuilt,
 not reported undecodable, and a just-flushed renderer refuses a non-keyframe.

@@ -112,6 +112,7 @@ asserts none reach the envelope bytes.
 | `playback.degraded` | warning | sorted reasons | session ended over thresholds |
 | `playback.subtitleLoadFailed` | warning | stage, domain, code | an external subtitle did not load |
 | `playback.handoffFailed` | error | none | next-episode handoff outcome `failed` |
+| `playback.startStalled` | error | `noProgress` / `tooSlow` | no first frame, and no bytes or queued packets for 30 s, or no first frame after 120 s |
 | `api.requestFailed` | warning (5xx) / error | client, route token, status or domain+code | non-2xx, or a transport error that is not expected |
 | `api.decodeFailed` | error | client, route token, kind, key | a 2xx body the app could not decode |
 
@@ -132,6 +133,13 @@ vary per occurrence (positions, durations) never enter a fingerprint.
   `StallRecoveryPolicy.reprimeAfter`, 5 s) or a resume after ≥ 8 s reports
   `playback.stall`. Three stalls within 60 s report once per attempt as
   `frequent`.
+- **Start** (`PlaybackStartWatchdog`), sampled every 2 s from the engine's
+  install to its first frame. Bytes the cache served and the video intake,
+  video and audio queues count as progress. HLS has no cache, so there only
+  the queues do. Time away from the app restarts both clocks. A verdict
+  reports `playback.startStalled` with the requested start in `position`,
+  the wait in `elapsedMs` and `bytesRead`, then ends the attempt with an
+  error. It never moves down the delivery ladder.
 - **Degraded** (`PlaybackDegradationPolicy`, at stop, for sessions that did
   not fail, with ≥ 30 s played). Reasons: `droppedFrames` (≥ 60 dropped and
   ≥ 0.5% of frames), `stalls` (≥ 3), `reprimes` (≥ 1), `audioStarvation`
