@@ -49,6 +49,7 @@ nonisolated enum Changelog {
     static let unreleased: [ChangelogSection] = [
         ChangelogSection(category: .bugFixes, changes: [
             "In a collection or playlist, the Up Next bar fills as the credits roll instead of staying empty until the last seconds.",
+            "A video that stops loading before it starts now shows an error instead of a spinner that never goes away.",
         ]),
     ]
 
