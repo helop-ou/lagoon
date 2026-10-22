@@ -133,7 +133,7 @@ final class PlaybackController {
     private var engineHasStarted = false
     private var nextUpTask: Task<Void, Never>?
     /// Runs from install to the engine's first frame.
-    @ObservationIgnored private var startWatchdogTask: Task<Void, Never>?
+    @ObservationIgnored private let startWatch = PlaybackStartWatch()
     @ObservationIgnored private let successorPreparation = PlaybackSuccessorPreparation()
     /// Guards the hand-off: `didFinish` and an expiring countdown can both
     /// fire, and advancing twice would skip an episode.
@@ -678,8 +678,7 @@ final class PlaybackController {
         engine.onPlaybackStarted = { [weak self, weak engine] in
             guard let self, let engine, self.engine === engine else { return }
             self.engineHasStarted = true
-            self.startWatchdogTask?.cancel()
-            self.startWatchdogTask = nil
+            self.startWatch.end()
             self.finishEpisodeHandoff(outcome: "ready")
             self.incidents.playbackReady(engine: engine)
             #if DEBUG
@@ -716,61 +715,21 @@ final class PlaybackController {
     /// attempt with an error instead. It never moves down the delivery
     /// ladder: that takes the engine's verdict on the samples.
     private func watchStart(of engine: SampleBufferPlayerEngine, at startSeconds: Double) {
-        startWatchdogTask?.cancel()
-        startWatchdogTask = Task { [weak self, weak engine] in
-            var watchdog = PlaybackStartWatchdog()
-            while !Task.isCancelled,
-                  self?.keepWatchingStart(of: engine, with: &watchdog, startSeconds: startSeconds) == true {
-                try? await Task.sleep(for: .seconds(2))
-            }
+        startWatch.begin(engine) { [weak self, weak engine] stall in
+            guard let self, let engine, self.engine === engine, !self.engineHasStarted else { return }
+            self.incidents.startStalled(
+                stall.reason,
+                waitedSeconds: stall.seconds,
+                startSeconds: startSeconds,
+                bytesRead: stall.progress.bytes,
+                delivery: self.delivery,
+                engine: engine
+            )
+            self.finishEpisodeHandoff(outcome: "failed")
+            self.incidents.endAttempt(engine: engine, outcome: "failed")
+            _ = self.beginStop()
+            self.errorMessage = PlaybackStartError.stalled.errorDescription
         }
-    }
-
-    /// One watchdog sample. False once there is nothing left to watch.
-    private func keepWatchingStart(
-        of engine: SampleBufferPlayerEngine?,
-        with watchdog: inout PlaybackStartWatchdog,
-        startSeconds: Double
-    ) -> Bool {
-        guard let engine, self.engine === engine, !engineHasStarted else { return false }
-        let verdict = watchdog.observe(
-            Self.startProgress(of: engine),
-            isAppActive: UIApplication.shared.applicationState == .active,
-            at: ProcessInfo.processInfo.systemUptime
-        )
-        guard case .stalled(let reason, let seconds) = verdict else { return true }
-        startDidStall(engine, reason: reason, seconds: seconds, startSeconds: startSeconds)
-        return false
-    }
-
-    private static func startProgress(of engine: SampleBufferPlayerEngine) -> PlaybackStartWatchdog.Progress {
-        let cache = engine.playbackCacheMetrics
-        return PlaybackStartWatchdog.Progress(
-            bytes: (cache?.networkBytes ?? 0) + (cache?.cacheHitBytes ?? 0),
-            videoIntake: engine.videoIntakeCountDiagnostic,
-            videoQueued: engine.videoQueueCountDiagnostic,
-            audioQueued: engine.queueDepths.audio
-        )
-    }
-
-    private func startDidStall(
-        _ engine: SampleBufferPlayerEngine,
-        reason: PlaybackStartWatchdog.Reason,
-        seconds: Double,
-        startSeconds: Double
-    ) {
-        incidents.startStalled(
-            reason,
-            waitedSeconds: seconds,
-            startSeconds: startSeconds,
-            bytesRead: Self.startProgress(of: engine).bytes,
-            delivery: delivery,
-            engine: engine
-        )
-        finishEpisodeHandoff(outcome: "failed")
-        incidents.endAttempt(engine: engine, outcome: "failed")
-        _ = beginStop()
-        errorMessage = PlaybackStartError.stalled.errorDescription
     }
 
     private func beginAutomation(segments: [MediaSegment], engine: SampleBufferPlayerEngine) {
@@ -1421,8 +1380,7 @@ final class PlaybackController {
         diagnosticSampler.stop()
         nextUpTask?.cancel()
         nextUpTask = nil
-        startWatchdogTask?.cancel()
-        startWatchdogTask = nil
+        startWatch.end()
         // A sleeping countdown must not wake on a gone engine.
         automation.invalidate()
         qualityOffer.withdraw()

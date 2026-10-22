@@ -1,4 +1,6 @@
 import Foundation
+import LagoonEngine
+import UIKit
 
 /// Gives up on a start that has stopped getting anywhere.
 ///
@@ -60,5 +62,89 @@ nonisolated struct PlaybackStartWatchdog: Equatable, Sendable {
             return .stalled(.tooSlow, seconds: waited)
         }
         return .waiting
+    }
+}
+
+/// Samples a starting engine every two seconds and reports a stall once. The
+/// controller ends it at the first frame and at every stop.
+@MainActor
+final class PlaybackStartWatch {
+    struct Stall: Equatable {
+        let reason: PlaybackStartWatchdog.Reason
+        let seconds: Double
+        let progress: PlaybackStartWatchdog.Progress
+    }
+
+    private enum Check {
+        case waiting
+        case stalled(Stall)
+    }
+
+    static let interval: Duration = .seconds(2)
+
+    private var task: Task<Void, Never>?
+    private let sleep: @MainActor (Duration) async throws -> Void
+    private let uptime: @MainActor () -> TimeInterval
+    private let isAppActive: @MainActor () -> Bool
+
+    init(
+        sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+        uptime: @escaping @MainActor () -> TimeInterval = { ProcessInfo.processInfo.systemUptime },
+        isAppActive: @escaping @MainActor () -> Bool = { UIApplication.shared.applicationState == .active }
+    ) {
+        self.sleep = sleep
+        self.uptime = uptime
+        self.isAppActive = isAppActive
+    }
+
+    isolated deinit {
+        task?.cancel()
+    }
+
+    /// Replaces any earlier watch. Neither the engine nor this watch is held
+    /// between samples, and a gone engine ends the watch.
+    func begin(_ engine: DiagnosableEngine, onStall: @escaping @MainActor (Stall) -> Void) {
+        end()
+        let sleep = self.sleep
+        task = Task { [weak self, weak engine] in
+            var watchdog = PlaybackStartWatchdog()
+            while !Task.isCancelled {
+                switch self?.check(engine, with: &watchdog) {
+                case .waiting?:
+                    try? await sleep(Self.interval)
+                case .stalled(let stall)?:
+                    onStall(stall)
+                    return
+                case nil:
+                    return
+                }
+            }
+        }
+    }
+
+    func end() {
+        task?.cancel()
+        task = nil
+    }
+
+    static func progress(of engine: DiagnosableEngine) -> PlaybackStartWatchdog.Progress {
+        let cache = engine.playbackCacheMetrics
+        return PlaybackStartWatchdog.Progress(
+            bytes: (cache?.networkBytes ?? 0) + (cache?.cacheHitBytes ?? 0),
+            videoIntake: engine.videoIntakeCountDiagnostic,
+            videoQueued: engine.videoQueueCountDiagnostic,
+            audioQueued: engine.queueDepths.audio
+        )
+    }
+
+    private func check(_ engine: DiagnosableEngine?, with watchdog: inout PlaybackStartWatchdog) -> Check? {
+        guard let engine else { return nil }
+        let progress = Self.progress(of: engine)
+        switch watchdog.observe(progress, isAppActive: isAppActive(), at: uptime()) {
+        case .waiting:
+            return .waiting
+        case .stalled(let reason, let seconds):
+            return .stalled(Stall(reason: reason, seconds: seconds, progress: progress))
+        }
     }
 }
