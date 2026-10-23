@@ -57,11 +57,11 @@ nonisolated enum Acknowledgements {
         ThirdPartyComponent(
             id: "lcms2",
             name: "Little-CMS",
-            version: "2.17",
+            version: "2.19.1",
             summary: "Colour management FFmpeg uses for embedded ICC profiles.",
             licenseName: "MIT",
             copyright: "Copyright (c) 2023 Marti Maria Saguer",
-            sourceURL: URL(string: "https://github.com/mm2/Little-CMS/tree/lcms2.17")!,
+            sourceURL: URL(string: "https://github.com/mm2/Little-CMS/tree/lcms2.19.1")!,
             notes: "Built by lagoon-engine \(EngineVersion.current) from this release, without the GPL-3.0 fast_float and threaded plugins (scripts/build-lcms2.sh).",
             licenseFile: "lcms2",
             binaryTargets: ["lcms2"]
@@ -81,11 +81,11 @@ nonisolated enum Acknowledgements {
         ThirdPartyComponent(
             id: "freetype",
             name: "FreeType",
-            version: "2.14.3",
+            version: "2.15.0",
             summary: "Rasterizes the glyphs libass draws.",
             licenseName: "FreeType License",
             copyright: "Copyright (C) 2006-2026 by David Turner, Robert Wilhelm, and Werner Lemberg",
-            sourceURL: URL(string: "https://download.savannah.gnu.org/releases/freetype/freetype-2.14.3.tar.xz")!,
+            sourceURL: URL(string: "https://download.savannah.gnu.org/releases/freetype/freetype-2.15.0.tar.xz")!,
             notes: "Built by lagoon-engine inside its libass library, under the FreeType License rather than the GPL alternative.",
             licenseFile: "freetype",
             binaryTargets: []
@@ -105,11 +105,11 @@ nonisolated enum Acknowledgements {
         ThirdPartyComponent(
             id: "harfbuzz",
             name: "HarfBuzz",
-            version: "14.5.0",
+            version: "15.0.0",
             summary: "Shapes subtitle text for libass, joining and positioning glyphs.",
             licenseName: "MIT (Old MIT)",
             copyright: "Copyright (C) 2010-2022 Google, Inc. and the HarfBuzz contributors",
-            sourceURL: URL(string: "https://github.com/harfbuzz/harfbuzz/tree/14.5.0")!,
+            sourceURL: URL(string: "https://github.com/harfbuzz/harfbuzz/tree/15.0.0")!,
             notes: "Built by lagoon-engine inside its libass library, with only its FreeType integration.",
             licenseFile: "harfbuzz",
             binaryTargets: []
