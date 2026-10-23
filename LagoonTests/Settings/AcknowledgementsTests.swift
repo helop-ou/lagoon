@@ -109,8 +109,10 @@ struct AcknowledgementsTests {
         // past the tag. The release is the part before the first hyphen.
         let dav1d = String(cString: dav1d_version()).split(separator: "-").first.map(String.init)
         #expect(try entry("dav1d").version == dav1d)
+        // lcms2 encodes major and minor only: 2.19.1 reports 2190.
         let lcms = Int(cmsGetEncodedCMMversion())
-        #expect(try entry("lcms2").version == "\(lcms / 1000).\(lcms % 1000 / 10)")
+        let lcmsRelease = try entry("lcms2").version.split(separator: ".").prefix(2).joined(separator: ".")
+        #expect(lcmsRelease == "\(lcms / 1000).\(lcms % 1000 / 10)")
         // libass packs its version as hex digits, 0.17.5 as 0x01705000.
         let ass = String(format: "%08x", ass_library_version())
         let digits = Array(ass)
