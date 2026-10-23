@@ -1,5 +1,5 @@
-HarfBuzz 14.5.0
-Source: https://github.com/harfbuzz/harfbuzz/tree/14.5.0
+HarfBuzz 15.0.0
+Source: https://github.com/harfbuzz/harfbuzz/tree/15.0.0
 Copyright (C) 2010-2022 Google, Inc. and the HarfBuzz contributors
 
 Built by the lagoon-engine package from this release's source tarball, with

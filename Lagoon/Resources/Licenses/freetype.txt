@@ -1,5 +1,5 @@
-FreeType 2.14.3
-Source: https://download.savannah.gnu.org/releases/freetype/freetype-2.14.3.tar.xz
+FreeType 2.15.0
+Source: https://download.savannah.gnu.org/releases/freetype/freetype-2.15.0.tar.xz
 Copyright (C) 2006-2026 by David Turner, Robert Wilhelm, and Werner Lemberg.
 
 Portions of this software are copyright (C) 2006-2026 The FreeType Project
