@@ -46,19 +46,26 @@ nonisolated enum Changelog {
     /// Notes merged since the last release. The release workflow's prepare
     /// action moves them into a new entry, so a pull request never bumps the
     /// build or edits a shipped entry.
-    static let unreleased: [ChangelogSection] = [
-        ChangelogSection(category: .improvements, changes: [
-            "Resuming a video your server converts for playback starts about a second sooner.",
-        ]),
-        ChangelogSection(category: .bugFixes, changes: [
-            "In a collection or playlist, the Up Next bar fills as the credits roll instead of staying empty until the last seconds.",
-            "A video that stops loading before it starts now shows an error instead of a spinner that never goes away.",
-        ]),
-    ]
+    static let unreleased: [ChangelogSection] = []
 
     /// Newest first. The prepare action adds the top one. The About screen
     /// highlights whichever one matches the running bundle.
     static let entries: [ChangelogEntry] = [
+        ChangelogEntry(
+            version: "0.7.1",
+            build: "118",
+            released: "October 2026",
+            headline: "Faster resume, no more endless spinner for some video starts.",
+            sections: [
+                ChangelogSection(category: .improvements, changes: [
+                    "Resuming a video your server converts for playback starts about a second sooner.",
+                ]),
+                ChangelogSection(category: .bugFixes, changes: [
+                    "In a collection or playlist, the Up Next bar fills as the credits roll instead of staying empty until the last seconds.",
+                    "A video that stops loading before it starts now shows an error instead of a spinner that never goes away.",
+                ]),
+            ]
+        ),
         ChangelogEntry(
             version: "0.7.0",
             build: "117",

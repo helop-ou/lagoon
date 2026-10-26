@@ -17,6 +17,21 @@ what identifies a binary: it is what About shows, what a release tag
 carries, and what to quote in a bug report. One marketing version spans
 many builds.
 
+## 0.7.1 (118)
+
+October 2026
+
+**Faster resume, no more endless spinner for some video starts.**
+
+### Improvements
+
+- Resuming a video your server converts for playback starts about a second sooner.
+
+### Bug fixes
+
+- In a collection or playlist, the Up Next bar fills as the credits roll instead of staying empty until the last seconds.
+- A video that stops loading before it starts now shows an error instead of a spinner that never goes away.
+
 ## 0.7.0 (117)
 
 October 2026
