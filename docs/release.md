@@ -282,8 +282,9 @@ four actions:
 - **prepare** runs `scripts/prepare-release.sh` with the chosen bump and
   headline, which stamps the release as [above](#version-and-changelog),
   then pushes `chore/release-<version>` and opens its pull request. It acts
-  through `RELEASE_TOKEN`, because a pull request opened with the workflow's
-  own token never starts the checks `main` requires.
+  through a token minted from the release GitHub App, because a pull request
+  opened with the workflow's own token never starts the checks `main`
+  requires.
 - **trial** archives and signs both platforms with `--export-only`. Nothing
   is uploaded or kept, since artifacts of a public repository are public. Run
   it after a signing or Xcode change.
@@ -304,10 +305,15 @@ Environments, release), never to the repository:
 | `ASC_ISSUER_ID` | The issuer id from the same page |
 | `ASC_KEY_P8` | The full contents of the `.p8` file |
 | `LAGOON_SENTRY_DSN` | As in `.env` |
-| `RELEASE_TOKEN` | A fine-grained token for this repository with Contents and Pull requests read and write |
+| `RELEASE_APP_CLIENT_ID` | The release GitHub App's client id |
+| `RELEASE_APP_PRIVATE_KEY` | The full contents of a private key generated for that app |
 
-`RELEASE_TOKEN` expires. When prepare fails to push or open its pull request,
-renew it first.
+The release app belongs to `helop-ou`, has no webhook, and holds Contents and
+Pull requests read and write. It acts only on the repositories it is installed
+on, so another project reuses it by installing it there and adding the same
+two secrets. Its tokens last an hour and are minted per run, so nothing
+expires. When prepare fails to push or open its pull request, check that the
+app is still installed on this repository.
 
 The key needs the Admin role. App Manager can upload, but the runner has no
 certificates, so the key must also create the development certificate the

@@ -37,19 +37,29 @@ jobs:
       DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
       BUMP: ${{ inputs.bump }}
       HEADLINE: ${{ inputs.headline }}
-      # Not github.token: a pull request it opens never starts the checks main requires.
-      GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
     steps:
+      # Not github.token: a pull request it opens never starts the checks main requires.
+      - name: Mint the release token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-          token: ${{ secrets.RELEASE_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
 
       # CHANGELOG.md is rendered by a test, which builds.
       - name: Install the Metal toolchain
         run: xcodebuild -downloadComponent MetalToolchain
 
       - name: Prepare
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
