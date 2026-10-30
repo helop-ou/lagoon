@@ -16,6 +16,7 @@ struct DetailPlayActions<Secondary: View>: View {
 
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     #endif
 
     init(
@@ -62,7 +63,7 @@ struct DetailPlayActions<Secondary: View>: View {
 
     #if os(iOS)
     private var usesLeadingColumn: Bool {
-        DetailLayout.usesLeadingColumn(horizontalSizeClass)
+        DetailLayout.usesLeadingColumn(horizontalSizeClass, verticalSizeClass)
     }
     #endif
 

@@ -12,10 +12,15 @@ extension VerticalAlignment {
     static let detailPillCenter = VerticalAlignment(DetailPillCenter.self)
 }
 
-/// Wide (regular-width iPad, laid out like the TV) or compact touch layout.
+/// Wide (regular both ways, as on iPad or an open iPhone Duo, laid out like
+/// the TV) or compact touch layout. A landscape Pro Max is regular wide but
+/// compact tall, so it keeps the phone layout.
 enum DetailLayout {
-    static func usesLeadingColumn(_ horizontalSizeClass: UserInterfaceSizeClass?) -> Bool {
-        UIDevice.current.userInterfaceIdiom == .pad && horizontalSizeClass == .regular
+    static func usesLeadingColumn(
+        _ horizontalSizeClass: UserInterfaceSizeClass?,
+        _ verticalSizeClass: UserInterfaceSizeClass?
+    ) -> Bool {
+        horizontalSizeClass == .regular && verticalSizeClass == .regular
     }
 
     /// A landscape phone: title, actions and Play share one row.
@@ -23,14 +28,14 @@ enum DetailLayout {
         _ horizontalSizeClass: UserInterfaceSizeClass?,
         _ verticalSizeClass: UserInterfaceSizeClass?
     ) -> Bool {
-        !usesLeadingColumn(horizontalSizeClass) && verticalSizeClass == .compact
+        !usesLeadingColumn(horizontalSizeClass, verticalSizeClass) && verticalSizeClass == .compact
     }
 
     static func titleAlignment(
         _ horizontalSizeClass: UserInterfaceSizeClass?,
         _ verticalSizeClass: UserInterfaceSizeClass?
     ) -> HorizontalAlignment {
-        usesLeadingColumn(horizontalSizeClass) || usesLandscapeRow(horizontalSizeClass, verticalSizeClass)
+        usesLeadingColumn(horizontalSizeClass, verticalSizeClass) || usesLandscapeRow(horizontalSizeClass, verticalSizeClass)
             ? .leading
             : .center
     }
@@ -77,7 +82,7 @@ struct DetailActionLayout<Primary: View, Secondary: View, Accessory: View>: View
             accessory
         }
         #else
-        if DetailLayout.usesLeadingColumn(horizontalSizeClass) {
+        if DetailLayout.usesLeadingColumn(horizontalSizeClass, verticalSizeClass) {
             VStack(alignment: .leading, spacing: Metrics.Space.l) {
                 AdaptiveActionStack(spacing: Metrics.detailActionSpacing) {
                     primary
@@ -132,7 +137,7 @@ private struct DetailPrimaryLabelModifier: ViewModifier {
 
     /// Uncapped in the wide iPad row.
     private var maxWidth: CGFloat? {
-        if DetailLayout.usesLeadingColumn(horizontalSizeClass) { return nil }
+        if DetailLayout.usesLeadingColumn(horizontalSizeClass, verticalSizeClass) { return nil }
         return DetailLayout.usesLandscapeRow(horizontalSizeClass, verticalSizeClass)
             ? Metrics.detailLandscapePlayButtonMaxWidth
             : Metrics.detailPlayButtonMaxWidth

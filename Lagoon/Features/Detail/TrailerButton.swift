@@ -75,6 +75,7 @@ struct TrailerButton: View {
     @Environment(\.openURL) private var openURL
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     #endif
     @State private var showsMissingApp = false
 
@@ -99,7 +100,7 @@ struct TrailerButton: View {
     @ViewBuilder
     private func button(opening destination: URL) -> some View {
         #if os(iOS)
-        if DetailLayout.usesLeadingColumn(horizontalSizeClass) {
+        if DetailLayout.usesLeadingColumn(horizontalSizeClass, verticalSizeClass) {
             pill(opening: destination)
         } else {
             DetailCircleButton {

@@ -1,7 +1,4 @@
 import SwiftUI
-#if os(iOS)
-import UIKit
-#endif
 
 /// What the hero needs of a title, from Jellyfin (Home) or Seerr (Discover).
 /// `route` is generic so each keeps its own navigation identity. Seerr has no
@@ -26,12 +23,13 @@ struct HeroSection<Route: Hashable>: View {
     @Environment(\.scenePhase) private var scenePhase
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     #endif
     @ScaledMetric(relativeTo: .callout) private var textHeight = Metrics.heroHeight / 2
 
     #if os(iOS)
     private var usesExpandedLayout: Bool {
-        UIDevice.current.userInterfaceIdiom == .pad && horizontalSizeClass == .regular
+        DetailLayout.usesLeadingColumn(horizontalSizeClass, verticalSizeClass)
     }
     #endif
 
