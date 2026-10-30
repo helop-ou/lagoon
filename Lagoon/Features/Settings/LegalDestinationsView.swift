@@ -197,17 +197,24 @@ struct AboutLagoonButton: View {
     @State private var showingAbout = false
 
     var body: some View {
-        Button("About Lagoon") { showingAbout = true }
-            #if os(tvOS)
-            .buttonStyle(.glass)
-            #else
-            .buttonStyle(.plain)
-            .font(.footnote)
-            .frame(minHeight: Metrics.touchTarget)
-            #endif
-            .accessibilityIdentifier("signin.about")
-            .sheet(isPresented: $showingAbout) {
-                AboutLagoonSheet()
-            }
+        Button {
+            showingAbout = true
+        } label: {
+            Text("About Lagoon")
+                #if os(iOS)
+                .font(.footnote)
+                .frame(minHeight: Metrics.touchTarget)
+                .contentShape(Rectangle())
+                #endif
+        }
+        #if os(tvOS)
+        .buttonStyle(.glass)
+        #else
+        .buttonStyle(.plain)
+        #endif
+        .accessibilityIdentifier("signin.about")
+        .sheet(isPresented: $showingAbout) {
+            AboutLagoonSheet()
+        }
     }
 }
