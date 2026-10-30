@@ -404,17 +404,22 @@ struct LibraryView: View {
 
 #if os(iOS)
 /// A full-width glass row above the controls that opens another list.
-private struct LibraryEntryLink: View {
+struct LibraryEntryLink: View {
     let route: ContentNavigationRoute
     let title: LocalizedStringKey
     let subtitle: String
     let systemImage: String
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     var body: some View {
         NavigationLink(value: route) {
             HStack(spacing: Metrics.Space.m) {
-                Image(systemName: systemImage)
-                    .font(.title2)
+                // At accessibility sizes the icon squeezed the title into a mid-word break.
+                if !dynamicTypeSize.isAccessibilitySize {
+                    Image(systemName: systemImage)
+                        .font(.title2)
+                }
                 VStack(alignment: .leading, spacing: Metrics.Space.hair) {
                     Text(title)
                         .font(.headline)
@@ -422,6 +427,7 @@ private struct LibraryEntryLink: View {
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                 }
+                .multilineTextAlignment(.leading)
                 Spacer(minLength: Metrics.Space.m)
                 Image(systemName: "chevron.forward")
                     .font(.caption.bold())
