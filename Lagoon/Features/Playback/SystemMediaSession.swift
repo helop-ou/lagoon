@@ -242,18 +242,24 @@ final class NowPlayingCoordinator {
         reset(publishStopped: !replacingActiveSession)
         self.engine = engine
         self.transport = transport
-        nowPlayingInfo = [
-            MPMediaItemPropertyTitle: info.title,
-            MPMediaItemPropertyMediaType: MPMediaType.anyVideo.rawValue,
-            MPNowPlayingInfoPropertyExternalContentIdentifier: itemID,
-        ]
-        if let subtitle = info.subtitle {
-            nowPlayingInfo[MPMediaItemPropertyAlbumTitle] = subtitle
-        }
+        nowPlayingInfo = Self.itemMetadata(title: info.title, subtitle: info.subtitle, itemID: itemID)
         registerCommands()
         updateTimeline()
         updateLanguageOptions()
         loadArtwork(from: info.posterURL)
+    }
+
+    /// tvOS shows a Now Playing notification for audio, so the item says it is video.
+    nonisolated static func itemMetadata(title: String, subtitle: String?, itemID: String) -> [String: Any] {
+        var metadata: [String: Any] = [
+            MPMediaItemPropertyTitle: title,
+            MPNowPlayingInfoPropertyMediaType: MPNowPlayingInfoMediaType.video.rawValue,
+            MPNowPlayingInfoPropertyExternalContentIdentifier: itemID,
+        ]
+        if let subtitle {
+            metadata[MPMediaItemPropertyAlbumTitle] = subtitle
+        }
+        return metadata
     }
 
     func updateTimeline() {
