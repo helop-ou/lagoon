@@ -51,6 +51,7 @@ nonisolated enum Changelog {
             "VoiceOver no longer reads an icon name on Discover or an unlabelled picture in Settings.",
             "At the largest text sizes, the Playlists and Downloads rows in Library keep their titles whole.",
             "About Lagoon on the sign-in screen is easier to tap.",
+            "Starting a video on Apple TV no longer shows a Now Playing notification.",
         ]),
     ]
 
