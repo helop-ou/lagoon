@@ -170,7 +170,7 @@ struct ChangelogView: View {
             .navigationTitle("Changelog")
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                    Button("Done", systemImage: "xmark", role: .close) { dismiss() }
                 }
             }
             .accessibilityIdentifier("settings.changelog")

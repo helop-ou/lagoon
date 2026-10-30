@@ -27,7 +27,7 @@ struct AddAccountView: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Cancel", role: .cancel, action: cancel)
+                    Button("Cancel", systemImage: "xmark", role: .cancel, action: cancel)
                         .accessibilityIdentifier("account.setup.cancel")
                 }
             }
