@@ -72,6 +72,7 @@ struct PlayerTransportOverlay: View {
                     .font(.caption.weight(.semibold))
                 Image(systemName: "chevron.compact.down")
                     .font(.title3.weight(.bold))
+                    .accessibilityHidden(true)
             }
             .foregroundStyle(.white.opacity(0.9))
             .padding(.top, Metrics.railTopPadding)
