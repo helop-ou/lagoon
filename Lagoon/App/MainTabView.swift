@@ -59,6 +59,8 @@ struct MainTabView: View {
         primaryNavigation
         #if os(tvOS)
         .overlay(alignment: .topLeading) { topChrome }
+        #else
+        .modifier(VerticalBarSearchActivation())
         #endif
         .task(id: profileImageKey) {
             guard let account = session.activeAccount else {
@@ -668,3 +670,28 @@ private extension View {
         #endif
     }
 }
+
+#if os(iOS)
+/// With the bars on the side (a closed iPhone Duo) the Search tab shows no
+/// field until it is activated, so selecting the tab activates it. Elsewhere
+/// the field already sits in the tab bar and the keyboard waits for a tap.
+private struct VerticalBarSearchActivation: ViewModifier {
+    func body(content: Content) -> some View {
+        if #available(iOS 27.1, *) {
+            VerticalBarSearchActivationBody(content: content)
+        } else {
+            content
+        }
+    }
+}
+
+@available(iOS 27.1, *)
+private struct VerticalBarSearchActivationBody<Content: View>: View {
+    let content: Content
+    @Environment(\.toolbarVerticalEdge) private var verticalEdge
+
+    var body: some View {
+        content.tabViewSearchActivation(verticalEdge == nil ? .automatic : .searchTabSelection)
+    }
+}
+#endif
