@@ -156,6 +156,7 @@ struct DiscoverView: View {
             Image(systemName: "sparkles.tv")
                 .font(Typography.largeGlyph)
                 .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
             Text(seerr.isConfigured ? "Sign In to Seerr" : "Connect Seerr")
                 .font(.title3.bold())
             Text(seerr.isConfigured
