@@ -315,6 +315,7 @@ struct PlayerControlPanel: View {
             )
             .background(Color.artworkPlaceholder)
             .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
+            .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: Metrics.Space.s) {
                 Text(combinedTitle)

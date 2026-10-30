@@ -133,6 +133,7 @@ struct PlayerNextUpCard: View {
                     height: (NextUpMetrics.thumbnailWidth * 9 / 16).rounded()
                 )
                 .clipShape(RoundedRectangle(cornerRadius: Metrics.cardArtRadius))
+                .accessibilityHidden(true)
 
                 VStack(alignment: .leading, spacing: Metrics.Space.hair) {
                     if let subtitle = episode.subtitle {
