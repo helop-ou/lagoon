@@ -370,7 +370,7 @@ the exact build that will be submitted, not an earlier one.
   jellyfin-sdk-swift and avoids the GPL's conflict with App Store terms.
   `LICENSE` carries the canonical text verbatim, `TRADEMARKS.md` the
   carve-out, and `CODE_OF_CONDUCT.md` the Contributor Covenant.
-- [ ] Deliver the corresponding-source, notices and relinking materials for
+- [x] Deliver the corresponding-source, notices and relinking materials for
   every native component. FFmpeg is statically linked, so the shared-library
   route is unavailable. Publishing the source is the cheapest way to
   discharge this and removes the per-release burden. Since engine 1.0.2 all
@@ -382,9 +382,9 @@ the exact build that will be submitted, not an earlier one.
   script and configure records). Each artifact ships its licence, libdovi's
   with its Rust crates. The FFmpeg notice links that release and credits the
   Independent JPEG Group, whose DCT code is in libavcodec. Both repositories
-  have been public since 2026-09-23, before the first external build. Owed:
-  the FFmpeg line on the website's download pages. Whether the App Store's
-  usage rules are a further restriction under LGPL-2.1 §10 is a legal
+  have been public since 2026-09-23, before the first external build, and
+  the website's download section links the engine releases. Whether the App
+  Store's usage rules are a further restriction under LGPL-2.1 §10 is a legal
   judgement, not an engineering one. VLC for iOS ships the same arrangement.
 - [ ] Record the encryption classification and territories, including
   France, in App Store Connect. The build already declares
