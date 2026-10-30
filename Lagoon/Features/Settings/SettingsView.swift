@@ -259,15 +259,18 @@ struct SettingsView: View {
 
     /// The same portrait as the picker and the profile button, so a profile
     /// looks alike everywhere.
-    @ViewBuilder
     private func identityAvatar(size: CGFloat) -> some View {
-        if let account = session.activeAccount {
-            ProfilePortrait(account: account, size: size)
-        } else {
-            Circle()
-                .fill(.white.opacity(0.12))
-                .frame(width: size, height: size)
+        Group {
+            if let account = session.activeAccount {
+                ProfilePortrait(account: account, size: size)
+            } else {
+                Circle()
+                    .fill(.white.opacity(0.12))
+                    .frame(width: size, height: size)
+            }
         }
+        // The user's name always sits beside it.
+        .accessibilityHidden(true)
     }
 
     // MARK: - iOS: category list and native settings pages
