@@ -356,8 +356,11 @@ and build records with the candidate.
 
 ## Public release
 
-These gates are separate from internal TestFlight. Check them against the
-final signed candidate, not an earlier audit revision.
+The App Store takes the same upload as external testers. A build the
+[upload action](#releasing-from-ci) sends is external-eligible, and that also
+makes it a build an App Store version can select. Only an internal-only upload
+is shut out of both. There is no separate public export. These gates apply to
+the exact build that will be submitted, not an earlier one.
 
 ### Decisions before a public candidate
 
@@ -367,28 +370,29 @@ final signed candidate, not an earlier audit revision.
   jellyfin-sdk-swift and avoids the GPL's conflict with App Store terms.
   `LICENSE` carries the canonical text verbatim, `TRADEMARKS.md` the
   carve-out, and `CODE_OF_CONDUCT.md` the Contributor Covenant.
-- [ ] Deliver and test the corresponding-source, notices and relinking
-  materials for every native component. FFmpeg is statically linked, so the
-  shared-library route is unavailable. Publishing the source is the cheapest
-  way to discharge this and removes the per-release burden. Since engine
-  1.0.2 all four FFmpeg libraries are built by the engine from
-  checksum-pinned source without `--enable-version3`, and are
-  LGPL-2.1-or-later, and dav1d, lcms2 and uavs3d are built there too. libdovi is
-  the one component vendored prebuilt, because it needs a Rust toolchain.
-  In place: every engine release attaches FFmpeg's corresponding source
-  (upstream tarball, patch, build script and configure records). Each
-  artifact ships its licence, libdovi's with its Rust crates. The FFmpeg
-  notice links that release and credits the Independent JPEG Group, whose
-  DCT code is in libavcodec. Both repositories have been public since
-  2026-09-23, before the first external build. Owed: the FFmpeg line on
-  the website's download pages. Whether the App Store's usage
-  rules are a further restriction under LGPL-2.1 §10 is a legal judgement,
-  not an engineering one. VLC for iOS ships the same arrangement.
-- [ ] Record encryption classification and territories, including France.
-  Align build declarations and keep any required documentation.
-- [ ] Approve data collection and retention answers, complete the app's
-  collection manifest and App Privacy labels, and generate and review Xcode's
-  privacy report.
+- [ ] Deliver the corresponding-source, notices and relinking materials for
+  every native component. FFmpeg is statically linked, so the shared-library
+  route is unavailable. Publishing the source is the cheapest way to
+  discharge this and removes the per-release burden. Since engine 1.0.2 all
+  four FFmpeg libraries are built by the engine from checksum-pinned source
+  without `--enable-version3`, and are LGPL-2.1-or-later, and dav1d, lcms2
+  and uavs3d are built there too. libdovi is the one component vendored
+  prebuilt, because it needs a Rust toolchain. In place: every engine release
+  attaches FFmpeg's corresponding source (upstream tarball, patch, build
+  script and configure records). Each artifact ships its licence, libdovi's
+  with its Rust crates. The FFmpeg notice links that release and credits the
+  Independent JPEG Group, whose DCT code is in libavcodec. Both repositories
+  have been public since 2026-09-23, before the first external build. Owed:
+  the FFmpeg line on the website's download pages. Whether the App Store's
+  usage rules are a further restriction under LGPL-2.1 §10 is a legal
+  judgement, not an engineering one. VLC for iOS ships the same arrangement.
+- [ ] Record the encryption classification and territories, including
+  France, in App Store Connect. The build already declares
+  `ITSAppUsesNonExemptEncryption=NO`, and the answers must agree with it.
+- [ ] Approve the App Privacy labels in App Store Connect and review the
+  Organizer privacy report. The app manifest already declares diagnostic and
+  performance data, unlinked and not used for tracking. The labels must say
+  the same, as must the Settings footer and the privacy page.
 - [x] Direct OpenSubtitles integration removed. Subtitle search relies on
   Jellyfin.
 - [x] In-app legal and acknowledgements are reachable before login and in
@@ -399,60 +403,45 @@ final signed candidate, not an earlier audit revision.
   iPhone and iPad rows open in Safari. Owed: the tvOS rows seen on a
   television, the code scanned with a phone, and App Store Connect (a URL for
   iOS, the pasted policy text for tvOS). See [Website](#website).
-- [ ] Complete physical acceptance testing, including the permission journey
-  from the assessment above, and the outstanding device checks.
+- [ ] Complete physical acceptance. The device checks owed by shipped work
+  are done. Owed: the local-network permission journey on a fresh iPhone and
+  iPad install, an accessibility pass per device class, and long playback
+  with repeated start and stop on hardware.
 
-### Prepare and verify the exact release
+### The release candidate
 
-1. Select the final source revision, a deliberate marketing version and the
-   next unused build number. Write the changelog entry and regenerate
-   `CHANGELOG.md` with `scripts/generate-changelog.sh`.
-2. Run the iOS and tvOS unit suites and the applicable UI and hardware
-   journeys explicitly. Archive does **not** run them. Keep result bundles and
-   device, OS, media and server details for that revision.
-3. Archive separately for generic iOS and tvOS devices with the distribution
-   team and signing. Keep both archives and their app and extension dSYMs.
-   Verify signing identities, profiles, app-group entitlements, bundle
-   identifiers, deployment targets, app and extension versions and intended
-   device support.
-4. Run `python3 scripts/validate-release-privacy.py /path/to/Lagoon.xcarchive`
-   for both archives. Generate the Organizer privacy report and validate the
-   signed archives in Xcode. Review icons and Top Shelf artwork, frameworks,
-   native symbols and App Store validation messages. The script checks
-   resources and basic bundle consistency. It is not Apple's validation or
-   legal approval.
-5. Keep per-slice dependency hashes and build records with the exact release,
-   and regenerate the inventory if an input changes. Match the recipient
-   licence, source and relink package to those same inputs.
+**The marketing version is part of the binary.** App Store Connect only lets
+a version select a build whose `CFBundleShortVersionString` matches it, so a
+0.x build can never be submitted as 1.0. Prepare the candidate with a major
+bump, and it reaches external testers as 1.0.0. A fix found after that is a
+patch, and the App Store version follows whichever build is submitted.
 
-### Public export procedure
+1. **Prepare and merge** as for any build ([Cutting a
+   build](#cutting-a-build-start-to-finish)). The release pull request's
+   checks run both unit suites on that revision.
+2. **Run the UI and hardware journeys** that apply on the merged revision.
+   Archive runs no tests. Keep the result bundles with device, OS, media and
+   server details.
+3. **Check the packaging.** The upload action keeps no archive, because
+   artifacts of a public repository are public. Archive the same revision
+   locally with `scripts/upload-testflight.sh both --archive-only`, then run
+   `python3 scripts/validate-release-privacy.py <archive>` on both and review
+   the Organizer privacy report, icons, Top Shelf artwork and symbols. The
+   script checks resources and basic bundle consistency. It is not Apple's
+   validation or legal approval.
+4. **Upload, test and publish** as for any build: the upload action, the
+   external group, then the publish action once Beta App Review accepts it.
+   The tag is how a recipient finds the corresponding source, which the
+   native licences require, so the build is published before it is
+   submitted and needs no second tag.
+5. **Submit.** In App Store Connect, create the version for iOS and for tvOS,
+   select the uploaded build on each, complete the [review
+   package](#review-package) and submit. Check the build number and platform
+   on each before submitting. Beta App Review and App Store review are
+   separate, so passing one says nothing about the other.
 
-`ExportOptions.plist` stays internal-only, and `--external` lifts that for one
-run. For an App Store candidate, after the decisions above, create a
-**separate** public export configuration with:
-
-- `method=app-store-connect`
-- `destination=export`
-- `testFlightInternalTestingOnly=false`
-- `manageAppVersionAndBuildNumber=false`
-- `uploadSymbols=true`
-- the verified team and signing choices
-
-Compare these options with `xcodebuild -help` from the release Xcode before
-using them. Export a local reviewable artifact from each signed archive
-first.
-
-Upload those candidates through Organizer's App Store Connect flow or a
-separately reviewed public upload command. Verify build numbers and platform
-assignments in App Store Connect. External TestFlight review and App Store
-submission are separate actions. An internal-only upload can never become a
-public candidate.
-
-Once the build is accepted, run `scripts/publish-release.sh <build>` to tag
-the exact archived revision and publish the release (see [Release
-tags](#release-tags)). Pass `--rev` if that revision is not `HEAD`. Without
-it a recipient cannot identify the corresponding source, which the native
-licences require. GitHub attaches that source archive to the release.
+Keep per-slice dependency hashes and build records with the submitted build,
+and regenerate the inventory if an input changes.
 
 ### Review package
 
@@ -469,8 +458,8 @@ licences require. GitHub attaches that source archive to the release.
   and rights-cleared media, reachable from outside the developer's LAN. Its
   credentials stay out of the repository and the public website.
 - [ ] A publisher has reviewed the final candidate and explicitly authorized
-  upload, submission and release. Record processing and review results, and
-  follow up on App Store warnings. An unsigned archive is not acceptance.
+  submission and release. Record the review result and follow up on App Store
+  warnings.
 
 ## Website
 
