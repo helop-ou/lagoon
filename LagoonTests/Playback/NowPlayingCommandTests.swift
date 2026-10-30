@@ -1,3 +1,4 @@
+import MediaPlayer
 import Testing
 @testable import Lagoon
 
@@ -27,6 +28,14 @@ struct NowPlayingCommandTests {
         NowPlayingCoordinator.route(.skip(seconds: -10), to: transport.actions)
         NowPlayingCoordinator.route(.changePosition(seconds: 754.5), to: transport.actions)
         #expect(transport.calls == ["seekBy -10.0", "seek 754.5 resume false"])
+    }
+
+    /// tvOS shows a Now Playing notification for audio.
+    @Test func theItemIsPublishedAsVideo() {
+        let metadata = NowPlayingCoordinator.itemMetadata(title: "Pilot", subtitle: "Silo", itemID: "ep")
+        #expect(metadata[MPNowPlayingInfoPropertyMediaType] as? UInt == MPNowPlayingInfoMediaType.video.rawValue)
+        #expect(metadata[MPMediaItemPropertyTitle] as? String == "Pilot")
+        #expect(metadata[MPMediaItemPropertyAlbumTitle] as? String == "Silo")
     }
 }
 
