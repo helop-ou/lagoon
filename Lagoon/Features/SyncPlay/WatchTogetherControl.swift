@@ -14,6 +14,7 @@ struct WatchTogetherControl: View {
     @Environment(SyncPlayStore.self) private var syncPlay
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     #endif
     @State private var isPresented = false
 
@@ -31,7 +32,7 @@ struct WatchTogetherControl: View {
     @ViewBuilder
     private var control: some View {
         #if os(iOS)
-        if DetailLayout.usesLeadingColumn(horizontalSizeClass) {
+        if DetailLayout.usesLeadingColumn(horizontalSizeClass, verticalSizeClass) {
             pill
         } else {
             DetailCircleButton {

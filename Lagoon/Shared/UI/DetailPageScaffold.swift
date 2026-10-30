@@ -16,6 +16,7 @@ struct DetailBackdropView: View {
     @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     #endif
 
     var body: some View {
@@ -148,7 +149,7 @@ struct DetailBackdropView: View {
         }
         #else
         let heavy = contrast == .increased || reduceTransparency
-        if DetailLayout.usesLeadingColumn(horizontalSizeClass) {
+        if DetailLayout.usesLeadingColumn(horizontalSizeClass, verticalSizeClass) {
             // Laid out like the TV: a leading fade, plus a bottom fade for
             // the rails that scroll over it.
             ZStack {
@@ -212,6 +213,7 @@ struct DetailPageScaffold<Content: View>: View {
 
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     #endif
 
     var body: some View {
@@ -252,7 +254,7 @@ struct DetailPageScaffold<Content: View>: View {
     /// Zero for the wide iPad layout, which draws the backdrop.
     private func posterHeroHeight(in size: CGSize, safeArea: EdgeInsets) -> CGFloat {
         #if os(iOS)
-        guard posterURL != nil, !DetailLayout.usesLeadingColumn(horizontalSizeClass) else { return 0 }
+        guard posterURL != nil, !DetailLayout.usesLeadingColumn(horizontalSizeClass, verticalSizeClass) else { return 0 }
         if size.width > size.height {
             return (size.height + safeArea.top + safeArea.bottom).rounded()
         }
@@ -270,7 +272,7 @@ struct DetailPageScaffold<Content: View>: View {
     private func heroSpace(posterHeight: CGFloat, isLandscape: Bool, safeTop: CGFloat) -> CGFloat {
         #if os(iOS)
         guard posterHeight > 0 else {
-            return DetailLayout.usesLeadingColumn(horizontalSizeClass)
+            return DetailLayout.usesLeadingColumn(horizontalSizeClass, verticalSizeClass)
                 ? Metrics.expandedDetailHeroSpace
                 : Metrics.detailHeroSpace
         }

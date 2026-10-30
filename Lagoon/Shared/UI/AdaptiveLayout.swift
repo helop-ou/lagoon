@@ -1,7 +1,4 @@
 import SwiftUI
-#if os(iOS)
-import UIKit
-#endif
 
 /// Actions keep their natural label width, then stack when a phone cannot
 /// fit them. tvOS retains its horizontal focus geometry.
@@ -100,6 +97,10 @@ struct PosterLayout: DynamicProperty {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.displayScale) private var displayScale
     @Environment(\.posterCardWidth) private var gridCardWidth
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    #endif
 
     var width: CGFloat {
         #if os(tvOS)
@@ -109,9 +110,9 @@ struct PosterLayout: DynamicProperty {
         #endif
     }
 
-    /// iOS sizes cards to the column. The minimum is per idiom, not size
-    /// class (a Pro Max is regular width in landscape), and scales with
-    /// Dynamic Type. tvOS keeps five columns. Zero width means not measured.
+    /// iOS sizes cards to the column. The larger minimum needs regular size
+    /// classes both ways (a Pro Max is regular width in landscape), and scales
+    /// with Dynamic Type. tvOS keeps five columns. Zero width means not measured.
     func grid(fitting availableWidth: CGFloat) -> PosterGrid {
         #if os(tvOS)
         return PosterGrid(columns: Metrics.posterGridColumns, columnCount: Metrics.gridColumns, cardWidth: nil)
@@ -119,7 +120,7 @@ struct PosterLayout: DynamicProperty {
         guard availableWidth > 0 else {
             return PosterGrid(columns: columns, columnCount: 2, cardWidth: nil)
         }
-        let baseMinimum = UIDevice.current.userInterfaceIdiom == .pad
+        let baseMinimum = DetailLayout.usesLeadingColumn(horizontalSizeClass, verticalSizeClass)
             ? Metrics.padGridPosterMinimum
             : Metrics.phoneGridPosterMinimum
         let spacing = Metrics.cardSpacing

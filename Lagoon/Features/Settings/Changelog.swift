@@ -47,6 +47,9 @@ nonisolated enum Changelog {
     /// action moves them into a new entry, so a pull request never bumps the
     /// build or edits a shipped entry.
     static let unreleased: [ChangelogSection] = [
+        ChangelogSection(category: .improvements, changes: [
+            "On iPhone Duo, Lagoon uses its wide layouts when the phone is open, and Search opens its field when it is closed.",
+        ]),
         ChangelogSection(category: .bugFixes, changes: [
             "VoiceOver no longer reads icon names or unlabelled pictures on Discover, in Settings and in the player.",
             "At the largest text sizes, the Playlists and Downloads rows in Library keep their titles whole.",
