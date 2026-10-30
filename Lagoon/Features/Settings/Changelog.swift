@@ -48,7 +48,7 @@ nonisolated enum Changelog {
     /// build or edits a shipped entry.
     static let unreleased: [ChangelogSection] = [
         ChangelogSection(category: .bugFixes, changes: [
-            "VoiceOver no longer reads an icon name on Discover or an unlabelled picture in Settings.",
+            "VoiceOver no longer reads icon names or unlabelled pictures on Discover, in Settings and in the player.",
             "At the largest text sizes, the Playlists and Downloads rows in Library keep their titles whole.",
             "About Lagoon on the sign-in screen is easier to tap.",
         ]),
