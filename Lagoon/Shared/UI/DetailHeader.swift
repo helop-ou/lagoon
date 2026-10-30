@@ -112,7 +112,7 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
     }
 
     private var usesLeadingColumn: Bool {
-        DetailLayout.usesLeadingColumn(horizontalSizeClass)
+        DetailLayout.usesLeadingColumn(horizontalSizeClass, verticalSizeClass)
     }
 
     private var compactAlignment: Alignment {
