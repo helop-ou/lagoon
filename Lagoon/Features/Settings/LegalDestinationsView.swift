@@ -183,7 +183,7 @@ struct AboutLagoonSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { dismiss() }
+                    Button("Done", systemImage: "xmark", role: .close) { dismiss() }
                 }
             }
         }

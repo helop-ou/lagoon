@@ -468,7 +468,7 @@ struct SeerrSeasonRequestView: View {
         .navigationTitle("Choose Seasons")
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button("Cancel") { dismiss() }
+                Button("Cancel", systemImage: "xmark", role: .cancel) { dismiss() }
             }
             ToolbarItem(placement: .confirmationAction) {
                 Button {

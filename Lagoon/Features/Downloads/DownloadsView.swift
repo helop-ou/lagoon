@@ -23,7 +23,7 @@ struct DownloadsView: View {
         .toolbar {
             if !store.entries.isEmpty {
                 ToolbarItem(placement: .primaryAction) {
-                    Button("Delete All", role: .destructive) {
+                    Button("Delete All", systemImage: "trash", role: .destructive) {
                         confirmingDeleteAll = true
                     }
                 }
