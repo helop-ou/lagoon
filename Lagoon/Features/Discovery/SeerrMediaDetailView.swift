@@ -292,10 +292,16 @@ struct SeerrMediaDetailView: View {
         .accessibilityIdentifier(identifier)
     }
 
+    @ViewBuilder
+    private func secondaryActions(_ details: SeerrMediaDetails) -> some View {
+        seasonActions(details)
+        TrailerButton(trailers: details.trailers)
+    }
+
     /// Beside a show's primary action: request the seasons nobody has
     /// asked for yet, or say only part is here.
     @ViewBuilder
-    private func secondaryActions(_ details: SeerrMediaDetails) -> some View {
+    private func seasonActions(_ details: SeerrMediaDetails) -> some View {
         switch availability {
         case .partiallyAvailable where jellyfinItem != nil:
             if canRequestMoreSeasons(details) {
