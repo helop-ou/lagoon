@@ -98,6 +98,24 @@ struct WideLayoutSnapshotTests {
         )
     }
 
+    // MARK: - Rails
+
+    @Test func anOpenDuoRailGetsMoreRoom() async throws {
+        try await Snapshot.verify(
+            try posterRail(.regular, .regular),
+            named: "rail-duo-open",
+            size: CGSize(width: Self.duoOpen.width, height: 360)
+        )
+    }
+
+    @Test func aPhoneRailKeepsItsSpacing() async throws {
+        try await Snapshot.verify(
+            try posterRail(.compact, .regular),
+            named: "rail-phone-portrait",
+            size: CGSize(width: Self.phonePortrait.width, height: 360)
+        )
+    }
+
     // MARK: - Watch Together
 
     @Test func watchTogetherIsAPillOnAnOpenDuoAndACircleOnAPhone() async throws {
@@ -182,14 +200,24 @@ struct WideLayoutSnapshotTests {
         .environment(\.verticalSizeClass, vertical)
     }
 
-    private func posterGrid(_ horizontal: UserInterfaceSizeClass, _ vertical: UserInterfaceSizeClass) throws -> some View {
-        let items = try (1...6).map { index in
+    private func posterRail(_ horizontal: UserInterfaceSizeClass, _ vertical: UserInterfaceSizeClass) throws -> some View {
+        MediaRail(title: "Recently Added", items: try films())
+            .environment(\.jellyfinClient, client)
+            .environment(\.horizontalSizeClass, horizontal)
+            .environment(\.verticalSizeClass, vertical)
+    }
+
+    private func films() throws -> [MediaItem] {
+        try (1...6).map { index in
             try JellyfinClient.decoder.decode(
                 MediaItem.self,
                 from: Data(#"{"Id":"film-\#(index)","Name":"Film \#(index)","Type":"Movie","ProductionYear":\#(2010 + index)}"#.utf8)
             )
         }
-        return PosterGridView(items: items) { item in
+    }
+
+    private func posterGrid(_ horizontal: UserInterfaceSizeClass, _ vertical: UserInterfaceSizeClass) throws -> some View {
+        PosterGridView(items: try films()) { item in
             PosterCard(item: item)
         }
         .padding(.horizontal, Metrics.screenGutter)
