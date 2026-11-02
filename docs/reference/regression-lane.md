@@ -80,8 +80,8 @@ persists nothing.
 Which launches pass the reset, and why:
 
 - Every public-demo and fixture-server launch through `launchSignedIn`, plus
-  `SettingsUITests`, `ServerSyncUITests` and `LibraryBrowseUITests`, passes it
-  on the first launch.
+  `SettingsUITests`, `ServerSyncUITests`, `LibraryBrowseUITests` and
+  `DuoLayoutUITests`, passes it on the first launch.
 - A journey that relaunches to prove persistence drops the flag for the
   relaunch only (`LibraryBrowseUITests` does this by rewriting its argument
   list).
@@ -120,6 +120,8 @@ scripts/test-session-recovery.py --subtitle-downloads --platforms iOS tvOS
 - Give a UI run its own `-derivedDataPath`, or it shares a build database
   with `xcodebuild build` and dies with "database is locked".
 - Two lanes at once on one machine are fine, but three caused load flakes.
+- `DuoLayoutUITests` skips unless the app runs with its tab bar on the side,
+  so run it by id on an iPhone Duo simulator (iOS 27.1 or later), closed.
 - A passed lane means every test passed or skipped with a named fixture
   reason. A skip on a supplied fixture server is a missing-fixture finding,
   not a pass.
