@@ -56,6 +56,7 @@ nonisolated enum Changelog {
             "About Lagoon on the sign-in screen is easier to tap.",
             "Starting a video on Apple TV no longer shows a Now Playing notification.",
             "On iPhone and iPad, genre names sit in the middle of their cards, as they do on Apple TV.",
+            "On cellular or a slower connection, a video small enough for the quality limit plays in its original quality instead of being converted.",
         ]),
     ]
 
