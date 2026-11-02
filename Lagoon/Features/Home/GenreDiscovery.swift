@@ -102,7 +102,7 @@ struct GenreRail: View {
     }
 }
 
-private struct GenreCard: View {
+struct GenreCard: View {
     let genre: GenreShelfItem
     let includeTypes: [MediaItemType]
     let identifier: String
