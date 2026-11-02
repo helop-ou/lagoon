@@ -120,9 +120,7 @@ struct PosterLayout: DynamicProperty {
         guard availableWidth > 0 else {
             return PosterGrid(columns: columns, columnCount: 2, cardWidth: nil)
         }
-        let baseMinimum = DetailLayout.usesLeadingColumn(horizontalSizeClass, verticalSizeClass)
-            ? Metrics.padGridPosterMinimum
-            : Metrics.phoneGridPosterMinimum
+        let baseMinimum = PosterGridSizing.baseMinimum(horizontalSizeClass, verticalSizeClass)
         let spacing = Metrics.cardSpacing
         let count = PosterGridSizing.columnCount(
             availableWidth: availableWidth,
@@ -223,6 +221,15 @@ extension PosterGridView where Trailing == EmptyView {
 #if os(iOS)
 /// How many poster columns fit. Pure, so the Dynamic Type rule is testable.
 enum PosterGridSizing {
+    static func baseMinimum(
+        _ horizontalSizeClass: UserInterfaceSizeClass?,
+        _ verticalSizeClass: UserInterfaceSizeClass?
+    ) -> CGFloat {
+        DetailLayout.usesLeadingColumn(horizontalSizeClass, verticalSizeClass)
+            ? Metrics.padGridPosterMinimum
+            : Metrics.phoneGridPosterMinimum
+    }
+
     /// Larger text widens the cards. Smaller text must not shrink them, or
     /// one step below the default squeezes a fourth column onto a phone.
     static func columnCount(

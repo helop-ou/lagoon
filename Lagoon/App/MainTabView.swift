@@ -675,7 +675,11 @@ private extension View {
 /// With the bars on the side (a closed iPhone Duo) the Search tab shows no
 /// field until it is activated, so selecting the tab activates it. Elsewhere
 /// the field already sits in the tab bar and the keyboard waits for a tap.
-private struct VerticalBarSearchActivation: ViewModifier {
+struct VerticalBarSearchActivation: ViewModifier {
+    static func activation(barEdge: HorizontalEdge?) -> TabSearchActivation {
+        barEdge == nil ? .automatic : .searchTabSelection
+    }
+
     func body(content: Content) -> some View {
         if #available(iOS 27.1, *) {
             VerticalBarSearchActivationBody(content: content)
@@ -691,7 +695,7 @@ private struct VerticalBarSearchActivationBody<Content: View>: View {
     @Environment(\.toolbarVerticalEdge) private var verticalEdge
 
     var body: some View {
-        content.tabViewSearchActivation(verticalEdge == nil ? .automatic : .searchTabSelection)
+        content.tabViewSearchActivation(VerticalBarSearchActivation.activation(barEdge: verticalEdge))
     }
 }
 #endif

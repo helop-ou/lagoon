@@ -1,5 +1,5 @@
 #if os(iOS)
-import Foundation
+import SwiftUI
 import Testing
 @testable import Lagoon
 
@@ -34,6 +34,31 @@ struct PosterGridSizingTests {
 
     @Test func largerTextStillWidensTheCards() {
         #expect(columns(proMaxWidth, textScale: 1.4) == 2)
+    }
+
+    /// An open iPhone Duo is regular both ways and takes the iPad's larger
+    /// cards, three across its 669-point inner screen instead of five.
+    @Test func anOpenDuoGetsTheLargerCards() {
+        let minimum = PosterGridSizing.baseMinimum(.regular, .regular)
+        #expect(minimum == Metrics.padGridPosterMinimum)
+        let count = PosterGridSizing.columnCount(
+            availableWidth: 669 - Metrics.screenGutter * 2,
+            baseMinimum: minimum,
+            scaledPosterWidth: Metrics.posterWidth,
+            spacing: Metrics.cardSpacing
+        )
+        #expect(count == 3)
+    }
+
+    /// A landscape Pro Max is regular wide only, so it keeps phone cards.
+    @Test(arguments: [
+        (UserInterfaceSizeClass?.some(.regular), UserInterfaceSizeClass?.some(.compact)),
+        (.compact, .regular),
+        (.compact, .compact),
+        (nil, nil),
+    ])
+    func anythingElseGetsPhoneCards(horizontal: UserInterfaceSizeClass?, vertical: UserInterfaceSizeClass?) {
+        #expect(PosterGridSizing.baseMinimum(horizontal, vertical) == Metrics.phoneGridPosterMinimum)
     }
 }
 #endif
