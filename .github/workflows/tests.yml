@@ -113,15 +113,38 @@ jobs:
       - name: Install the Metal toolchain
         run: xcodebuild -downloadComponent MetalToolchain
 
-      - name: Test
+      - name: Build
         run: |
           mkdir -p build
           status=0
-          xcodebuild test \
+          xcodebuild build-for-testing \
             -scheme LagoonHardwareRegression \
             -destination "platform=iOS Simulator,name=iPhone Duo,OS=27.1" \
-            -only-testing:LagoonUITests/DuoLayoutUITests \
             -clonedSourcePackagesDirPath build/SourcePackages \
+            -derivedDataPath build/DerivedData \
+            > build/xcodebuild-build.log 2>&1 || status=$?
+          grep -E ": error: |^error: |\*\* (BUILD|TEST) " build/xcodebuild-build.log || true
+          exit "$status"
+
+      # A cold simulator took over two minutes to open the app, past
+      # XCUITest's launch timeout. Boot it and open the app once first.
+      - name: Warm the simulator
+        run: |
+          udid=$(xcrun simctl list devices available -j \
+            | jq -r '.devices["com.apple.CoreSimulator.SimRuntime.iOS-27-1"][] | select(.name == "iPhone Duo") | .udid' | head -n 1)
+          echo "DUO_UDID=$udid" >> "$GITHUB_ENV"
+          xcrun simctl bootstatus "$udid" -b
+          xcrun simctl install "$udid" build/DerivedData/Build/Products/Debug-iphonesimulator/Lagoon.app
+          xcrun simctl launch "$udid" ee.helop.lagoon
+          xcrun simctl terminate "$udid" ee.helop.lagoon
+
+      - name: Test
+        run: |
+          status=0
+          xcodebuild test-without-building \
+            -scheme LagoonHardwareRegression \
+            -destination "platform=iOS Simulator,id=$DUO_UDID" \
+            -only-testing:LagoonUITests/DuoLayoutUITests \
             -derivedDataPath build/DerivedData \
             -resultBundlePath build/TestResults.xcresult \
             -collect-test-diagnostics never \
@@ -136,6 +159,7 @@ jobs:
           name: test-results-duo
           path: |
             build/TestResults.xcresult
+            build/xcodebuild-build.log
             build/xcodebuild.log
           if-no-files-found: ignore
           retention-days: 14
