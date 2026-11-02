@@ -123,7 +123,10 @@ Settings → Playback → Maximum Quality on Auto asks before negotiating
 - Both are probes: a failure keeps today's ceiling and is never reported.
   Results are kept per server for half an hour, or until the device moves to
   another network (`NetworkPathObserver.generation`). A failure is kept for two
-  minutes. A title's page starts the measurement, so Play rarely waits on it.
+  minutes. A reading too slow for the transcode rung's 20 Mbit/s is kept for
+  five: one taken far from the router held a whole evening of episodes to a
+  transcode, because moving closer is not a network change. A title's page
+  starts the measurement, so Play rarely waits on it.
 
 ## Library endpoints
 
