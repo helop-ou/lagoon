@@ -50,6 +50,7 @@ nonisolated enum Changelog {
         ChangelogSection(category: .improvements, changes: [
             "On iPhone Duo, Lagoon uses its wide layouts when the phone is open, and Search opens its field when it is closed.",
             "With Maximum Quality on Auto, a slow connection is checked again after five minutes, so moving closer to the router brings back full quality sooner.",
+            "Discover, Library and the Settings categories have new icons, and favourites are now a heart.",
         ]),
         ChangelogSection(category: .bugFixes, changes: [
             "VoiceOver no longer reads icon names or unlabelled pictures on Discover, in Settings and in the player.",
