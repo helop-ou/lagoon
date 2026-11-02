@@ -86,8 +86,15 @@ such paths.)
 - **`maxStaticBitrate` comes down with `maxStreamingBitrate`.** The server
   checks the static ceiling before offering the original file, so capping
   only streaming would still direct-play the remux.
-- **A resolution ceiling comes too.** Bitrate alone leaves `MaxWidth` unset,
-  and the server answers a 4K source with a 4K re-encode at 3 Mbps.
+- **A resolution ceiling comes too, on the transcoding profile.** Bitrate
+  alone leaves `MaxWidth` unset, and the server answers a 4K source with a 4K
+  re-encode at 3 Mbps. The ceiling goes in the transcoding profile's
+  `Conditions`, which Jellyfin applies only to what it encodes. On the codec
+  profiles it also refused direct play: a 2.7 Mbps 1080p episode, already
+  under the cap, was re-encoded to 720p at more bits than the original.
+  Jellyfin skips those conditions when direct play was withheld rather than
+  refused, so the transcode rung copies the ceiling onto its codec profiles
+  (`transcodeCeilingOnCodecProfiles`). Direct play is off there anyway.
 - **The viewer can override it** (Settings → Playback → Cellular). Apple says
   a path is expensive, never that it is slow, and fast tethered 5G and a
   throttled hotspot look the same.
@@ -100,7 +107,8 @@ Known limits, both deliberate:
   launch on cellular can miss the cap once.
 
 `boundedTo(_:width:height:)` **tightens** rather than skips when two bounds
-apply (fallback 1080p, metered 720p), so the smaller ceiling always wins.
+apply (fallback 1080p, metered 720p), so the smaller ceiling always wins. It
+takes a codec profile or a transcoding profile.
 
 ### What a remote link is offered
 
@@ -117,9 +125,9 @@ Maximum Quality, and `cappedToBitrate` applies it before the metered cap:
 - **A fixed maximum** applies everywhere, local servers included. **No
   Limit** turns the cap off.
 - Like the metered cap, it brings `maxStaticBitrate` down with
-  `maxStreamingBitrate`, and resolution comes down in steps: 720p under
-  4 Mbit/s, 1080p under 20 Mbit/s. Above that it is left alone, so a remote 4K
-  file the link can carry still direct-plays.
+  `maxStreamingBitrate`, and the encoded resolution comes down in steps: 720p
+  under 4 Mbit/s, 1080p under 20 Mbit/s, nothing above. Only the re-encode is
+  bounded, so any file under the cap direct-plays whatever its size.
 - **The lower quality after stalls** (`PlaybackQualityOffer`): three stalls
   inside a minute bring up an offer in the player's corner, once per item.
   Accepting re-negotiates on the same rung under a lower ceiling (70% of the

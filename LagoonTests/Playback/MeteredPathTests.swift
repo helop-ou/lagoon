@@ -38,7 +38,9 @@ struct MeteredPathTests {
     }
 
     /// The server checks the static ceiling before offering the original
-    /// file, so it must come down too, and the picture with it.
+    /// file, so it must come down too, and the encoded picture with it. A
+    /// 1080p file under the cap still direct-plays: it costs fewer bits
+    /// than its 720p re-encode.
     @Test func theStaticCeilingComesDownToo() {
         let capped = DeviceProfile.cappedForMeteredPath(
             DeviceProfile.everything,
@@ -47,9 +49,11 @@ struct MeteredPathTests {
         )
         #expect(capped.maxStreamingBitrate == MeteredPathPolicy.maxBitrate)
         #expect(capped.maxStaticBitrate == MeteredPathPolicy.maxBitrate)
+        let encoded = capped.transcodingProfiles.first { $0.type == "Video" }?.conditions ?? []
+        #expect(encoded.first { $0.property == "Width" }?.value == String(MeteredPathPolicy.maxWidth))
+        #expect(encoded.first { $0.property == "Height" }?.value == String(MeteredPathPolicy.maxHeight))
         let hevc = capped.codecProfiles.first { $0.codec == "hevc" }?.conditions ?? []
-        #expect(hevc.first { $0.property == "Width" }?.value == String(MeteredPathPolicy.maxWidth))
-        #expect(hevc.first { $0.property == "Height" }?.value == String(MeteredPathPolicy.maxHeight))
+        #expect(!hevc.contains { $0.property == "Width" || $0.property == "Height" })
     }
 
     @Test func anOrdinaryPathIsUntouched() {
@@ -63,6 +67,7 @@ struct MeteredPathTests {
             #expect(same.maxStaticBitrate == DeviceProfile.everything.maxStaticBitrate)
             #expect(same.codecProfiles.map(\.conditions.count)
                 == DeviceProfile.everything.codecProfiles.map(\.conditions.count))
+            #expect(same.transcodingProfiles.allSatisfy { $0.conditions.isEmpty })
         }
     }
 

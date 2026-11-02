@@ -17,19 +17,64 @@ struct PlaybackQualityLimitTests {
     }
 
     /// A bitrate alone gets a 4K source re-encoded at 4K, so a low cap
-    /// brings the picture down with it. A high one leaves a 4K file the link
-    /// can carry alone.
+    /// brings the encoded picture down with it. A high one leaves it alone.
     @Test func aLowCapBoundsTheResolutionAndAHighOneDoesNot() {
         func ceiling(_ bitrate: Int) -> String? {
             DeviceProfile.cappedToBitrate(DeviceProfile.everything, bitrate)
-                .codecProfiles.first { $0.codec == "hevc" }?
+                .transcodingProfiles.first { $0.type == "Video" }?
                 .conditions.first { $0.property == "Width" }?.value
         }
         #expect(ceiling(2_000_000) == "1280")
         #expect(ceiling(14_000_000) == "1920")
-        let original = DeviceProfile.everything.codecProfiles.first { $0.codec == "hevc" }?
+        #expect(ceiling(35_000_000) == nil)
+    }
+
+    /// A 3.1 Mbit/s 1080p episode under a 3.5 Mbit/s cap was re-encoded to
+    /// 720p, at more bits than the original. The ceiling bounds only what the
+    /// server encodes, never which files direct-play.
+    @Test func aCapNeverBoundsWhatDirectPlays() throws {
+        let capped = DeviceProfile.cappedToBitrate(DeviceProfile.everything, 3_500_000)
+        let original = try JSONSerialization.jsonObject(
+            with: JellyfinClient.encoder.encode(DeviceProfile.everything.codecProfiles)
+        ) as? NSArray
+        let sent = try JSONSerialization.jsonObject(
+            with: JellyfinClient.encoder.encode(capped.codecProfiles)
+        ) as? NSArray
+        #expect(original != nil)
+        #expect(sent == original)
+    }
+
+    /// Jellyfin reads the ceiling from the transcoding profile's
+    /// `Conditions`.
+    @Test func theCeilingReachesTheServerOnTheTranscodingProfile() throws {
+        let capped = DeviceProfile.cappedToBitrate(DeviceProfile.everything, 2_000_000)
+        let json = try #require(try JSONSerialization.jsonObject(
+            with: JellyfinClient.encoder.encode(capped)
+        ) as? [String: Any])
+        let transcoding = try #require((json["TranscodingProfiles"] as? [[String: Any]])?.first)
+        let conditions = try #require(transcoding["Conditions"] as? [[String: Any]])
+        let width = try #require(conditions.first { $0["Property"] as? String == "Width" })
+        #expect(width["Condition"] as? String == "LessThanEqual")
+        #expect(width["Value"] as? String == "1280")
+        #expect(width["IsRequired"] as? Bool == true)
+        #expect(conditions.contains { $0["Property"] as? String == "Height" && $0["Value"] as? String == "720" })
+    }
+
+    /// The transcode rung withholds direct play, and Jellyfin then skips the
+    /// transcoding profile's conditions, so the ceiling has to sit on the
+    /// codec profiles there. The remux rung must keep them clear, or a file
+    /// it could copy gets re-encoded.
+    @Test func onlyTheTranscodeRungBoundsItsCodecProfiles() {
+        func width(_ delivery: PlaybackDelivery) -> String? {
+            DeviceProfile.lagoon(for: delivery, maxBitrate: 2_000_000)
+                .codecProfiles.first { $0.codec == "h264" }?
+                .conditions.first { $0.property == "Width" }?.value
+        }
+        #expect(width(.transcode) == "1280")
+        let uncapped = DeviceProfile.lagoon.codecProfiles.first { $0.codec == "h264" }?
             .conditions.first { $0.property == "Width" }?.value
-        #expect(ceiling(35_000_000) == original)
+        #expect(width(.remux) == uncapped)
+        #expect(width(.negotiated) == uncapped)
     }
 
     @Test func autoLeavesAServerOnThisNetworkAtFullQuality() {

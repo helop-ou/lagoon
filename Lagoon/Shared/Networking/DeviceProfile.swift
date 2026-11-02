@@ -32,6 +32,9 @@ nonisolated enum DeviceProfile {
         let maxAudioChannels: String
         let minSegments: Int
         let breakOnNonKeyFrames: Bool
+        /// Shape only what the server encodes. Jellyfin applies them when it
+        /// re-encodes video, never to the direct-play decision.
+        var conditions: [ProfileCondition] = []
     }
 
     struct CodecProfile: Encodable {
@@ -289,32 +292,30 @@ nonisolated enum DeviceProfile {
     /// transcode rung.
     static func lagoon(for delivery: PlaybackDelivery, maxBitrate: Int? = nil) -> Profile {
         let forRung = delivery == .transcode ? boundedForRealtimeTranscode(lagoon) : lagoon
-        let capped = cappedToBitrate(forRung, maxBitrate)
+        var capped = cappedToBitrate(forRung, maxBitrate)
+        // An Apple TV never reports an expensive path.
         #if os(iOS)
-        return cappedForMeteredPath(
+        capped = cappedForMeteredPath(
             capped,
             cost: NetworkPathObserver.shared.current,
             allowFullQuality: UserDefaults.standard.bool(forKey: meteredOverrideKey)
         )
-        #else
-        // An Apple TV never reports an expensive path.
-        return capped
         #endif
+        return delivery == .transcode ? transcodeCeilingOnCodecProfiles(capped) : capped
     }
 
     /// The connection's ceiling (`PlaybackQualityLimit`). Both figures come
     /// down: the server checks the static one before offering the original
     /// file. Resolution comes down in steps too, because a bitrate alone
-    /// gets a 4K source re-encoded at 4K (see the metered cap). Above
-    /// `realtimeTranscodeBitrateCeiling` it is left alone, so a remote 4K
-    /// file the link can carry still direct-plays.
+    /// gets a 4K source re-encoded at 4K (see the metered cap). It bounds
+    /// only the re-encode, so a 1080p file under the cap still direct-plays.
     static func cappedToBitrate(_ profile: Profile, _ maxBitrate: Int?) -> Profile {
         guard let maxBitrate, maxBitrate > 0 else { return profile }
         var capped = profile
         capped.maxStreamingBitrate = min(profile.maxStreamingBitrate, maxBitrate)
         capped.maxStaticBitrate = min(profile.maxStaticBitrate, maxBitrate)
         if let size = resolutionCeiling(forBitrate: maxBitrate) {
-            capped.codecProfiles = profile.codecProfiles.map {
+            capped.transcodingProfiles = profile.transcodingProfiles.map {
                 boundedTo($0, width: size.width, height: size.height)
             }
         }
@@ -351,10 +352,25 @@ nonisolated enum DeviceProfile {
         // The server checks the static ceiling before offering the original
         // file, so it must come down too.
         capped.maxStaticBitrate = min(profile.maxStaticBitrate, bitrate)
-        capped.codecProfiles = profile.codecProfiles.map {
+        capped.transcodingProfiles = profile.transcodingProfiles.map {
             boundedTo($0, width: MeteredPathPolicy.maxWidth, height: MeteredPathPolicy.maxHeight)
         }
         return capped
+    }
+
+    /// Copies the transcoding profiles' resolution ceiling onto the codec
+    /// profiles. Jellyfin skips a transcoding profile's conditions when
+    /// direct play was withheld rather than refused, as on the transcode
+    /// rung, where direct play is off anyway.
+    static func transcodeCeilingOnCodecProfiles(_ profile: Profile) -> Profile {
+        let conditions = profile.transcodingProfiles.flatMap(\.conditions)
+        func smallest(_ property: String) -> Int? {
+            conditions.filter { $0.property == property }.compactMap { Int($0.value) }.min()
+        }
+        guard let width = smallest("Width"), let height = smallest("Height") else { return profile }
+        var bounded = profile
+        bounded.codecProfiles = profile.codecProfiles.map { boundedTo($0, width: width, height: height) }
+        return bounded
     }
 
     /// The defaults key behind Settings → Playback → Full Quality on Cellular.
@@ -449,28 +465,43 @@ nonisolated enum DeviceProfile {
     /// contradictory pair.
     static func boundedTo(_ profile: CodecProfile, width: Int, height: Int) -> CodecProfile {
         guard profile.type == "Video" else { return profile }
-        var conditions = profile.conditions.filter {
+        return CodecProfile(
+            type: profile.type,
+            codec: profile.codec,
+            conditions: boundedTo(profile.conditions, width: width, height: height)
+        )
+    }
+
+    static func boundedTo(_ profile: TranscodingProfile, width: Int, height: Int) -> TranscodingProfile {
+        guard profile.type == "Video" else { return profile }
+        var bounded = profile
+        bounded.conditions = boundedTo(profile.conditions, width: width, height: height)
+        return bounded
+    }
+
+    private static func boundedTo(_ conditions: [ProfileCondition], width: Int, height: Int) -> [ProfileCondition] {
+        var bounded = conditions.filter {
             !($0.property == "Width" || $0.property == "Height")
         }
-        let existingWidth = profile.conditions
+        let existingWidth = conditions
             .first { $0.property == "Width" }
             .flatMap { Int($0.value) }
-        let existingHeight = profile.conditions
+        let existingHeight = conditions
             .first { $0.property == "Height" }
             .flatMap { Int($0.value) }
-        conditions.append(ProfileCondition(
+        bounded.append(ProfileCondition(
             condition: "LessThanEqual",
             property: "Width",
             value: String(min(width, existingWidth ?? width)),
             isRequired: true
         ))
-        conditions.append(ProfileCondition(
+        bounded.append(ProfileCondition(
             condition: "LessThanEqual",
             property: "Height",
             value: String(min(height, existingHeight ?? height)),
             isRequired: true
         ))
-        return CodecProfile(type: profile.type, codec: profile.codec, conditions: conditions)
+        return bounded
     }
 
     /// nil when nothing is left. Callers then drop the profile.
