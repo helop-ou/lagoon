@@ -14,6 +14,8 @@ nonisolated enum DiagnosticFieldKind: Equatable, Sendable {
     /// `Users/{id}/Items/{id}`, produced only by `DiagnosticRouteTemplate`.
     case route
     case choice(Set<String>)
+    /// Comma-separated members of a closed set, each once.
+    case choiceList(Set<String>)
 }
 
 /// The only allowlist of diagnostic fields. Unknown keys and ill-fitting
@@ -53,6 +55,20 @@ nonisolated enum DiagnosticSchema {
     static let httpMethodChoices: Set<String> = ["GET", "POST", "DELETE", "PUT"]
     static let clientChoices: Set<String> = ["jellyfin", "seerr", "media", "image", "subtitle"]
     static let networkChoices: Set<String> = ["unrestricted", "constrained", "expensive", "unknown"]
+    static let capChoices = Set(PlaybackOffer.Cap.allCases.map(\.rawValue))
+    /// Jellyfin's `TranscodeReason` names, 10.11 through 12.
+    static let transcodeReasonChoices: Set<String> = [
+        "ContainerNotSupported", "VideoCodecNotSupported", "AudioCodecNotSupported",
+        "SubtitleCodecNotSupported", "AudioIsExternal", "SecondaryAudioNotSupported",
+        "StreamCountExceedsLimit", "VideoProfileNotSupported", "VideoRangeTypeNotSupported",
+        "VideoCodecTagNotSupported", "VideoLevelNotSupported", "VideoResolutionNotSupported",
+        "VideoBitDepthNotSupported", "VideoFramerateNotSupported", "VideoRotationNotSupported",
+        "RefFramesNotSupported", "AnamorphicVideoNotSupported", "InterlacedVideoNotSupported",
+        "AudioChannelsNotSupported", "AudioProfileNotSupported", "AudioSampleRateNotSupported",
+        "AudioBitDepthNotSupported", "ContainerBitrateExceedsLimit", "VideoBitrateNotSupported",
+        "AudioBitrateNotSupported", "UnknownVideoStreamInfo", "UnknownAudioStreamInfo",
+        "DirectPlayError",
+    ]
     /// SyncPlay's transport commands and drift corrections. The correction
     /// has its own key: `method` is Jellyfin's delivery method.
     static let syncPlayCommandChoices: Set<String> = ["unpause", "pause", "seek", "stop"]
@@ -83,6 +99,12 @@ nonisolated enum DiagnosticSchema {
         "videoPath": .token,
         "audioPath": .token,
         "network": .choice(networkChoices),
+        // What this device offered the server, what bounded it, and why the
+        // server re-encoded anyway.
+        "offeredBitrate": .int,
+        "cap": .choice(capChoices),
+        "probedBitrate": .int,
+        "transcodeReasons": .choiceList(transcodeReasonChoices),
         // Where the playhead was and how the pipeline looked.
         "position": .double,
         "rate": .double,
@@ -190,6 +212,9 @@ nonisolated enum DiagnosticSchema {
             return isRoute(text)
         case (.choice(let choices), .string(let text)):
             return choices.contains(text)
+        case (.choiceList(let choices), .string(let text)):
+            let members = text.split(separator: ",", omittingEmptySubsequences: false).map(String.init)
+            return members.allSatisfy(choices.contains) && Set(members).count == members.count
         default:
             return false
         }

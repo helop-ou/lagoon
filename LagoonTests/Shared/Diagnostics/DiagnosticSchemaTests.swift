@@ -59,6 +59,11 @@ struct DiagnosticSchemaTests {
                 #expect(!choices.isEmpty, "\(key) has no choices")
                 #expect(choices.allSatisfy(DiagnosticSchema.isToken), "\(key) choices must be tokens")
             }
+            if case .choiceList(let choices) = kind {
+                #expect(!choices.isEmpty, "\(key) has no choices")
+                #expect(choices.allSatisfy(DiagnosticSchema.isToken), "\(key) choices must be tokens")
+                #expect(!choices.contains { $0.contains(",") }, "\(key) choices must not contain the separator")
+            }
         }
         let eventCodes = DiagnosticEventCode.allCases.map(\.rawValue)
         #expect(Set(eventCodes).count == eventCodes.count)
@@ -210,7 +215,7 @@ struct DiagnosticsHubTests {
                 case .bool: .bool(true)
                 case .token: .string("hevc")
                 case .route: .string("Items")
-                case .choice(let choices): .string(choices.sorted()[0])
+                case .choice(let choices), .choiceList(let choices): .string(choices.sorted()[0])
                 }
             }
         }

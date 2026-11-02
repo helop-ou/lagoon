@@ -239,7 +239,8 @@ final class PlaybackIncidentMonitor {
         source: MediaSource,
         cached: Bool,
         disc: Bool,
-        resumeSeconds: Double
+        resumeSeconds: Double,
+        offer: PlaybackOffer? = nil
     ) {
         endSampling()
         samplingEngine = nil
@@ -257,6 +258,7 @@ final class PlaybackIncidentMonitor {
         linkFields = [:]
         sampledWholeAttempt = hub.isReportingEnabled
         facts = Self.facts(delivery: delivery, method: method, source: source, cached: cached, disc: disc)
+            .merging(Self.offerFields(offer, source: source)) { _, offer in offer }
         var fields = facts
         fields["position"] = .double(resumeSeconds.rounded(toPlaces: 1))
         fields["network"] = .string(Self.networkName)
@@ -644,6 +646,34 @@ final class PlaybackIncidentMonitor {
             if let channels = audio.channels { fields["audioChannels"] = .int(channels) }
         }
         return fields
+    }
+
+    /// What was offered and why the server re-encoded anyway. A download
+    /// has no offer.
+    static func offerFields(_ offer: PlaybackOffer?, source: MediaSource) -> [String: DiagnosticValue] {
+        var fields: [String: DiagnosticValue] = [:]
+        if let offer {
+            fields["offeredBitrate"] = .int(offer.maxStreamingBitrate)
+            fields["cap"] = .string(offer.cap.rawValue)
+            if let probed = offer.probedBitsPerSecond { fields["probedBitrate"] = .int(probed) }
+        }
+        if let reasons = transcodeReasons(source.transcodingUrl) {
+            fields["transcodeReasons"] = .string(reasons)
+        }
+        return fields
+    }
+
+    /// The `TranscodeReasons` query item, keeping only Jellyfin's known
+    /// names so one new reason does not cost the rest.
+    static func transcodeReasons(_ transcodingURL: String?) -> String? {
+        guard let transcodingURL,
+              let value = URLComponents(string: transcodingURL)?.queryItems?
+                .first(where: { $0.name == "TranscodeReasons" })?.value else { return nil }
+        var seen = Set<String>()
+        let known = value.split(separator: ",").map(String.init).filter {
+            DiagnosticSchema.transcodeReasonChoices.contains($0) && seen.insert($0).inserted
+        }
+        return known.isEmpty ? nil : known.joined(separator: ",")
     }
 
     /// What the pipeline looks like right now: cheap reads only.

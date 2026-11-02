@@ -213,7 +213,8 @@ struct PlaybackSuccessorPreparationTests {
         """.utf8)
         let info = try JellyfinClient.decoder.decode(PlaybackInfoResponse.self, from: data)
         return .init(mediaID: "episode-2", info: info, source: try #require(info.mediaSources.first),
-                     streamURL: URL(string: "https://media.test/\(sourceID).mkv")!, method: .directPlay)
+                     streamURL: URL(string: "https://media.test/\(sourceID).mkv")!, method: .directPlay,
+                     offer: PlaybackOffer(maxStreamingBitrate: 120_000_000, cap: .none, probedBitsPerSecond: nil))
     }
 
     private func waitUntil(_ predicate: @MainActor () -> Bool) async {
