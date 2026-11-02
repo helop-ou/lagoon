@@ -81,6 +81,27 @@ extension EnvironmentValues {
     @Entry var posterCardWidth: CGFloat?
 }
 
+/// Gaps between cards and rows on rails and grids. The wide layout gets a
+/// little more room. tvOS has one.
+struct BrowseSpacing: DynamicProperty {
+    #if os(iOS)
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+
+    private var isWide: Bool { DetailLayout.usesLeadingColumn(horizontalSizeClass, verticalSizeClass) }
+
+    var card: CGFloat { isWide ? Metrics.wideCardSpacing : Metrics.cardSpacing }
+    var gridRow: CGFloat { isWide ? Metrics.wideGridRowSpacing : Metrics.gridRowSpacing }
+    var railTop: CGFloat { isWide ? Metrics.wideRailTopPadding : Metrics.railTopPadding }
+    var railBottom: CGFloat { isWide ? Metrics.wideRailBottomPadding : Metrics.railBottomPadding }
+    #else
+    var card: CGFloat { Metrics.cardSpacing }
+    var gridRow: CGFloat { Metrics.gridRowSpacing }
+    var railTop: CGFloat { Metrics.railTopPadding }
+    var railBottom: CGFloat { Metrics.railBottomPadding }
+    #endif
+}
+
 /// A grid resolved for a width. Paging thresholds scale with the column
 /// count.
 struct PosterGrid {
@@ -97,6 +118,7 @@ struct PosterLayout: DynamicProperty {
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.displayScale) private var displayScale
     @Environment(\.posterCardWidth) private var gridCardWidth
+    private let browseSpacing = BrowseSpacing()
     #if os(iOS)
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
@@ -121,7 +143,7 @@ struct PosterLayout: DynamicProperty {
             return PosterGrid(columns: columns, columnCount: 2, cardWidth: nil)
         }
         let baseMinimum = PosterGridSizing.baseMinimum(horizontalSizeClass, verticalSizeClass)
-        let spacing = Metrics.cardSpacing
+        let spacing = browseSpacing.card
         let count = PosterGridSizing.columnCount(
             availableWidth: availableWidth,
             baseMinimum: baseMinimum,
@@ -137,6 +159,7 @@ struct PosterLayout: DynamicProperty {
         #endif
     }
 
+    var rowSpacing: CGFloat { browseSpacing.gridRow }
     var height: CGFloat { (width * 3 / 2).rounded() }
     var captionHeight: CGFloat {
         #if os(tvOS)
@@ -162,7 +185,7 @@ struct PosterLayout: DynamicProperty {
     #if os(iOS)
     /// The grid before it has been measured.
     private var columns: [GridItem] {
-        [GridItem(.adaptive(minimum: width), spacing: Metrics.cardSpacing)]
+        [GridItem(.adaptive(minimum: width), spacing: browseSpacing.card)]
     }
     #endif
     var imageWidth: Int { ArtworkSizing.pixels(for: width, displayScale: displayScale) }
@@ -190,7 +213,7 @@ struct PosterGridView<Item: Identifiable, Card: View, Trailing: View>: View {
 
     var body: some View {
         let grid = layout.grid(fitting: gridWidth)
-        LazyVGrid(columns: grid.columns, spacing: Metrics.gridRowSpacing) {
+        LazyVGrid(columns: grid.columns, spacing: layout.rowSpacing) {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                 card(item)
                     .onAppear {

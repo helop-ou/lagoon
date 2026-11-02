@@ -8,10 +8,11 @@ struct PlaylistsView: View {
     /// Nil until the first answer, and after a failed one.
     @State private var playlists: [CollectionShelfItem]?
     @State private var isLoading = false
+    private let browseSpacing = BrowseSpacing()
 
-    private let columns = [
-        GridItem(.adaptive(minimum: Metrics.landscapeWidth), spacing: Metrics.cardSpacing, alignment: .topLeading),
-    ]
+    private var columns: [GridItem] {
+        [GridItem(.adaptive(minimum: Metrics.landscapeWidth), spacing: browseSpacing.card, alignment: .topLeading)]
+    }
 
     var body: some View {
         ScrollView(showsIndicators: false) {
@@ -40,7 +41,7 @@ struct PlaylistsView: View {
     @ViewBuilder
     private var content: some View {
         if let playlists, !playlists.isEmpty {
-            LazyVGrid(columns: columns, alignment: .leading, spacing: Metrics.gridRowSpacing) {
+            LazyVGrid(columns: columns, alignment: .leading, spacing: browseSpacing.gridRow) {
                 ForEach(playlists) { playlist in
                     CollectionCard(collection: playlist, identifier: "playlist")
                 }
