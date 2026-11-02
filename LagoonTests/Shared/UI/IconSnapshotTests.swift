@@ -48,6 +48,34 @@ struct IconSnapshotTests {
             tolerance: 0.0003
         )
     }
+
+    /// A downloaded title's long-press entry deletes, so it shows a bin.
+    @Test func deletingADownloadShowsABin() async throws {
+        let base = FileManager.default.temporaryDirectory
+            .appending(path: "IconSnapshotTests-\(UUID().uuidString)", directoryHint: .isDirectory)
+        defer { try? FileManager.default.removeItem(at: base) }
+        let directory = base.appending(path: DownloadStore.accountKey(for: "a"), directoryHint: .isDirectory)
+        var manifest = DownloadManifest()
+        manifest.insert(DownloadManifestTests.makeEntry(id: "arrival"))
+        manifest.markComplete("arrival", bytes: 1_000, at: Date())
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        DownloadStore.saveManifest(manifest, at: directory.appending(path: "manifest.json"))
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [UnansweredProtocol.self]
+        let store = DownloadStore(baseDirectory: base, sessionConfiguration: configuration)
+        let owner = NSObject()
+        store.activate(accountID: "a", owner: ObjectIdentifier(owner))
+        try #require(store.isDownloaded("arrival"))
+        let movie = try item(favorite: false)
+
+        try await Snapshot.verify(
+            VStack(alignment: .leading) { store.contextMenuItems(for: movie) }
+                .padding(Metrics.screenGutter)
+                .environment(session),
+            named: "download-menu-delete",
+            size: CGSize(width: 260, height: 100)
+        )
+    }
     #endif
 
     // MARK: - Fixtures
