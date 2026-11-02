@@ -53,6 +53,7 @@ nonisolated enum Changelog {
             "Discover, Library and the Settings categories have new icons, and favourites are now a heart.",
             "Baby Pink has new colours: soft orchid over deep plum, and posters keep their own colours.",
             "On Apple TV, posters and cards are a little larger. On iPad, rails and grids have a little more room between cards and rows.",
+            "A show you've started shows how many episodes you have left on its poster.",
         ]),
         ChangelogSection(category: .bugFixes, changes: [
             "VoiceOver no longer reads icon names or unlabelled pictures on Discover, in Settings and in the player.",
