@@ -363,6 +363,8 @@ final class PlaybackController {
         let source: MediaSource
         let streamURL: URL
         let method: PlayMethod
+        /// What was offered the server. Nil for a download.
+        var offer: PlaybackOffer?
         var isDownload = false
         /// A download's own position, which replaces the server's.
         var localResumeTicks: Int64?
@@ -451,7 +453,8 @@ final class PlaybackController {
                 info: prepared.info,
                 source: prepared.source,
                 streamURL: prepared.streamURL,
-                method: prepared.method
+                method: prepared.method,
+                offer: prepared.offer
             )
         }
         var negotiated = try await negotiatedSource(for: media, client: client)
@@ -470,15 +473,16 @@ final class PlaybackController {
             info: negotiated.info,
             source: negotiated.source,
             streamURL: streamURL,
-            method: method
+            method: method,
+            offer: negotiated.offer
         )
     }
 
     private func negotiatedSource(
         for media: MediaItem,
         client: JellyfinClient
-    ) async throws -> (info: PlaybackInfoResponse, source: MediaSource) {
-        let info = try await client.playbackInfo(
+    ) async throws -> (info: PlaybackInfoResponse, source: MediaSource, offer: PlaybackOffer) {
+        let (info, offer) = try await client.negotiate(
             itemId: media.id,
             delivery: delivery,
             maxBitrate: qualityCap
@@ -486,7 +490,7 @@ final class PlaybackController {
         guard info.errorCode == nil, let source = info.mediaSources.first else {
             throw JellyfinError.unplayable
         }
-        return (info, source)
+        return (info, source, offer)
     }
 
     private func adopt(_ resolved: ResolvedSource) {
@@ -518,7 +522,8 @@ final class PlaybackController {
                 url: resolved.streamURL, delivery: resolved.method.delivery
             ),
             disc: resolved.discRequest != nil,
-            resumeSeconds: seconds
+            resumeSeconds: seconds,
+            offer: resolved.offer
         )
         return seconds
     }

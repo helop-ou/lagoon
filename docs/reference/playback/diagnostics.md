@@ -64,8 +64,8 @@ Lagoon/Shared/Networking/APIDiagnostics.swift  request/decode failure classifica
 ## What leaves the device
 
 Only fields in `DiagnosticSchema.fields` can appear. Each key has a kind:
-`int`, `double`, `bool`, a closed `choice`, a `token`, or a `route` template
-of letters and `{id}`. A token matches `[A-Za-z0-9._,-]`, is at most 48 bytes,
+`int`, `double`, `bool`, a closed `choice`, a `choiceList` of distinct members
+of a closed set, a `token`, or a `route` template of letters and `{id}`. A token matches `[A-Za-z0-9._,-]`, is at most 48 bytes,
 and is refused if it looks like a hostname or IPv4 address. A value that does
 not fit is dropped and counted in `schemaRejected`, so a call-site mistake is
 visible rather than shipped.
@@ -73,7 +73,9 @@ visible rather than shipped.
 **Sent:** app build and version, engine (`lavf` version), OS name and version,
 device model class, simulator flag, distribution environment, delivery rung,
 play method, container, codec names, profile, range, dimensions, bit depth,
-frame rate, bitrate, output paths, position and rate, queue depths, audio
+frame rate, bitrate, the bitrate offered to the server and which cap bounded
+it (`none`, `auto`, `setting`, `metered`, `lowered`), Auto's measured link
+rate, Jellyfin's transcode reason names, output paths, position and rate, queue depths, audio
 lead, stall and starvation counters, dropped and corrupted frame counts,
 memory footprint and headroom, thermal state, app state, error domain and
 code, HTTP status and method, route template, stage, cause, recovery reason,
@@ -217,7 +219,8 @@ Settings → Advanced → Diagnostic Reports → *Send Diagnostic Reports* contr
   Subscription monthly. The client-side limits cap a worst case at a few dozen
   reports per process.
 - **Finding reports.** Issues, filtered by `release`, `build`, `videoCodec`,
-  `delivery`, `stage`, `route`. Each event has `extra` with every field and a
+  `delivery`, `stage`, `route`. `cap` and `transcodeReasons` say why a title
+  transcoded. Each event has `extra` with every field and a
   `history.json` attachment (`t` in seconds relative to the incident,
   negative before it).
 - No `sentry-cli`, dSYM upload or source maps. Stack traces for any failure

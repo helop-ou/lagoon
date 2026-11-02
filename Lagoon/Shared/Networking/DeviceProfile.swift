@@ -376,6 +376,18 @@ nonisolated enum DeviceProfile {
     /// The defaults key behind Settings → Playback → Full Quality on Cellular.
     static let meteredOverrideKey = "playback.allowFullQualityOnMetered"
 
+    /// Whether the metered cap bounds a negotiation started now.
+    static var meteredCapApplies: Bool {
+        #if os(iOS)
+        MeteredPathPolicy.applies(
+            cost: NetworkPathObserver.shared.current,
+            allowFullQuality: UserDefaults.standard.bool(forKey: meteredOverrideKey)
+        )
+        #else
+        false
+        #endif
+    }
+
     /// The transcode rung's bitrate. The envelope's 120 Mbps is a
     /// direct-play figure, not an encoder target.
     static let realtimeTranscodeBitrateCeiling = 20_000_000

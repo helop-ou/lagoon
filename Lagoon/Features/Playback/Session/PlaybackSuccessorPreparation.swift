@@ -12,6 +12,7 @@ final class PlaybackSuccessorPreparation {
         let source: MediaSource
         let streamURL: URL
         let method: PlayMethod
+        let offer: PlaybackOffer
     }
 
     /// Injected so the generation rules can be tested without an engine.
@@ -116,7 +117,7 @@ final class PlaybackSuccessorPreparation {
     }
 
     static func negotiate(itemID: String, client: JellyfinClient) async throws -> PreparedPlayback? {
-        let info = try await client.playbackInfo(itemId: itemID)
+        let (info, offer) = try await client.negotiate(itemId: itemID)
         guard !Task.isCancelled,
               info.errorCode == nil,
               let source = info.mediaSources.first else { return nil }
@@ -124,6 +125,8 @@ final class PlaybackSuccessorPreparation {
         let layout = PlaybackSourceLayout(videoType: source.videoType, isoType: source.isoType)
         guard !layout.isDisc else { return nil }
         let (url, method) = try client.streamURL(itemId: itemID, source: source)
-        return PreparedPlayback(mediaID: itemID, info: info, source: source, streamURL: url, method: method)
+        return PreparedPlayback(
+            mediaID: itemID, info: info, source: source, streamURL: url, method: method, offer: offer
+        )
     }
 }

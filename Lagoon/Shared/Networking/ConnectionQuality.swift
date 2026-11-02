@@ -51,6 +51,28 @@ nonisolated enum ConnectionMeasurement: Equatable, Sendable {
     case remote(bitsPerSecond: Int)
 }
 
+/// What a negotiation offered the server and what bounded it, so a report
+/// on a transcode says whether a cap chose it.
+nonisolated struct PlaybackOffer: Equatable, Sendable {
+    enum Cap: String, CaseIterable, Sendable {
+        case none, auto, setting, metered, lowered
+    }
+
+    let maxStreamingBitrate: Int
+    let cap: Cap
+    /// What Auto measured, in bit/s.
+    let probedBitsPerSecond: Int?
+
+    /// The lowest bound wins: the metered cap unless the connection's
+    /// ceiling is already under it.
+    static func cap(lowered: Bool, setting: MaximumQuality, ceiling: Int?, metered: Bool) -> Cap {
+        if metered, (ceiling ?? .max) > MeteredPathPolicy.maxBitrate { return .metered }
+        guard ceiling != nil else { return .none }
+        if lowered { return .lowered }
+        return setting == .auto ? .auto : .setting
+    }
+}
+
 /// The bitrate ceiling a playback negotiates with. Nil leaves the envelope
 /// alone.
 nonisolated enum PlaybackQualityLimit {

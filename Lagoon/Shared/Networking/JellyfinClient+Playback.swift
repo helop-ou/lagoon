@@ -81,21 +81,31 @@ extension JellyfinClient {
         delivery: PlaybackDelivery = .negotiated,
         maxBitrate: Int? = nil
     ) async throws -> PlaybackInfoResponse {
+        try await negotiate(itemId: itemId, delivery: delivery, maxBitrate: maxBitrate).info
+    }
+
+    /// `playbackInfo`, with what this device offered the server and why.
+    func negotiate(
+        itemId: String,
+        delivery: PlaybackDelivery = .negotiated,
+        maxBitrate: Int? = nil
+    ) async throws -> (info: PlaybackInfoResponse, offer: PlaybackOffer) {
         let userId = try requireUserId()
-        let ceiling: Int?
+        let setting = MaximumQuality.current
+        let ceiling: ConnectionCeiling
         if let maxBitrate {
-            ceiling = maxBitrate
+            ceiling = ConnectionCeiling(bitrate: maxBitrate, probedBitsPerSecond: nil)
         } else {
-            ceiling = await connectionBitrateCeiling()
+            ceiling = await connectionCeiling(setting: setting)
         }
         #if DEBUG && targetEnvironment(simulator)
         let profile = UserDefaults.standard.bool(forKey: "debug.simulatorTranscode")
             ? DeviceProfile.simulatorRegression
-            : DeviceProfile.lagoon(for: delivery, maxBitrate: ceiling)
+            : DeviceProfile.lagoon(for: delivery, maxBitrate: ceiling.bitrate)
         #else
-        let profile = DeviceProfile.lagoon(for: delivery, maxBitrate: ceiling)
+        let profile = DeviceProfile.lagoon(for: delivery, maxBitrate: ceiling.bitrate)
         #endif
-        return try await post(
+        let info: PlaybackInfoResponse = try await post(
             "Items/\(itemId)/PlaybackInfo",
             query: [URLQueryItem(name: "UserId", value: userId)],
             body: PlaybackInfoRequest(
@@ -105,26 +115,51 @@ extension JellyfinClient {
                 delivery: delivery
             )
         )
+        let offer = PlaybackOffer(
+            maxStreamingBitrate: profile.maxStreamingBitrate,
+            cap: PlaybackOffer.cap(
+                lowered: maxBitrate != nil,
+                setting: setting,
+                ceiling: ceiling.bitrate,
+                metered: DeviceProfile.meteredCapApplies
+            ),
+            probedBitsPerSecond: ceiling.probedBitsPerSecond
+        )
+        return (info, offer)
     }
 
-    /// The ceiling Settings → Playback → Maximum Quality asks for. Auto
-    /// measures a remote server once per network and half hour. Not on a
-    /// metered path, whose own, lower cap applies anyway.
+    nonisolated struct ConnectionCeiling: Equatable, Sendable {
+        let bitrate: Int?
+        /// What Auto measured, in bit/s. Nil when nothing was measured.
+        let probedBitsPerSecond: Int?
+    }
+
+    /// The ceiling Settings → Playback → Maximum Quality asks for.
     func connectionBitrateCeiling(setting: MaximumQuality = .current) async -> Int? {
+        await connectionCeiling(setting: setting).bitrate
+    }
+
+    /// Auto measures a remote server once per network and half hour. Not on
+    /// a metered path, whose own, lower cap applies anyway.
+    func connectionCeiling(setting: MaximumQuality = .current) async -> ConnectionCeiling {
         guard setting == .auto else {
-            return PlaybackQualityLimit.maxBitrate(setting: setting, connection: nil)
+            return ConnectionCeiling(
+                bitrate: PlaybackQualityLimit.maxBitrate(setting: setting, connection: nil),
+                probedBitsPerSecond: nil
+            )
         }
-        #if os(iOS)
-        if MeteredPathPolicy.applies(
-            cost: NetworkPathObserver.shared.current,
-            allowFullQuality: UserDefaults.standard.bool(forKey: DeviceProfile.meteredOverrideKey)
-        ) { return nil }
-        #endif
-        guard let serverURL else { return nil }
+        guard !DeviceProfile.meteredCapApplies, let serverURL else {
+            return ConnectionCeiling(bitrate: nil, probedBitsPerSecond: nil)
+        }
         let measurement = await ConnectionMeasurementCache.shared.measurement(for: serverURL.absoluteString) {
             await self.measureConnection()
         }
-        return PlaybackQualityLimit.maxBitrate(setting: setting, connection: measurement)
+        var probed: Int?
+        if case .remote(let bitsPerSecond) = measurement { probed = bitsPerSecond }
+        return ConnectionCeiling(
+            bitrate: PlaybackQualityLimit.maxBitrate(setting: setting, connection: measurement),
+            probedBitsPerSecond: probed
+        )
     }
 
     /// Nil when either request fails: today's ceiling stands rather than

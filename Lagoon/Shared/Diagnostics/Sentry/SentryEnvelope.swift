@@ -13,6 +13,7 @@ nonisolated struct SentryEnvelope: Equatable, Sendable {
         "delivery", "method", "container", "videoCodec", "audioCodec", "videoRange",
         "videoPath", "audioPath", "stage", "cause", "errorDomain", "client", "route",
         "httpStatus", "degradation", "thermal", "recovery", "outcome", "track",
+        "cap", "transcodeReasons",
     ]
 
     let eventID: String
