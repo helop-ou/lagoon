@@ -7,8 +7,8 @@ enum Metrics {
     #if os(tvOS)
     static let screenGutter: CGFloat = 80
     static let cardSpacing: CGFloat = 40
-    static let posterWidth: CGFloat = 280
-    static let landscapeWidth: CGFloat = 360
+    static let posterWidth: CGFloat = 300
+    static let landscapeWidth: CGFloat = 384
     static let heroHeight: CGFloat = 620
     static let gridColumns = 5
     static let gridRowSpacing: CGFloat = 72
@@ -87,6 +87,12 @@ enum Metrics {
     /// next shelf.
     static let railTopPadding: CGFloat = Space.m
     static let railBottomPadding: CGFloat = Space.xxl
+    /// The wide layout (an iPad, an open Duo) gives rails and grids a little
+    /// more room. Read through `BrowseSpacing`.
+    static let wideCardSpacing: CGFloat = 20
+    static let wideRailTopPadding: CGFloat = Space.l
+    static let wideRailBottomPadding: CGFloat = Space.xxl + Space.m
+    static let wideGridRowSpacing: CGFloat = Space.xxl + Space.m
     /// A profile's round portrait in the "Who's watching?" picker.
     static let profilePortraitSize: CGFloat = 84
     static let groupedProfilePortraitSize: CGFloat = 84

@@ -20,8 +20,10 @@ struct RailShelf<Destination: Hashable, Content: View>: View {
     /// the trailing card even though a destination exists.
     let showsSeeAllCard: Bool
     let alignment: VerticalAlignment
-    let spacing: CGFloat
+    /// Nil takes the layout's card spacing.
+    let spacing: CGFloat?
     let content: () -> Content
+    private let browseSpacing = BrowseSpacing()
 
     init(
         title: String,
@@ -29,7 +31,7 @@ struct RailShelf<Destination: Hashable, Content: View>: View {
         seeAllIdentifier: String = "rail.seeAll",
         showsSeeAllCard: Bool = true,
         alignment: VerticalAlignment = .center,
-        spacing: CGFloat = Metrics.cardSpacing,
+        spacing: CGFloat? = nil,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.title = title
@@ -56,7 +58,7 @@ struct RailShelf<Destination: Hashable, Content: View>: View {
             }
             .padding(.horizontal, Metrics.screenGutter)
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(alignment: alignment, spacing: spacing) {
+                LazyHStack(alignment: alignment, spacing: spacing ?? browseSpacing.card) {
                     content()
                     #if os(tvOS)
                     if let destination, showsSeeAllCard {
@@ -65,8 +67,8 @@ struct RailShelf<Destination: Hashable, Content: View>: View {
                     #endif
                 }
                 .padding(.horizontal, Metrics.screenGutter)
-                .padding(.top, Metrics.railTopPadding)
-                .padding(.bottom, Metrics.railBottomPadding)
+                .padding(.top, browseSpacing.railTop)
+                .padding(.bottom, browseSpacing.railBottom)
             }
             // Or the focus halo is cut off square at the rail edge.
             .scrollClipDisabled()
@@ -79,7 +81,7 @@ extension RailShelf where Destination == Never {
     init(
         title: String,
         alignment: VerticalAlignment = .center,
-        spacing: CGFloat = Metrics.cardSpacing,
+        spacing: CGFloat? = nil,
         @ViewBuilder content: @escaping () -> Content
     ) {
         self.init(
