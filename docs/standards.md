@@ -147,6 +147,9 @@ are the commit types: `feat`, `fix`, `docs`, `test`, `refactor`, `perf`,
 every pull request and again when its title or description is edited, and
 `main` requires it to pass. The script reads the pull request from the
 environment, so it runs locally the same way (usage is at its top).
+`.githooks/pre-push` runs its branch and commit checks on every push, before
+anything reaches GitHub. Turn it on once per clone with
+`git config core.hooksPath .githooks`.
 `.github/CODEOWNERS` names the owner of every file, whose review GitHub
 requests on each pull request.
 
