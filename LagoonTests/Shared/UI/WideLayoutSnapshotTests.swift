@@ -98,7 +98,43 @@ struct WideLayoutSnapshotTests {
         )
     }
 
+    // MARK: - Watch Together
+
+    @Test func watchTogetherIsAPillOnAnOpenDuoAndACircleOnAPhone() async throws {
+        let syncPlay = try await joinableSyncPlay()
+        let item = try JellyfinClient.decoder.decode(MediaItem.self, from: Data(#"{"Id":"arrival","Name":"Arrival","Type":"Movie"}"#.utf8))
+        let control = WatchTogetherControl(item: item, startPositionTicks: 0)
+            .padding(Metrics.screenGutter)
+            .environment(syncPlay)
+        try await Snapshot.verify(
+            control.environment(\.horizontalSizeClass, .regular).environment(\.verticalSizeClass, .regular),
+            named: "watch-together-duo-open",
+            size: CGSize(width: 300, height: 100)
+        )
+        try await Snapshot.verify(
+            control.environment(\.horizontalSizeClass, .compact).environment(\.verticalSizeClass, .regular),
+            named: "watch-together-phone",
+            size: CGSize(width: 300, height: 100)
+        )
+    }
+
     // MARK: - Fixtures
+
+    /// A server that serves SyncPlay to a viewer who may join groups.
+    private func joinableSyncPlay() async throws -> SyncPlayStore {
+        let host = "syncplay.snapshot.test"
+        StubURLProtocol.register(host: host) { request in
+            if request.url?.path.hasSuffix("/Users/Me") == true {
+                return (200, [:], Data(#"{"Id":"user","Name":"Viewer","Policy":{"SyncPlayAccess":"JoinGroups"}}"#.utf8))
+            }
+            return (200, [:], Data("[]".utf8))
+        }
+        let store = SyncPlayStore()
+        store.configure(client: StubURLProtocol.makeJellyfinClient(host: host, deviceId: "snapshot-tests"), accountID: "account")
+        await store.refreshAvailability()
+        try #require(store.availability.canJoinGroups)
+        return store
+    }
 
     private func detailPage(_ horizontal: UserInterfaceSizeClass, _ vertical: UserInterfaceSizeClass) -> some View {
         DetailPageScaffold(backdropURL: Self.backdropURL, posterURL: Self.posterURL) {
