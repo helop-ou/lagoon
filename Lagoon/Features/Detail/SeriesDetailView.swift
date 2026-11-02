@@ -151,6 +151,7 @@ struct SeriesDetailView: View {
     /// Set only when the rail's content changes (load, season pick, end of
     /// playback). Setting it while browsing would yank the row under focus.
     @State private var railPosition: String?
+    private let browseSpacing = BrowseSpacing()
 
     private var displayed: MediaItem { viewModel.detail ?? item }
 
@@ -339,7 +340,7 @@ struct SeriesDetailView: View {
             // Stays mounted across season switches. A spinner in its place
             // collapses the layout and makes focus jump.
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: Metrics.cardSpacing) {
+                LazyHStack(spacing: browseSpacing.card) {
                     ForEach(viewModel.episodes) { episode in
                         EpisodeCard(episode: episode) {
                             highlighted = episode
@@ -352,8 +353,8 @@ struct SeriesDetailView: View {
                     }
                 }
                 .scrollTargetLayout()
-                .padding(.top, Metrics.railTopPadding)
-                .padding(.bottom, Metrics.railBottomPadding)
+                .padding(.top, browseSpacing.railTop)
+                .padding(.bottom, browseSpacing.railBottom)
             }
             // A content margin, not padding: scrolling lands an episode at
             // the gutter, and the full-width viewport keeps focus lift unclipped.

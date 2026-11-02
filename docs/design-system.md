@@ -10,10 +10,10 @@ screen-specific copies.
 | `Metrics` token | tvOS | iOS |
 | --- | --- | --- |
 | `screenGutter` | 80 | 20 |
-| `cardSpacing` | 40 | 14 |
-| `posterWidth` | 280 | 160 rail card baseline, scales with Dynamic Type |
+| `cardSpacing` | 40 | 14, 20 in the wide layout (`wideCardSpacing`) |
+| `posterWidth` | 300 | 160 rail card baseline, scales with Dynamic Type |
 | `phoneGridPosterMinimum` / `padGridPosterMinimum` | Not used | 100 / 150: grids fit as many columns as these allow. 150 in the wide layout |
-| `landscapeWidth` | 360 | 240 |
+| `landscapeWidth` | 384 | 240 |
 | `heroHeight` | 620 | 200 in the phone layouts |
 | `expandedHeroHeight` | Not used | 360 in the wide layout |
 | `expandedHeroTextWidth` | Not used | 520 maximum in the wide layout |
@@ -36,7 +36,8 @@ screen-specific copies.
 | `artworkTitleShadowRadius` / `artworkTitleShadowOpacity` | 6 / 0.6 | 6 / 0.6: the shadow lifting a name drawn over artwork |
 | `themeSwatchSize` | Not used | 28: swatch in Settings › Appearance |
 | `qrCodeSize` / `qrCodeMinimumQuietZone` | 420 / 32 | 220 / 16, gallery only. A code scans from about ten times its width. The real quiet zone is derived from the code |
-| Rail top / bottom padding | 48 / 96 | 12 / 40 |
+| Rail top / bottom padding | 48 / 96 | 12 / 40, 16 / 52 in the wide layout |
+| `gridRowSpacing` | 72 | 40, 52 in the wide layout (`wideGridRowSpacing`) |
 | `readableWidth` | 700 | 700: a column of text or controls that should not stretch across a wide screen |
 | `detailOverviewWidth` | 1000 | 1000: the detail page synopsis |
 | `settingsRowMinHeight` / `settingsRowCornerRadius` | 66 / 18 | 66 / 18: the tvOS settings list row, and the subtitle preview's corner |
@@ -306,7 +307,9 @@ orientation: an iPhone Duo changes its size classes as it folds.
 
 - Regular both ways (an iPad, an open Duo): the wide layout, laid out like
   the TV. Backdrop with a leading fade, a leading column, pill actions, the
-  tall hero and the larger grid posters.
+  tall hero, the larger grid posters, and a little more room between cards
+  and rows. Rails and grids read their gaps from `BrowseSpacing`, never the
+  bare tokens.
 - Compact tall (a phone in landscape, including a Pro Max, which is regular
   wide): the phone's one-row landscape layout.
 - Compact wide (a portrait phone, a closed Duo, a narrow iPad window): the
