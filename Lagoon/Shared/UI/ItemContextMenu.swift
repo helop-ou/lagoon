@@ -18,7 +18,7 @@ private struct ItemUserDataMenu: ViewModifier {
     private var isFavorite: Bool { favorite ?? item.userData?.isFavorite ?? false }
 
     /// Episode cards get the checkmark only. Favourites are show-level, and
-    /// don't retarget the star at `seriesId`: the card carries the episode's
+    /// don't retarget the heart at `seriesId`: the card carries the episode's
     /// `userData`, so it can't know the show's state. The series page owns it.
     private var offersFavorite: Bool { item.type != .episode }
 
@@ -48,7 +48,7 @@ private struct ItemUserDataMenu: ViewModifier {
                     } label: {
                         Label(
                             isFavorite ? "Remove from Favorites" : "Add to Favorites",
-                            systemImage: isFavorite ? "star.slash" : "star"
+                            systemImage: isFavorite ? "heart.slash" : "heart"
                         )
                     }
                 }
