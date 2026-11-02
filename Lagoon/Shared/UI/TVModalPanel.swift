@@ -49,8 +49,8 @@ struct TVModalPanel<Leading: View, Content: View>: View {
 
             ScrollView {
                 content
-                    .padding(.horizontal, Metrics.Space.xl)
-                    .padding(.bottom, Metrics.Space.xl)
+                    // Room for the focus lift of a top or bottom row.
+                    .padding(Metrics.Space.xl)
             }
             .id(scrollIdentity)
 
