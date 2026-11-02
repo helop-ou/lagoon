@@ -2,11 +2,17 @@
 import XCTest
 
 /// A closed iPhone Duo puts the tab bar on the side, where the Search tab has
-/// no field of its own until it is activated. Runs on a closed Duo only.
+/// no field of its own until it is activated. Skips on other devices, and
+/// fails on a Duo that is open, so CI cannot pass without testing anything.
 @MainActor
 final class DuoLayoutUITests: XCTestCase {
+    private static let duoModel = "iPhone19,4"
+
     override func setUpWithError() throws {
         continueAfterFailure = false
+        guard ProcessInfo.processInfo.environment["SIMULATOR_MODEL_IDENTIFIER"] == Self.duoModel else {
+            throw XCTSkip("Requires an iPhone Duo simulator")
+        }
     }
 
     func testSearchOpensItsFieldWhenTheBarsAreOnTheSide() throws {
@@ -22,9 +28,10 @@ final class DuoLayoutUITests: XCTestCase {
         // The side bar is not exposed as a tab bar, so read its tabs' stacking.
         let home = tab("Home", in: app).frame
         let discover = tab("Discover", in: app).frame
-        guard abs(home.midX - discover.midX) < 1, home.midY != discover.midY else {
-            throw XCTSkip("Requires a closed iPhone Duo, with the tab bar on the side")
-        }
+        XCTAssertTrue(
+            abs(home.midX - discover.midX) < 1 && home.midY != discover.midY,
+            "The tabs are not stacked on the side. Close the Duo."
+        )
 
         search.tap()
         XCTAssertTrue(app.searchFields.firstMatch.waitForExistence(timeout: 5), "Search showed no field")
