@@ -443,6 +443,11 @@ A Seerr title page reads `movie/{id}` or `tv/{id}`:
   only the details.
 - Discovery titles use their name in type unless a matching Jellyfin item has
   a Logo image.
+- Trailers come from `relatedVideos`, TMDB's videos with `type`, `name` and a
+  YouTube `url`. Featurettes, clips and behind-the-scenes outnumber trailers,
+  so only `type: Trailer` counts, or `Teaser` when there is none, and
+  `TrailerLink` picks among them as for Jellyfin. TMDB has no season videos
+  here, so a show offers one trailer.
 
 **Query encoding.** Seerr answers 400 to a query value with any reserved
 character left raw (`:` or `'` in a title), which Foundation's query items
