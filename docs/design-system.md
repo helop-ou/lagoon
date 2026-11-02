@@ -258,6 +258,12 @@ notes](reference/design-system.md#themes).
     resizes under focus.
   - Never put `TVSettingsPage` in a sheet. It is the full-screen Settings
     destination (460pt identity column, page title, Back, opaque background).
+  - No toolbar in a tvOS sheet. It squeezes Cancel into "C…el", so actions
+    sit in the panel beside Done (`leadingActions`, `doneTitle`). Only Add
+    Account's full-screen cover keeps one. `AdaptiveLayoutRulesTests` fails
+    on any other tvOS toolbar, and `TVModalSnapshotTests` pins every panel.
+  - The scrolling content is inset on every side, so the first and last
+    rows have room for their focus lift.
 - **Downloads (iOS only):**
   - `DownloadControl` is a glass circle beside the detail actions, like
     `ItemActionRow`'s toggles. Glyph and menu show state through symbol weight
