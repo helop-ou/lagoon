@@ -4,6 +4,9 @@
 #
 #   BRANCH=fix/home-rows TITLE="fix: show the rows" BODY=$'Changes:\n- Show the rows' \
 #   BASE=origin/main HEAD=HEAD scripts/check-pull-request.sh
+#
+# With TITLE and BODY unset it checks only the branch and commits, as the
+# pre-push hook does. CI always sets both, even when empty.
 set -uo pipefail
 
 types='feat|fix|docs|test|refactor|perf|build|chore|ci|style|revert'
@@ -20,30 +23,32 @@ if ! [[ "$branch" =~ ^($types)/[a-z0-9]+(-[a-z0-9]+)*$ ]]; then
     problem "Branch \"$branch\" should be <type>/<kebab-case-words>, with a type of: ${types//|/, }"
 fi
 
-title="${TITLE:-}"
-if ! [[ "$title" =~ ^($types):\ [^A-Z\ ] ]]; then
-    problem "Title \"$title\" should start with \"<type>: \" and a lowercase word, like a commit subject"
-fi
-if (( ${#title} > 72 )); then
-    problem "Title is ${#title} characters, over the 72 allowed"
-fi
-if [[ "$title" == *. ]]; then
-    problem "Title ends with a full stop"
-fi
+if [[ -n "${TITLE+set}" || -n "${BODY+set}" ]]; then
+    title="${TITLE:-}"
+    if ! [[ "$title" =~ ^($types):\ [^A-Z\ ] ]]; then
+        problem "Title \"$title\" should start with \"<type>: \" and a lowercase word, like a commit subject"
+    fi
+    if (( ${#title} > 72 )); then
+        problem "Title is ${#title} characters, over the 72 allowed"
+    fi
+    if [[ "$title" == *. ]]; then
+        problem "Title ends with a full stop"
+    fi
 
-body="$(printf '%s' "${BODY:-}" | tr -d '\r' | sed -e '/^[[:space:]]*$/d')"
-if [[ "$(printf '%s\n' "$body" | head -n 1)" != "Changes:" ]]; then
-    problem "Description should start with a \"Changes:\" line"
-fi
-if ! printf '%s\n' "$body" | sed -n '2,$p' | grep -q '^- '; then
-    problem "Description should list at least one change as \"- …\""
-fi
-if printf '%s\n' "$body" | sed -n '2,$p' | grep -qv '^- '; then
-    problem "Description should hold only \"- …\" lines after \"Changes:\""
-fi
+    body="$(printf '%s' "${BODY:-}" | tr -d '\r' | sed -e '/^[[:space:]]*$/d')"
+    if [[ "$(printf '%s\n' "$body" | head -n 1)" != "Changes:" ]]; then
+        problem "Description should start with a \"Changes:\" line"
+    fi
+    if ! printf '%s\n' "$body" | sed -n '2,$p' | grep -q '^- '; then
+        problem "Description should list at least one change as \"- …\""
+    fi
+    if printf '%s\n' "$body" | sed -n '2,$p' | grep -qv '^- '; then
+        problem "Description should hold only \"- …\" lines after \"Changes:\""
+    fi
 
-if printf '%s\n%s\n' "$title" "$body" | grep -qE "$references"; then
-    problem "Title or description mentions a Sentry issue or Jira ticket"
+    if printf '%s\n%s\n' "$title" "$body" | grep -qE "$references"; then
+        problem "Title or description mentions a Sentry issue or Jira ticket"
+    fi
 fi
 
 if [[ -n "${BASE:-}" && -n "${HEAD:-}" ]]; then
