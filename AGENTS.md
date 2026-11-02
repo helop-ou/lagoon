@@ -64,6 +64,14 @@ clean" in docs/README.md.
   every pull request, and `main` takes only pull requests that passed
   ([standards](docs/standards.md#continuous-integration)). It reports after
   the push, so it never replaces a local run.
+- Ship through pull requests. Read "Pull requests" in the
+  [standards](docs/standards.md#pull-requests) before creating a branch: its
+  name, the title, the description and every commit are checked, and a
+  feature and its snapshot tests are two pull requests in a stack. Turn on
+  the pre-push hook once per clone (`git config core.hooksPath .githooks`),
+  and run `scripts/check-pull-request.sh` with the title and description
+  before opening the pull request. Never rename a pull request's branch on
+  GitHub: that closes the pull request.
 - Build numbers belong to the repo. Never let Xcode manage them at upload. See
   [Release](docs/release.md). A change a viewer would notice gets a line in
   `Changelog.unreleased` (`Lagoon/Features/Settings/Changelog.swift`). An
