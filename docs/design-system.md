@@ -87,8 +87,9 @@ connect code's letter spacing is `Typography.quickConnectCodeTracking` (6).
 
 ## Themes
 
-A theme is a `ThemePalette` of eight roles: `accent`, `ground`, `background`,
-`surface`, `glowDepth`, `controlTint`, `artworkTint` and `chrome`. Three exist:
+A theme is a `ThemePalette` of nine roles: `accent`, `signal`, `ground`,
+`background`, `surface`, `glowDepth`, `controlTint`, `artworkTint` and
+`chrome`. Three exist:
 `AppTheme.lagoon` over true black, `AppTheme.babyPink` and `AppTheme.spooky`.
 Keep the list short, because each theme is checked over every screen.
 
@@ -97,6 +98,10 @@ Keep the list short, because each theme is checked over every screen.
   theme change re-render through Observation.
 - **Text never takes a theme colour.** A scrim over artwork inside a card stays
   black.
+- **`signal` is for a few small marks only**: the accent's opposite, on a
+  started series' unwatched count (`UnwatchedMark`, black figures) and the
+  hero's current page dot. Never text, never a large area. Adding a place
+  for it is a design decision, not a styling one.
 - **A grouped form on iOS is a `ThemedForm`**, never a bare `Form` or `List`.
   It themes page, rows and bars, so a new settings page needs nothing else.
 - **A page's backdrop is `.themedPageBackground()`**, not a bare
@@ -164,7 +169,7 @@ notes](reference/design-system.md#themes).
     name. Collection cards caption below the art and keep it untouched.
   - The `.downloadedBadge(itemID:)` modifier draws the top-trailing corner
     marks (iOS-only `DownloadedMark`, plus an optional `leading` view like
-    `WatchedMark`). `String.appendingDownloadedSuffix(itemID:)` appends the
+    `WatchedMark`, or `UnwatchedMark` on a series the viewer has started). `String.appendingDownloadedSuffix(itemID:)` appends the
     matching accessibility suffix without an `#if` at each call site.
 - **Chip rows** (Discover's Movies/Shows/Requests, the Requests filters) stay
   one row everywhere. On a phone the row scrolls horizontally, with the gutter

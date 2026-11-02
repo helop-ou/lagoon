@@ -39,7 +39,8 @@ struct ThemePaletteSnapshotTests {
         #endif
     }
 
-    /// Background, rows, ground, glow, controls and accent, left to right.
+    /// Background, rows, ground, glow, controls, accent and signal, left to
+    /// right.
     private func roles(_ palette: ThemePalette) -> some View {
         let colors: [Color] = [
             palette.background,
@@ -48,6 +49,7 @@ struct ThemePaletteSnapshotTests {
             palette.glowDepth,
             palette.controlTint ?? .white,
             palette.accent,
+            palette.signal,
         ]
         return HStack(spacing: 0) {
             ForEach(colors.indices, id: \.self) { colors[$0] }

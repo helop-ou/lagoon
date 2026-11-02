@@ -298,7 +298,7 @@ struct HeroSection<Route: Hashable>: View {
             HStack(spacing: Metrics.Space.s) {
                 ForEach(items.indices, id: \.self) { dot in
                     Capsule()
-                        .fill(dot == index ? Color.white : Color.white.opacity(0.35))
+                        .fill(dot == index ? Theme.signal : Color.white.opacity(0.35))
                         .frame(width: dot == index ? Metrics.heroActiveDotWidth : Metrics.heroDotSize, height: Metrics.heroDotSize)
                 }
             }

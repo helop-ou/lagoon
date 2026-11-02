@@ -358,6 +358,7 @@ Mechanics behind the [guide's rules](../design-system.md#themes).
 | `background` | The surface behind content, and fades that carry artwork into the page |
 | `surface` | Grouped-form rows, one step above background. Nil keeps the system grey, which suits black but clashes on plum |
 | `glowDepth` | The third glow colour |
+| `signal` | The accent's opposite, on a few small marks: a started series' unwatched count and the hero's current page dot. Bright enough for black figures on it (6.7:1 or better) |
 | `controlTint` | iOS native control tint. Kept pale because it fills whole toggle tracks |
 | `artworkTint` | Blushes into every artwork glow and focus halo through `Theme.glow(for:)`, so a hero never hides the theme |
 | `chrome` | Wash behind iOS tab and navigation bar glass, via `themedChrome()`. Keep it faint: at 0.7 the glass became a flat pane, so Baby Pink uses 0.25 of the ground |
@@ -365,16 +366,17 @@ Mechanics behind the [guide's rules](../design-system.md#themes).
 Palettes:
 
 - `AppTheme.lagoon`: Twin Shores over true black. Controls in pale aqua (the
-  accent lifted 40% toward white). No surface, artwork or chrome tint.
+  accent lifted 40% toward white). Coral `#FF7F66` signal. No surface,
+  artwork or chrome tint.
 - `AppTheme.babyPink`: Orchid. `#E7B0DE` accent, `#400849` plum ground,
-  `#160414` background, `#26092A` rows, `#FF5A0A` signal orange in the glow.
-  Controls in pale orchid `#EFC6E8`. No artwork tint, so posters keep their
-  own colours, and a faint wash of the ground as chrome.
+  `#160414` background, `#26092A` rows, `#FF5A0A` orange as both signal and
+  third glow. Controls in pale orchid `#EFC6E8`. No artwork tint, so posters
+  keep their own colours, and a faint wash of the ground as chrome.
 - `AppTheme.spooky`: `#FF8C1A` pumpkin accent, `#2B1433` aubergine ground,
   `#110B14` background, `#21152A` rows, `#5C2E91` purple glow. Controls in
-  pale pumpkin `#FFB870`. Its artwork tint is the purple, not the accent: an
-  orange blush turned every page brown, which read as autumn rather than
-  night.
+  pale pumpkin `#FFB870`, signal in lifted violet `#B07CFF`. Its artwork tint
+  is the purple, not the accent: an orange blush turned every page brown,
+  which read as autumn rather than night.
 
 Where it applies:
 

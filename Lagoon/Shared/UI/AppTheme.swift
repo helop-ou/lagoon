@@ -71,6 +71,10 @@ nonisolated struct ThemePalette: Equatable, Sendable {
     let surface: Color?
     /// A third glow colour, for the ambient field behind heroes.
     let glowDepth: Color
+    /// The accent's opposite, for the few small marks that must be seen: a
+    /// started series' unwatched count and the hero's current page. Never
+    /// text, never a large area.
+    let signal: Color
     /// Tint for iOS native controls. Nil keeps the white `AccentColor`. Keep
     /// it pale: it fills whole toggle tracks.
     let controlTint: Color?
@@ -105,6 +109,7 @@ nonisolated struct ThemePalette: Equatable, Sendable {
         background: .black,
         surface: nil,
         glowDepth: Color(red: 0.16, green: 0.1, blue: 0.35),
+        signal: Color(red: 0xFF / 255, green: 0x7F / 255, blue: 0x66 / 255),
         controlTint: paleAqua,
         artworkTint: nil,
         chrome: nil
@@ -117,6 +122,7 @@ nonisolated struct ThemePalette: Equatable, Sendable {
         background: Color(red: 0x16 / 255, green: 0x04 / 255, blue: 0x14 / 255),
         surface: Color(red: 0x26 / 255, green: 0x09 / 255, blue: 0x2A / 255),
         glowDepth: Color(red: 0xFF / 255, green: 0x5A / 255, blue: 0x0A / 255),
+        signal: Color(red: 0xFF / 255, green: 0x5A / 255, blue: 0x0A / 255),
         controlTint: Color(red: 0xEF / 255, green: 0xC6 / 255, blue: 0xE8 / 255),
         artworkTint: nil,
         chrome: Color(red: 0x40 / 255, green: 0x08 / 255, blue: 0x49 / 255).opacity(0.25)
@@ -131,6 +137,8 @@ extension ThemePalette {
         background: Color(red: 0x11 / 255, green: 0x0B / 255, blue: 0x14 / 255),
         surface: Color(red: 0x21 / 255, green: 0x15 / 255, blue: 0x2A / 255),
         glowDepth: Color(red: 0x5C / 255, green: 0x2E / 255, blue: 0x91 / 255),
+        // The purple glow lifted, so it reads as a mark on midnight.
+        signal: Color(red: 0xB0 / 255, green: 0x7C / 255, blue: 0xFF / 255),
         controlTint: Color(red: 0xFF / 255, green: 0xB8 / 255, blue: 0x70 / 255),
         // Purple: an orange blush turned every page brown.
         artworkTint: Color(red: 0x5C / 255, green: 0x2E / 255, blue: 0x91 / 255),
@@ -243,6 +251,7 @@ enum Theme {
     static var ground: Color { palette.ground }
     static var background: Color { palette.background }
     static var surface: Color? { palette.surface }
+    static var signal: Color { palette.signal }
     static var glow: ArtworkPalette { palette.glow }
 
     /// The theme's own glow until artwork is sampled.
