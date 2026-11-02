@@ -178,4 +178,51 @@ struct SeerrMediaDetailsTests {
         """)
         #expect(requestable(details).isEmpty)
     }
+
+    @Test func onlyTrailersCountAmongTheRelatedVideos() throws {
+        let details = try decode("""
+        {"id": 603, "title": "The Matrix", "relatedVideos": [
+          {"site": "YouTube", "key": "featurette", "name": "How Keanu prepared", "type": "Featurette", "url": "https://www.youtube.com/watch?v=featurette1"},
+          {"site": "YouTube", "key": "spot", "name": "25th Anniversary Spot", "type": "Teaser", "url": "https://www.youtube.com/watch?v=spot0000001"},
+          {"site": "YouTube", "key": "anniversary", "name": "Official 25th Anniversary Trailer", "type": "Trailer", "url": "https://www.youtube.com/watch?v=anniversary"},
+          {"site": "YouTube", "key": "clip", "name": "Desert of the Real Clip", "type": "Clip", "url": "https://www.youtube.com/watch?v=clip0000001"},
+          {"site": "YouTube", "key": "uk", "name": "20th Anniversary UK Trailer", "type": "Trailer", "url": "https://www.youtube.com/watch?v=uktrailer01"}
+        ]}
+        """)
+        #expect(details.trailers.map(\.name) == ["Official 25th Anniversary Trailer", "20th Anniversary UK Trailer"])
+        #expect(TrailerLink.preferred(details.trailers)?.name == "Official 25th Anniversary Trailer")
+    }
+
+    @Test func teasersStandInWhenThereIsNoTrailer() throws {
+        let details = try decode("""
+        {"id": 1, "name": "A Show", "relatedVideos": [
+          {"name": "Behind the Scenes", "type": "Behind the Scenes", "url": "https://www.youtube.com/watch?v=behindscene"},
+          {"name": "Official Teaser", "type": "Teaser", "url": "https://www.youtube.com/watch?v=teaser00001"}
+        ]}
+        """)
+        #expect(details.trailers.map(\.name) == ["Official Teaser"])
+
+        let clipsOnly = try decode("""
+        {"id": 2, "name": "Clips", "relatedVideos": [{"name": "Clip", "type": "Clip", "url": "https://www.youtube.com/watch?v=clip0000001"}]}
+        """)
+        #expect(clipsOnly.trailers.isEmpty)
+    }
+
+    @Test func aBadVideoDropsAloneAndABadListLeavesThePage() throws {
+        let details = try decode("""
+        {"id": 3, "title": "Film", "relatedVideos": [
+          {"name": "No address", "type": "Trailer"},
+          {"name": "Trailer", "type": "Trailer", "url": "https://www.youtube.com/watch?v=trailer0001"},
+          {"name": 42, "type": ["Trailer"], "url": "https://www.youtube.com/watch?v=trailer0002"},
+          "nope"
+        ]}
+        """)
+        #expect(details.trailers.map(\.url.absoluteString) == ["https://www.youtube.com/watch?v=trailer0001"])
+
+        let broken = try decode(#"{"id": 4, "title": "Film", "relatedVideos": "nope"}"#)
+        #expect(broken.displayTitle == "Film")
+        #expect(broken.trailers.isEmpty)
+        #expect(try decode(#"{"id": 5, "title": "Film", "relatedVideos": null}"#).trailers.isEmpty)
+        #expect(try decode(#"{"id": 6, "title": "Film"}"#).trailers.isEmpty)
+    }
 }
