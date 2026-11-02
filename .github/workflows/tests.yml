@@ -92,6 +92,54 @@ jobs:
           if-no-files-found: ignore
           retention-days: 14
 
+  # The one UI journey in CI: a closed Duo is the only place its bug shows.
+  # A fresh Duo simulator starts closed. It signs into the public demo.
+  duo-journey:
+    name: UI journey (iPhone Duo)
+    if: github.event_name == 'pull_request'
+    runs-on: xcode-27
+    timeout-minutes: 45
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.1.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Cache Swift packages
+        uses: actions/cache@v6
+        with:
+          path: build/SourcePackages
+          key: spm-${{ hashFiles('Lagoon.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+
+      - name: Install the Metal toolchain
+        run: xcodebuild -downloadComponent MetalToolchain
+
+      - name: Test
+        run: |
+          mkdir -p build
+          status=0
+          xcodebuild test \
+            -scheme LagoonHardwareRegression \
+            -destination "platform=iOS Simulator,name=iPhone Duo,OS=27.1" \
+            -only-testing:LagoonUITests/DuoLayoutUITests \
+            -clonedSourcePackagesDirPath build/SourcePackages \
+            -derivedDataPath build/DerivedData \
+            -resultBundlePath build/TestResults.xcresult \
+            -collect-test-diagnostics never \
+            > build/xcodebuild.log 2>&1 || status=$?
+          grep -E ": error: |^error: |Test Case .*(passed|failed|skipped)|\*\* (BUILD|TEST) " build/xcodebuild.log || true
+          exit "$status"
+
+      - name: Keep results of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-duo
+          path: |
+            build/TestResults.xcresult
+            build/xcodebuild.log
+          if-no-files-found: ignore
+          retention-days: 14
+
   sonar:
     name: SonarCloud scan
     needs: unit-tests

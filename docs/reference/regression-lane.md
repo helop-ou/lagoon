@@ -120,8 +120,9 @@ scripts/test-session-recovery.py --subtitle-downloads --platforms iOS tvOS
 - Give a UI run its own `-derivedDataPath`, or it shares a build database
   with `xcodebuild build` and dies with "database is locked".
 - Two lanes at once on one machine are fine, but three caused load flakes.
-- `DuoLayoutUITests` skips unless the app runs with its tab bar on the side,
-  so run it by id on an iPhone Duo simulator (iOS 27.1 or later), closed.
+- `DuoLayoutUITests` skips on anything but an iPhone Duo simulator (iOS 27.1
+  or later), and fails on one that is open. A new Duo simulator starts
+  closed. CI runs it on every pull request.
 - A passed lane means every test passed or skipped with a named fixture
   reason. A skip on a supplied fixture server is a missing-fixture finding,
   not a pass.

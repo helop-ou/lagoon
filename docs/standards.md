@@ -174,7 +174,11 @@ reports after the push.
 - A failed run keeps its `.xcresult` and full log for 14 days, under the
   run's artifacts.
 - UI journeys do not run in CI: they need a server and minutes per test. See
-  the [regression lane](reference/regression-lane.md).
+  the [regression lane](reference/regression-lane.md). The exception is
+  `DuoLayoutUITests`, because a closed iPhone Duo is the only place its bug
+  shows and no unit test reaches it. A third job runs it on the image's
+  iPhone Duo (iOS 27.1), which starts closed, against the public demo. It
+  runs on pull requests only and is not a required check.
 - Both test jobs collect coverage, and `scripts/coverage-to-sonar.py` turns
   each result bundle into Sonar's format. A third job then runs the SonarCloud
   scan with both reports, using the `SONAR_TOKEN` secret, and SonarCloud's
