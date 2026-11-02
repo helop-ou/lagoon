@@ -402,10 +402,12 @@ nonisolated struct SeerrMediaDetails: Decodable, Hashable, Identifiable {
     let releases: SeerrReleases?
     /// A show's certifications per country.
     let contentRatings: SeerrContentRatings?
+    let relatedVideos: SeerrRelatedVideos?
 
     var displayTitle: String { title ?? name ?? originalTitle ?? originalName ?? "Untitled" }
     var date: String? { releaseDate ?? firstAirDate }
     var year: String? { date.map { String($0.prefix(4)) }.flatMap { $0.isEmpty ? nil : $0 } }
+    var trailers: [RemoteTrailer] { relatedVideos?.trailers ?? [] }
 
     /// A show's seasons as the request sheet lists them. Specials only when
     /// the server offers them.
@@ -456,6 +458,30 @@ nonisolated struct SeerrMediaDetails: Decodable, Hashable, Identifiable {
             }
         }
         return nil
+    }
+}
+
+/// TMDB's videos for a title, as Seerr relays them. Featurettes and clips
+/// outnumber the trailers, so only trailers count, or teasers when there are
+/// none. A bad entry drops alone, and a bad list leaves no trailers rather
+/// than failing the page.
+nonisolated struct SeerrRelatedVideos: Decodable, Hashable {
+    let trailers: [RemoteTrailer]
+
+    init(from decoder: Decoder) throws {
+        let videos = (try? decoder.singleValueContainer().decode([Video].self)) ?? []
+        let trailers = videos.filter { $0.type == "Trailer" }.compactMap(\.trailer)
+        self.trailers = trailers.isEmpty ? videos.filter { $0.type == "Teaser" }.compactMap(\.trailer) : trailers
+    }
+
+    private struct Video: Decodable {
+        let type: String?
+        let trailer: RemoteTrailer?
+
+        init(from decoder: Decoder) throws {
+            type = try? decoder.container(keyedBy: AnyCodingKey.self).decodeIfPresent(String.self, forKey: "type")
+            trailer = try? RemoteTrailer(from: decoder)
+        }
     }
 }
 
