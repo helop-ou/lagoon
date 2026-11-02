@@ -24,7 +24,7 @@ nonisolated enum AppTheme: String, CaseIterable, Identifiable {
         case .lagoon:
             String(localized: "The Twin Shores palette: aqua accents over deep navy and black.")
         case .babyPink:
-            String(localized: "Soft pink accents over a deep rose ground. Still Lagoon, only prettier.")
+            String(localized: "Soft orchid pink over deep plum, with a spark of orange. Still Lagoon, only prettier.")
         case .spooky:
             String(localized: "Pumpkin orange over midnight, with cobwebs in the corners and a ghost or two. Still Lagoon, only haunted.")
         }
@@ -110,16 +110,16 @@ nonisolated struct ThemePalette: Equatable, Sendable {
         chrome: nil
     )
 
-    /// Baby pink accent over deep rose.
+    /// Orchid over deep plum, with signal orange in the glow.
     static let babyPink = ThemePalette(
-        accent: Color(red: 0xFF / 255, green: 0xB7 / 255, blue: 0xCF / 255),
-        ground: Color(red: 0x5E / 255, green: 0x28 / 255, blue: 0x48 / 255),
-        background: Color(red: 0x1F / 255, green: 0x10 / 255, blue: 0x19 / 255),
-        surface: Color(red: 0x33 / 255, green: 0x18 / 255, blue: 0x2A / 255),
-        glowDepth: Color(red: 0x8C / 255, green: 0x4A / 255, blue: 0x72 / 255),
-        controlTint: Color(red: 0xFF / 255, green: 0xB7 / 255, blue: 0xCF / 255),
-        artworkTint: Color(red: 0xFF / 255, green: 0xB7 / 255, blue: 0xCF / 255),
-        chrome: Color(red: 0x5E / 255, green: 0x28 / 255, blue: 0x48 / 255).opacity(0.25)
+        accent: Color(red: 0xE7 / 255, green: 0xB0 / 255, blue: 0xDE / 255),
+        ground: Color(red: 0x40 / 255, green: 0x08 / 255, blue: 0x49 / 255),
+        background: Color(red: 0x16 / 255, green: 0x04 / 255, blue: 0x14 / 255),
+        surface: Color(red: 0x26 / 255, green: 0x09 / 255, blue: 0x2A / 255),
+        glowDepth: Color(red: 0xFF / 255, green: 0x5A / 255, blue: 0x0A / 255),
+        controlTint: Color(red: 0xEF / 255, green: 0xC6 / 255, blue: 0xE8 / 255),
+        artworkTint: nil,
+        chrome: Color(red: 0x40 / 255, green: 0x08 / 255, blue: 0x49 / 255).opacity(0.25)
     )
 }
 

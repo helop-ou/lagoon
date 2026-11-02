@@ -123,15 +123,14 @@ struct AppThemeTests {
         #expect(ThemeStore.storedTheme(for: "a", in: defaults) == .babyPink)
     }
 
-    @Test func artworkGlowsAreLeftAloneByTheBrandAndBlushedByPink() {
+    /// Posters keep their own colours under the brand and Baby Pink.
+    @Test func artworkGlowsAreLeftAloneByTheBrandAndPink() {
         let artwork = ArtworkPalette(colors: [.red, .green, .blue])
         #expect(AppTheme.lagoon.palette.glow(for: artwork) == artwork)
-        let blushed = AppTheme.babyPink.palette.glow(for: artwork)
-        #expect(blushed != artwork)
-        #expect(blushed.colors.count == artwork.colors.count)
+        #expect(AppTheme.babyPink.palette.glow(for: artwork) == artwork)
     }
 
-    @Test func spookyBlushesArtworkGlowsAsPinkDoes() {
+    @Test func spookyBlushesArtworkGlows() {
         let artwork = ArtworkPalette(colors: [.red, .green])
 
         #expect(AppTheme.spooky.palette.glow(for: artwork) != artwork)
