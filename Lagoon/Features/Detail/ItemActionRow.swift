@@ -38,7 +38,7 @@ struct ItemActionRow: View {
 
                 toggle(
                     on: isFavorite,
-                    symbol: isFavorite ? "star.fill" : "star",
+                    symbol: isFavorite ? "heart.fill" : "heart",
                     label: isFavorite ? "Remove from favorites" : "Add to favorites"
                 ) {
                     await toggleFavorite()
