@@ -115,17 +115,21 @@ from that look out of place (`film.fill` measured 1.28 wide and 0.85 dense, and
 | tab | glyph | w/h | ink |
 | --- | --- | --- | --- |
 | Home | `house.fill` | 1.13 | 0.55 |
-| Discover | `sparkle` | 1.00 | 0.28 |
+| Discover | `safari.fill` | 1.00 | 0.68 |
 | Shows | `rectangle.stack.badge.play.fill` | 1.10 | 0.65 |
 | Movies | `movieclapper.fill` | 1.04 | 0.73 |
-| Libraries | `square.grid.2x2.fill` | 1.00 | 0.81 |
+| Libraries | `books.vertical.fill` | 1.08 | 0.68 |
 | Search | `magnifyingglass` | 0.99 | 0.26 |
 | Settings | `gearshape.fill` | 1.00 | 0.56 |
 
 - Shows is a stack (a series is a pile of episodes), which also separates it
-  from Movies. Libraries is a grid so the two cannot be confused.
-- Discover and Search are light by nature. SF Symbols has no solid magnifier,
-  and circled forms read as buttons.
+  from Movies. Libraries is a shelf so the two cannot be confused.
+- Discover is a compass. A sparkle now reads as AI.
+- Search is light by nature. SF Symbols has no solid magnifier, and circled
+  forms read as buttons.
+- Settings categories each have their own glyph, never a tab's: Home Rows is
+  `rectangle.grid.1x2.fill`, not the house. Seerr shares Discover's compass
+  because it is the same service.
 
 `everyContentIconResolvesToARealSymbol` checks each name exists on the
 running OS. A missing symbol renders as nothing, with no crash or warning.

@@ -383,12 +383,12 @@ extension Color {
 nonisolated enum ContentIcon {
     static let movies = "movieclapper.fill"
     static let shows = "rectangle.stack.badge.play.fill"
-    /// All libraries, when there are too many for tabs. A grid, so it is not
+    /// All libraries, when there are too many for tabs. A shelf, so it is not
     /// mistaken for Shows.
-    static let libraries = "square.grid.2x2.fill"
+    static let libraries = "books.vertical.fill"
     static let home = "house.fill"
-    /// The single sparkle: `sparkles` (0.81) is narrow and lopsided.
-    static let discover = "sparkle"
+    /// A compass. A sparkle now reads as AI.
+    static let discover = "safari.fill"
     /// No filled magnifier exists. Circled variants read as a button.
     /// `Tab(role: .search)` may substitute the system glyph, which is fine.
     static let search = "magnifyingglass"
@@ -396,14 +396,15 @@ nonisolated enum ContentIcon {
 
     nonisolated enum Settings {
         static let account = "person.crop.circle.fill"
-        static let playback = "play.circle.fill"
+        static let playback = "play.rectangle.fill"
         static let audio = "speaker.wave.2.fill"
         static let subtitles = "captions.bubble.fill"
-        static let advanced = "wrench.and.screwdriver.fill"
+        static let advanced = "gearshape.2.fill"
         static let developer = "hammer.fill"
         static let about = "info.circle.fill"
         static let downloads = "arrow.down.circle.fill"
-        static let appearance = "paintpalette.fill"
+        static let appearance = "circle.lefthalf.filled"
+        static let homeRows = "rectangle.grid.1x2.fill"
     }
 
     /// Jellyfin's collection type for a library, as a glyph.

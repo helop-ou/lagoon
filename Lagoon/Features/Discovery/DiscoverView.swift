@@ -153,7 +153,7 @@ struct DiscoverView: View {
 
     private var connectionState: some View {
         VStack(spacing: Metrics.Space.l) {
-            Image(systemName: "sparkles.tv")
+            Image(systemName: "safari")
                 .font(Typography.largeGlyph)
                 .foregroundStyle(.secondary)
                 .accessibilityHidden(true)
