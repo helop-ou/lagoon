@@ -26,6 +26,13 @@ struct SeerrMediaDetailView: View {
         _model = State(initialValue: SeerrMediaDetailModel(mediaID: mediaID, mediaType: mediaType))
     }
 
+    /// Over a model that has already loaded, so a snapshot draws the page.
+    init(model: SeerrMediaDetailModel) {
+        mediaID = model.mediaID
+        mediaType = model.mediaType
+        _model = State(initialValue: model)
+    }
+
     private var jellyfinItem: MediaItem? { model.jellyfinItem }
 
     var body: some View {
