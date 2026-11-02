@@ -55,6 +55,7 @@ nonisolated enum Changelog {
             "At the largest text sizes, the Playlists and Downloads rows in Library keep their titles whole.",
             "About Lagoon on the sign-in screen is easier to tap.",
             "Starting a video on Apple TV no longer shows a Now Playing notification.",
+            "On iPhone and iPad, genre names sit in the middle of their cards, as they do on Apple TV.",
         ]),
     ]
 

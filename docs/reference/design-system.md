@@ -240,9 +240,8 @@ checkmark.
   **focus lift**, since `.card` grows the artwork past its resting edge. The
   landscape and episode cards still overlay their label, since a still is not
   a title card.
-- **Genre cards:** on tvOS the name is centred both ways, up to two lines,
-  inside 24 pt padding, over darkened artwork. iOS uses one bottom-leading
-  line.
+- **Genre cards:** the name is centred both ways, up to two lines, inside
+  24 pt padding, over darkened artwork, on every device.
 - **Library grid:** 5 columns on tvOS, not 6. Cards are fixed width, so
   dropping a column is what buys spacing, and captions need the vertical room.
   On iOS the grid sizes cards to columns: `PosterLayout.grid(fitting:)` fits

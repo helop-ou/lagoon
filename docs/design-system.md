@@ -157,7 +157,7 @@ notes](reference/design-system.md#themes).
   - Genre and collection cards (`GenreCard`, `CollectionCard`,
     `SeerrGenreCard`) share `NamedArtworkBackground` (artwork, or a gradient
     picked deterministically from the name) and `GenreCardLabel` (the
-    dimmed, shadowed title, centered and multi-line on tvOS). Genre cards
+    dimmed, shadowed title, centered in up to two lines). Genre cards
     also soften their artwork with `genreArtworkTreatment()`, so a colourful
     poster or one with its own title painted in never fights the genre
     name. Collection cards caption below the art and keep it untouched.

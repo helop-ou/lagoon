@@ -451,34 +451,26 @@ struct GenreCardLabel: View {
     let name: String
 
     var body: some View {
-        ZStack(alignment: .bottomLeading) {
+        ZStack {
             Color.black.opacity(Metrics.genreArtworkDim)
-            LinearGradient(colors: titleWash, startPoint: .top, endPoint: .bottom)
+            // The name is centred. The bottom still darkens toward the rail.
+            LinearGradient(
+                colors: [.clear, .black.opacity(0.2), .black.opacity(0.5)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
 
             Text(name)
                 .font(.title3.bold())
-                #if os(tvOS)
                 .lineLimit(2)
                 .multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                #else
-                .lineLimit(1)
-                #endif
                 .shadow(
                     color: .black.opacity(Metrics.artworkTitleShadowOpacity),
                     radius: Metrics.artworkTitleShadowRadius
                 )
                 .padding(Metrics.Space.xl)
         }
-    }
-
-    private var titleWash: [Color] {
-        #if os(tvOS)
-        // The name is centred. The bottom still darkens toward the rail.
-        [.clear, .black.opacity(0.2), .black.opacity(0.5)]
-        #else
-        [.clear, .black.opacity(0.6)]
-        #endif
     }
 }
 
