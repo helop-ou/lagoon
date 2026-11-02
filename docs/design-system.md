@@ -12,11 +12,11 @@ screen-specific copies.
 | `screenGutter` | 80 | 20 |
 | `cardSpacing` | 40 | 14 |
 | `posterWidth` | 280 | 160 rail card baseline, scales with Dynamic Type |
-| `phoneGridPosterMinimum` / `padGridPosterMinimum` | Not used | 100 / 150: grids fit as many columns as these allow |
+| `phoneGridPosterMinimum` / `padGridPosterMinimum` | Not used | 100 / 150: grids fit as many columns as these allow. 150 in the wide layout |
 | `landscapeWidth` | 360 | 240 |
-| `heroHeight` | 620 | 200 on iPhone and compact-width iPad |
-| `expandedHeroHeight` | Not used | 360 on regular-width iPad |
-| `expandedHeroTextWidth` | Not used | 520 maximum on regular-width iPad |
+| `heroHeight` | 620 | 200 in the phone layouts |
+| `expandedHeroHeight` | Not used | 360 in the wide layout |
+| `expandedHeroTextWidth` | Not used | 520 maximum in the wide layout |
 | `detailPosterHeroMaxShare` / `detailPosterContentOverlap` | Not used | 0.72 / 0.36: portrait poster hero's cap as a share of window height, and how far the metadata rises over it |
 | `detailLandscapeRowShare` | Not used | 0.88: where the landscape row starts down the full-screen poster |
 | `detailBackdropHeroShare` | Not used | 0.6: portrait hero height as a share of the window for landscape key art |
@@ -201,7 +201,7 @@ notes](reference/design-system.md#themes).
   with the native control.
 - **Heroes:** contained banner, artwork wash, native paging. The focused or
   tappable control stays stable while artwork transitions. Home and Discover
-  share the taller iPad layout, with title and two-line synopsis in a bounded
+  share the taller wide layout, with title and two-line synopsis in a bounded
   column. Height grows for Dynamic Type. Ambient glow uses `AmbientGlowView`.
 - **Details:** `DetailPageScaffold`, `DetailMetadataHeader`,
   `DetailActionLayout`, `MetadataFlowLayout`, title art and cast components
@@ -297,6 +297,34 @@ notes](reference/design-system.md#themes).
     VoiceOver so the address is not read twice.
 - **Loading and failures:** use the shared state views. Keep mounted content
   during reconciliation, and use inline retry when there is usable content.
+
+## Size classes and iPhone Duo
+
+iOS layouts follow the size classes, never `userInterfaceIdiom` or the
+orientation: an iPhone Duo changes its size classes as it folds.
+`DetailLayout` holds the rule, and every wide or phone choice goes through it.
+
+- Regular both ways (an iPad, an open Duo): the wide layout, laid out like
+  the TV. Backdrop with a leading fade, a leading column, pill actions, the
+  tall hero and the larger grid posters.
+- Compact tall (a phone in landscape, including a Pro Max, which is regular
+  wide): the phone's one-row landscape layout.
+- Compact wide (a portrait phone, a closed Duo, a narrow iPad window): the
+  phone layout, with the poster hero and circular actions.
+
+A closed Duo moves the tab bar and toolbars into a vertical strip at the side.
+
+- A toolbar button there shows only its symbol, so every toolbar button has
+  one (`systemImage:`). Seerr's "Request N" is the one exception: a symbol
+  would hide its count in a bottom bar, and a closed Duo shows the text.
+- The Search tab has no field until it is activated, so
+  `VerticalBarSearchActivation` sets `.searchTabSelection` while
+  `toolbarVerticalEdge` is set.
+
+`AdaptiveLayoutRulesTests` fails on a read of the idiom outside diagnostics
+and on a toolbar button without a symbol. `WideLayoutSnapshotTests` pins the
+open-Duo, portrait and landscape pages. `DuoLayoutUITests` opens Search on a
+closed Duo, in CI on every pull request.
 
 ## iPhone accessibility and browsing
 
