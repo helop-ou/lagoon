@@ -356,7 +356,7 @@ Mechanics behind the [guide's rules](../design-system.md#themes).
 | `accent` | Progress fills, selection marks, the jellyfish, the focus halo's fallback |
 | `ground` | Card washes and ambient glow |
 | `background` | The surface behind content, and fades that carry artwork into the page |
-| `surface` | Grouped-form rows, one step above background. Nil keeps the system grey, which suits black but clashes on rose |
+| `surface` | Grouped-form rows, one step above background. Nil keeps the system grey, which suits black but clashes on plum |
 | `glowDepth` | The third glow colour |
 | `controlTint` | iOS native control tint. Kept pale because it fills whole toggle tracks |
 | `artworkTint` | Blushes into every artwork glow and focus halo through `Theme.glow(for:)`, so a hero never hides the theme |
@@ -366,9 +366,10 @@ Palettes:
 
 - `AppTheme.lagoon`: Twin Shores over true black. Controls in pale aqua (the
   accent lifted 40% toward white). No surface, artwork or chrome tint.
-- `AppTheme.babyPink`: `#FFB7CF` accent, `#5E2848` rose ground, `#1F1019`
-  background, `#33182A` rows. The accent as both tints, and a faint wash of
-  the ground as chrome.
+- `AppTheme.babyPink`: Orchid. `#E7B0DE` accent, `#400849` plum ground,
+  `#160414` background, `#26092A` rows, `#FF5A0A` signal orange in the glow.
+  Controls in pale orchid `#EFC6E8`. No artwork tint, so posters keep their
+  own colours, and a faint wash of the ground as chrome.
 - `AppTheme.spooky`: `#FF8C1A` pumpkin accent, `#2B1433` aubergine ground,
   `#110B14` background, `#21152A` rows, `#5C2E91` purple glow. Controls in
   pale pumpkin `#FFB870`. Its artwork tint is the purple, not the accent: an
