@@ -60,6 +60,21 @@ struct HomeCardSnapshotTests {
         )
     }
 
+    /// The count sits in the corner in the theme's signal colour.
+    @Test func aStartedSeriesPosterCarriesItsUnwatchedCount() async throws {
+        let item = try decodeItem(#"{"Id":"good-place","Name":"The Good Place","Type":"Series","ProductionYear":2016,"ImageTags":{"Primary":"p"},"UserData":{"PlayedPercentage":50,"UnplayedItemCount":25}}"#)
+        let layout = PosterLayout()
+        let url = try #require(client.imageURL(for: item, kind: .primary, maxWidth: layout.imageWidth))
+        ImageCache.shared.store(Artwork.poster(seed: 2), for: url, maxPixelSize: layout.imageSize)
+
+        try await Snapshot.verify(
+            PosterCard(item: item)
+                .environment(\.jellyfinClient, client),
+            named: "poster-card-unwatched",
+            size: CGSize(width: Metrics.posterWidth + 40, height: Metrics.posterWidth * 1.5 + 140)
+        )
+    }
+
     @Test func aPosterCardKeepsItsCaptionUnderTheArt() async throws {
         let item = try decodeItem(#"{"Id":"arrival","Name":"Arrival","Type":"Movie","ProductionYear":2016,"ImageTags":{"Primary":"p"}}"#)
         let layout = PosterLayout()

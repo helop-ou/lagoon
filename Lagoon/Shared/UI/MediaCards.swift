@@ -138,13 +138,26 @@ struct PosterCard: View {
             maxPixelSize: layout.imageSize,
             title: item.name ?? "",
             subtitle: item.productionYear.map(String.init),
-            accessibilityLabel: (item.name ?? "Item")
-                .appendingDownloadedSuffix(if: downloads?.isDownloaded(item.id) == true),
+            accessibilityLabel: accessibilityLabel,
             accessibilityIdentifier: "media.poster.\(item.id)"
         ) {
             progressBar
         }
-        .downloadedBadge(itemID: item.id)
+        .downloadedBadge(itemID: item.id, inset: Metrics.cardMarkInset) {
+            if let count = item.unwatchedEpisodeCount {
+                UnwatchedMark(count: count)
+            }
+        }
+    }
+
+    private var accessibilityLabel: String {
+        var label = item.name ?? String(localized: "Item")
+        if let count = item.unwatchedEpisodeCount {
+            label += ", " + (count == 1
+                ? String(localized: "1 unwatched episode")
+                : String(localized: "\(count) unwatched episodes"))
+        }
+        return label.appendingDownloadedSuffix(if: downloads?.isDownloaded(item.id) == true)
     }
 
     private var posterURL: URL? {
@@ -381,6 +394,21 @@ struct DownloadedMark: View {
 }
 #endif
 
+/// A started series' unwatched episode count, in the theme's signal colour.
+struct UnwatchedMark: View {
+    let count: Int
+
+    var body: some View {
+        Text(count, format: .number)
+            .font(.system(size: Metrics.cardMarkSize * 0.5, weight: .bold).monospacedDigit())
+            .foregroundStyle(.black)
+            .padding(.horizontal, Metrics.cardMarkSize * 0.3)
+            .frame(minWidth: Metrics.cardMarkSize, minHeight: Metrics.cardMarkSize)
+            .background(Capsule().fill(Theme.signal))
+            .accessibilityHidden(true)
+    }
+}
+
 /// Badge for a played episode: a checkmark on `DownloadedMark`'s disc. No
 /// colour, like every watched state in the app.
 struct WatchedMark: View {
@@ -488,6 +516,14 @@ extension MediaItem {
     var playbackProgress: Double? {
         guard let percentage = userData?.playedPercentage, percentage > 0, percentage < 95 else { return nil }
         return percentage / 100
+    }
+
+    /// Episodes left in a series the viewer has started. Nil for one never
+    /// begun, or a count would sit on every show in the library.
+    var unwatchedEpisodeCount: Int? {
+        guard type == .series, let userData, (userData.playedPercentage ?? 0) > 0,
+              let count = userData.unplayedItemCount, count > 0 else { return nil }
+        return count
     }
 
     /// Rail label: episodes show their series, everything else its own name.
