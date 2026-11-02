@@ -23,7 +23,7 @@ private struct DownloadContextMenuItems: View {
                 Button(role: .destructive) {
                     store.delete(item.id)
                 } label: {
-                    Label("Delete Download", systemImage: "arrow.down.circle.fill")
+                    Label("Delete Download", systemImage: "trash")
                 }
             } else if store.entry(for: item.id) != nil {
                 Button(role: .destructive) {

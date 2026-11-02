@@ -311,7 +311,7 @@ struct SettingsView: View {
                 touchSettingsDestination("Subtitles", systemImage: ContentIcon.Settings.subtitles, id: "subtitles") {
                     subtitleSettings
                 }
-                touchSettingsDestination("Home Rows", systemImage: ContentIcon.home, id: "home") {
+                touchSettingsDestination("Home Rows", systemImage: ContentIcon.Settings.homeRows, id: "home") {
                     HomeRowsSettingsView(preferences: homePreferences)
                 }
                 touchSettingsDestination("Appearance", systemImage: ContentIcon.Settings.appearance, id: "appearance") {

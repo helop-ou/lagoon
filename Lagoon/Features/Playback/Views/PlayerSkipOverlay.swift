@@ -102,7 +102,7 @@ struct PlayerSkipPrompt: View {
 
     var body: some View {
         HStack(spacing: Metrics.Space.s) {
-            Image(systemName: "forward.end.alt.fill")
+            Image(systemName: "forward.end.fill")
                 .font(.caption.weight(.bold))
             Text(title)
                 .font(.callout.weight(.semibold))
