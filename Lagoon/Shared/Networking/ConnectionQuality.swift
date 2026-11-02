@@ -114,6 +114,19 @@ nonisolated enum ConnectionBitrateProbe {
     static let lifetime: TimeInterval = 30 * 60
     /// A failed probe is not retried before every playback.
     static let failureLifetime: TimeInterval = 2 * 60
+    /// A reading that holds playback under the realtime transcode ceiling
+    /// may have been taken far from the router, so the next episode asks
+    /// again rather than inheriting it.
+    static let lowReadingLifetime: TimeInterval = 5 * 60
+    static let lowReadingBelow = Int((Double(DeviceProfile.realtimeTranscodeBitrateCeiling) / PlaybackQualityLimit.headroom).rounded(.up))
+
+    static func lifetime(of measurement: ConnectionMeasurement?) -> TimeInterval {
+        switch measurement {
+        case nil: failureLifetime
+        case .remote(let bitsPerSecond) where bitsPerSecond < lowReadingBelow: lowReadingLifetime
+        default: lifetime
+        }
+    }
 
     static func bitsPerSecond(bytes: Int, seconds: TimeInterval) -> Int? {
         guard bytes > 0, seconds.isFinite, seconds > 0 else { return nil }
@@ -144,11 +157,9 @@ final class ConnectionMeasurementCache {
         pathGeneration: Int = NetworkPathObserver.shared.generation,
         measure: @escaping @MainActor () async -> ConnectionMeasurement?
     ) async -> ConnectionMeasurement? {
-        if let entry = entries[serverKey], entry.pathGeneration == pathGeneration {
-            let lifetime = entry.measurement == nil
-                ? ConnectionBitrateProbe.failureLifetime
-                : ConnectionBitrateProbe.lifetime
-            if now - entry.measuredAt < lifetime { return entry.measurement }
+        if let entry = entries[serverKey], entry.pathGeneration == pathGeneration,
+           now - entry.measuredAt < ConnectionBitrateProbe.lifetime(of: entry.measurement) {
+            return entry.measurement
         }
         if let running = inFlight[serverKey] { return await running.value }
         let task = Task { await measure() }

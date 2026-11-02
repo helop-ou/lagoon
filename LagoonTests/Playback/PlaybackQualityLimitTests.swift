@@ -184,15 +184,41 @@ struct PlaybackQualityLimitTests {
         #expect(try Self.sentMaxStreamingBitrate(host: host) == DeviceProfile.lagoon.maxStreamingBitrate)
     }
 
+    /// A 4 Mbit/s reading taken far from the router held a whole evening
+    /// of 22-minute episodes to a transcode. The next one asks again.
+    @Test @MainActor func aLowReadingIsMeasuredAgainSooner() async {
+        let cache = ConnectionMeasurementCache()
+        var readings = [4_000_000, 90_000_000]
+        let measure: @MainActor () async -> ConnectionMeasurement? = {
+            .remote(bitsPerSecond: readings.removeFirst())
+        }
+        _ = await cache.measurement(for: "https://jf.example", now: 0, pathGeneration: 1, measure: measure)
+        let soon = await cache.measurement(for: "https://jf.example", now: 60, pathGeneration: 1, measure: measure)
+        #expect(soon == .remote(bitsPerSecond: 4_000_000))
+        let nextEpisode = await cache.measurement(
+            for: "https://jf.example", now: ConnectionBitrateProbe.lowReadingLifetime, pathGeneration: 1, measure: measure
+        )
+        #expect(nextEpisode == .remote(bitsPerSecond: 90_000_000))
+        #expect(ConnectionBitrateProbe.lowReadingLifetime < ConnectionBitrateProbe.lifetime)
+        // Low means Auto would hold playback under the transcode rung's ceiling.
+        let lowest = PlaybackQualityLimit.maxBitrate(
+            setting: .auto, connection: .remote(bitsPerSecond: ConnectionBitrateProbe.lowReadingBelow)
+        )
+        #expect(lowest == DeviceProfile.realtimeTranscodeBitrateCeiling)
+        #expect(ConnectionBitrateProbe.lifetime(of: .remote(bitsPerSecond: 28_000_000)) == ConnectionBitrateProbe.lowReadingLifetime)
+        #expect(ConnectionBitrateProbe.lifetime(of: .remote(bitsPerSecond: 30_000_000)) == ConnectionBitrateProbe.lifetime)
+        #expect(ConnectionBitrateProbe.lifetime(of: .inNetwork) == ConnectionBitrateProbe.lifetime)
+    }
+
     @Test @MainActor func aMeasurementIsReusedUntilItExpiresOrTheNetworkChanges() async {
         let cache = ConnectionMeasurementCache()
         var probes = 0
         let measure: @MainActor () async -> ConnectionMeasurement? = {
             probes += 1
-            return .remote(bitsPerSecond: 10_000_000)
+            return .remote(bitsPerSecond: 50_000_000)
         }
         let first = await cache.measurement(for: "https://jf.example", now: 0, pathGeneration: 1, measure: measure)
-        #expect(first == .remote(bitsPerSecond: 10_000_000))
+        #expect(first == .remote(bitsPerSecond: 50_000_000))
         _ = await cache.measurement(for: "https://jf.example", now: 600, pathGeneration: 1, measure: measure)
         #expect(probes == 1)
         // Another Wi-Fi network: measure again.
