@@ -20,6 +20,9 @@ struct AdaptiveLayoutRulesTests {
     /// A closed Duo shows the text as it is.
     private static let textToolbarButtonsAllowed: Set<String> = ["seerr.seasons.submit"]
 
+    /// A full-screen cover has room for its toolbar. A sheet does not.
+    private static let tvToolbarsAllowed: Set<String> = ["Features/Accounts/AddAccountView.swift"]
+
     private func sources() throws -> [(path: String, text: String)] {
         let enumerator = try #require(FileManager.default.enumerator(atPath: Self.appRoot.path))
         var files: [(String, String)] = []
@@ -52,6 +55,36 @@ struct AdaptiveLayoutRulesTests {
         return items
     }
 
+    /// Whether each line compiles for tvOS, from the `#if os(...)` blocks
+    /// around it. Any other condition counts as compiled.
+    private func tvOSLines(in text: String) -> [(line: Int, text: Substring, onTV: Bool)] {
+        func compilesForTV(_ condition: Substring) -> Bool {
+            if condition.contains("!os(tvOS)") { return false }
+            if condition.contains("os(tvOS)") || condition.contains("!os(iOS)") { return true }
+            return !condition.contains("os(iOS)")
+        }
+        // Each open block: whether this branch compiles, and whether an
+        // earlier branch did.
+        var blocks: [(active: Bool, taken: Bool)] = []
+        var lines: [(Int, Substring, Bool)] = []
+        for (index, line) in text.split(separator: "\n", omittingEmptySubsequences: false).enumerated() {
+            let trimmed = line.drop { $0 == " " }
+            if trimmed.hasPrefix("#if ") {
+                let active = compilesForTV(trimmed.dropFirst(4))
+                blocks.append((active, active))
+            } else if trimmed.hasPrefix("#elseif "), let block = blocks.popLast() {
+                let active = !block.taken && compilesForTV(trimmed.dropFirst(8))
+                blocks.append((active, block.taken || active))
+            } else if trimmed.hasPrefix("#else"), let block = blocks.popLast() {
+                blocks.append((!block.taken, true))
+            } else if trimmed.hasPrefix("#endif") {
+                _ = blocks.popLast()
+            }
+            lines.append((index + 1, line, blocks.allSatisfy(\.active)))
+        }
+        return lines
+    }
+
     @Test func theScanSeesTheToolbars() throws {
         let items = try sources().flatMap { toolbarItems(in: $0.text) }
         #expect(items.count > 10)
@@ -75,5 +108,38 @@ struct AdaptiveLayoutRulesTests {
                 #expect(exempt || hasSymbol, "\(file.path) has a toolbar button without a symbol: \(item.prefix(120))")
             }
         }
+    }
+
+    /// A tvOS sheet squeezes a toolbar's buttons into "C…el", so tvOS modals
+    /// are `TVModalPanel`s with their actions inside.
+    @Test func tvOSKeepsToolbarsOutOfSheets() throws {
+        for file in try sources() where !Self.tvToolbarsAllowed.contains(file.path) {
+            for line in tvOSLines(in: file.text) where line.onTV && line.text.contains(".toolbar {") {
+                Issue.record("\(file.path):\(line.line) has a toolbar on tvOS. Use TVModalPanel.")
+            }
+        }
+    }
+
+    @Test func theTVScanFollowsPlatformBlocks() {
+        let source = """
+        a
+        #if os(tvOS)
+        b
+        #elseif DEBUG
+        c
+        #else
+        d
+        #endif
+        #if !os(tvOS)
+        e
+        #if DEBUG
+        f
+        #endif
+        #else
+        g
+        #endif
+        """
+        let onTV = tvOSLines(in: source).filter { $0.onTV && !$0.text.hasPrefix("#") }.map { String($0.text) }
+        #expect(onTV == ["a", "b", "g"])
     }
 }
