@@ -14,6 +14,7 @@ struct TVModalPanel<Leading: View, Content: View>: View {
 
     let title: Text
     let subtitle: LocalizedStringKey?
+    let doneTitle: LocalizedStringKey
     let doneIdentifier: String?
     /// Resets the scroll position when it changes, for content that swaps
     /// wholesale.
@@ -25,6 +26,7 @@ struct TVModalPanel<Leading: View, Content: View>: View {
     init(
         title: Text,
         subtitle: LocalizedStringKey? = nil,
+        doneTitle: LocalizedStringKey = "Done",
         doneIdentifier: String? = nil,
         scrollIdentity: AnyHashable? = nil,
         onExit: (() -> Void)? = nil,
@@ -33,6 +35,7 @@ struct TVModalPanel<Leading: View, Content: View>: View {
     ) {
         self.title = title
         self.subtitle = subtitle
+        self.doneTitle = doneTitle
         self.doneIdentifier = doneIdentifier
         self.scrollIdentity = scrollIdentity
         self.onExit = onExit
@@ -85,7 +88,7 @@ struct TVModalPanel<Leading: View, Content: View>: View {
 
     @ViewBuilder
     private var doneButton: some View {
-        let button = Button("Done") { dismiss() }
+        let button = Button(doneTitle) { dismiss() }
             .buttonStyle(.glass)
         if let doneIdentifier {
             button.accessibilityIdentifier(doneIdentifier)
@@ -99,6 +102,7 @@ extension TVModalPanel where Leading == EmptyView {
     init(
         title: Text,
         subtitle: LocalizedStringKey? = nil,
+        doneTitle: LocalizedStringKey = "Done",
         doneIdentifier: String? = nil,
         scrollIdentity: AnyHashable? = nil,
         onExit: (() -> Void)? = nil,
@@ -107,6 +111,7 @@ extension TVModalPanel where Leading == EmptyView {
         self.init(
             title: title,
             subtitle: subtitle,
+            doneTitle: doneTitle,
             doneIdentifier: doneIdentifier,
             scrollIdentity: scrollIdentity,
             onExit: onExit,

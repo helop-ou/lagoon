@@ -92,10 +92,14 @@ struct SeerrMediaDetailView: View {
             Text(popup?.message ?? "")
         }
         .sheet(item: $seasonRequestDetails, onDismiss: { reloadID += 1 }) { details in
+            #if os(tvOS)
+            SeerrSeasonRequestView(details: details)
+            #else
             NavigationStack {
                 SeerrSeasonRequestView(details: details)
             }
             .presentationSizing(.form)
+            #endif
         }
         .accessibilityIdentifier("seerr.detail.\(mediaType.rawValue).\(mediaID)")
     }
@@ -458,12 +462,53 @@ struct SeerrSeasonRequestView: View {
     @State private var errorMessage: String?
 
     var body: some View {
-        Group {
-            #if os(tvOS)
-            List { seasonSections }
-            #else
-            ThemedForm { seasonSections }
-            #endif
+        page
+            .confirmationDialog(
+                "Request \(selected.count) Season\(selected.count == 1 ? "" : "s")?",
+                isPresented: $isConfirmingRequest,
+                titleVisibility: .visible
+            ) {
+                Button("Cancel", role: .cancel) {}
+                Button("Send Request") { submit() }
+            } message: {
+                Text("Send a request for the selected season\(selected.count == 1 ? "" : "s") of \(details.displayTitle)?")
+            }
+            .alert("Couldn't Send Request", isPresented: Binding(
+                get: { errorMessage != nil },
+                set: { if !$0 { errorMessage = nil } }
+            )) {
+                Button("OK") { errorMessage = nil }
+            } message: {
+                Text(errorMessage ?? "The request couldn't be sent.")
+            }
+            .accessibilityIdentifier("seerr.seasons")
+    }
+
+    @ViewBuilder
+    private var page: some View {
+        #if os(tvOS)
+        // A sheet toolbar on tvOS truncates Cancel beside the count.
+        TVModalPanel(
+            title: Text(details.displayTitle),
+            subtitle: "Choose Seasons",
+            doneTitle: "Cancel",
+            doneIdentifier: "seerr.seasons.cancel"
+        ) {
+            requestButton
+                .buttonStyle(.glass)
+                .accessibilityIdentifier("seerr.seasons.submit")
+        } content: {
+            VStack(spacing: Metrics.Space.m) {
+                selectAllButton
+                ForEach(visibleSeasons) { seasonButton($0) }
+            }
+        }
+        #else
+        ThemedForm {
+            Section { selectAllButton }
+            Section(details.displayTitle) {
+                ForEach(visibleSeasons) { seasonButton($0) }
+            }
         }
         .navigationTitle("Choose Seasons")
         .toolbar {
@@ -471,89 +516,70 @@ struct SeerrSeasonRequestView: View {
                 Button("Cancel", systemImage: "xmark", role: .cancel) { dismiss() }
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button {
-                    isConfirmingRequest = true
-                } label: {
-                    if isRequesting {
-                        ProgressView()
-                    } else {
-                        Text("Request \(selected.count)")
-                    }
-                }
-                .disabled(selected.isEmpty || isRequesting)
-                .accessibilityLabel("Request \(selected.count) Season\(selected.count == 1 ? "" : "s")")
-                .accessibilityIdentifier("seerr.seasons.submit")
+                requestButton
+                    .accessibilityIdentifier("seerr.seasons.submit")
             }
         }
-        .confirmationDialog(
-            "Request \(selected.count) Season\(selected.count == 1 ? "" : "s")?",
-            isPresented: $isConfirmingRequest,
-            titleVisibility: .visible
-        ) {
-            Button("Cancel", role: .cancel) {}
-            Button("Send Request") { submit() }
-        } message: {
-            Text("Send a request for the selected season\(selected.count == 1 ? "" : "s") of \(details.displayTitle)?")
-        }
-        .alert("Couldn't Send Request", isPresented: Binding(
-            get: { errorMessage != nil },
-            set: { if !$0 { errorMessage = nil } }
-        )) {
-            Button("OK") { errorMessage = nil }
-        } message: {
-            Text(errorMessage ?? "The request couldn't be sent.")
-        }
-        .accessibilityIdentifier("seerr.seasons")
+        #endif
     }
 
-    @ViewBuilder
-    private var seasonSections: some View {
-        Section {
-            Button {
-                selectAllOrClear()
-            } label: {
-                Text(allSelectableSeasonsAreSelected ? "Clear Selection" : "Select All Available")
-                    .frame(maxWidth: .infinity, alignment: .leading)
+    private var requestButton: some View {
+        Button {
+            isConfirmingRequest = true
+        } label: {
+            if isRequesting {
+                ProgressView()
+            } else {
+                Text("Request \(selected.count)")
             }
-            #if os(tvOS)
-            .buttonStyle(.glass)
-            #else
-            .buttonStyle(.borderless)
-            #endif
-            .disabled(selectableSeasons.isEmpty || isRequesting)
         }
+        .disabled(selected.isEmpty || isRequesting)
+        .accessibilityLabel("Request \(selected.count) Season\(selected.count == 1 ? "" : "s")")
+    }
 
-        Section(details.displayTitle) {
-            ForEach(visibleSeasons) { season in
-                let selectable = isSelectable(season)
-                Button {
-                    toggle(season)
-                } label: {
-                    HStack(spacing: Metrics.Space.l) {
-                        VStack(alignment: .leading, spacing: Metrics.Space.xs) {
-                            Text(season.displayName)
-                                .font(.headline)
-                            if let count = season.episodeCount {
-                                Text(count == 1 ? "1 episode" : "\(count) episodes")
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        Spacer()
-                        selectionAccessory(for: season, selectable: selectable)
-                    }
-                    .contentShape(Rectangle())
-                }
-                #if os(tvOS)
-                .buttonStyle(.glass)
-                #else
-                .buttonStyle(.borderless)
-                #endif
-                .disabled(!selectable || isRequesting)
-                .accessibilityValue(selectionValue(for: season, selectable: selectable))
-                .accessibilityIdentifier("seerr.season.\(season.seasonNumber)")
-            }
+    private var selectAllButton: some View {
+        Button {
+            selectAllOrClear()
+        } label: {
+            Text(allSelectableSeasonsAreSelected ? "Clear Selection" : "Select All Available")
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
+        #if os(tvOS)
+        .buttonStyle(.glass)
+        #else
+        .buttonStyle(.borderless)
+        #endif
+        .disabled(selectableSeasons.isEmpty || isRequesting)
+    }
+
+    private func seasonButton(_ season: SeerrSeason) -> some View {
+        let selectable = isSelectable(season)
+        return Button {
+            toggle(season)
+        } label: {
+            HStack(spacing: Metrics.Space.l) {
+                VStack(alignment: .leading, spacing: Metrics.Space.xs) {
+                    Text(season.displayName)
+                        .font(.headline)
+                    if let count = season.episodeCount {
+                        Text(count == 1 ? "1 episode" : "\(count) episodes")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                Spacer()
+                selectionAccessory(for: season, selectable: selectable)
+            }
+            .contentShape(Rectangle())
+        }
+        #if os(tvOS)
+        .buttonStyle(.glass)
+        #else
+        .buttonStyle(.borderless)
+        #endif
+        .disabled(!selectable || isRequesting)
+        .accessibilityValue(selectionValue(for: season, selectable: selectable))
+        .accessibilityIdentifier("seerr.season.\(season.seasonNumber)")
     }
 
     private var visibleSeasons: [SeerrSeason] {
