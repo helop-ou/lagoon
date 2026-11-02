@@ -79,6 +79,8 @@ nonisolated struct UserItemData: Decodable, Hashable {
     let playedPercentage: Double?
     let played: Bool?
     let isFavorite: Bool?
+    /// On a series or season, how many episodes are still unplayed.
+    let unplayedItemCount: Int?
     /// Kept as the server's string. See `JellyfinTimestamp`.
     let lastPlayedDate: String?
 }
