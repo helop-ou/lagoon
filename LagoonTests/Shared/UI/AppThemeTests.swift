@@ -1,5 +1,7 @@
 import Foundation
+import SwiftUI
 import Testing
+import UIKit
 @testable import Lagoon
 
 @Suite("App theme")
@@ -306,5 +308,17 @@ struct AppThemeTests {
 
     @Test func forgettingAnAccountForgetsItsSeasonChoiceToo() {
         #expect(AccountLocalData.perAccountKeyPrefixes.contains(ThemeStore.seasonKeyPrefix))
+    }
+
+    /// `UnwatchedMark` draws black figures on the signal colour.
+    @Test(arguments: AppTheme.allCases)
+    func blackFiguresStayReadableOnTheSignal(theme: AppTheme) {
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        UIColor(theme.palette.signal).getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        func linear(_ channel: CGFloat) -> CGFloat {
+            channel <= 0.04045 ? channel / 12.92 : pow((channel + 0.055) / 1.055, 2.4)
+        }
+        let luminance = 0.2126 * linear(red) + 0.7152 * linear(green) + 0.0722 * linear(blue)
+        #expect((luminance + 0.05) / 0.05 >= 6.7)
     }
 }
