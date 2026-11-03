@@ -7,6 +7,9 @@ import Observation
 private final class DiscoverViewModel {
     var rows: [SeerrDiscoverRow] = []
     var hero: [SeerrDiscoverResult] = []
+    /// Genre names by TMDB id for the hero's info line, films and shows
+    /// apart: the two lists share ids with different names.
+    var genreNames: [SeerrMediaType: [Int: String]] = [:]
     var isLoading = false
     var errorMessage: String?
 
@@ -29,6 +32,8 @@ private final class DiscoverViewModel {
             rows = SeerrDiscoverLayout.fallback
         }
 
+        async let movieGenres = try? client.genres(.movie)
+        async let tvGenres = try? client.genres(.tv)
         do {
             let trending = try await client.trending()
             guard !Task.isCancelled else { return }
@@ -43,6 +48,15 @@ private final class DiscoverViewModel {
             // Trending feeds the hero, so this failure is the one to show.
             errorMessage = error.localizedDescription
         }
+        // Without names the info line shows the year alone.
+        let names = await (movie: movieGenres, tv: tvGenres)
+        guard !Task.isCancelled else { return }
+        if let movie = names.movie { genreNames[.movie] = Self.names(movie) }
+        if let tv = names.tv { genreNames[.tv] = Self.names(tv) }
+    }
+
+    private static func names(_ genres: [SeerrGenre]) -> [Int: String] {
+        Dictionary(genres.map { ($0.id, $0.name) }, uniquingKeysWith: { first, _ in first })
     }
 
 }
@@ -146,7 +160,9 @@ struct DiscoverView: View {
                 overview: item.overview,
                 backdropURL: SeerrClient.imageURL(path: item.backdropPath, width: Metrics.detailBackdropRequestWidth),
                 logoURL: nil,
-                route: .media(id: item.id, type: type)
+                route: .media(id: item.id, type: type),
+                facts: item.heroFacts(genreNames: viewModel.genreNames[type] ?? [:]),
+                starRating: item.voteAverage.flatMap { $0 > 0 ? $0 : nil }
             )
         }
     }

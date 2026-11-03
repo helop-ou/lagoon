@@ -97,7 +97,7 @@ struct HomeView: View {
         viewModel.heroItems.map { item in
             HeroItem(
                 id: item.id,
-                title: item.name ?? "",
+                title: item.railTitle,
                 overview: item.overview,
                 backdropURL: session.client.imageURL(for: item, kind: .backdrop, maxWidth: Metrics.detailBackdropRequestWidth),
                 logoURL: session.client.imageURL(
@@ -105,7 +105,12 @@ struct HomeView: View {
                     kind: .logo,
                     maxWidth: ArtworkSizing.pixels(for: Metrics.logoMaxWidth, displayScale: displayScale)
                 ),
-                route: .item(item)
+                route: .item(item),
+                facts: item.heroFacts,
+                ageRating: item.officialRating,
+                starRating: item.communityRating,
+                progress: item.playbackProgress,
+                timeRemaining: item.timeRemainingLabel
             )
         }
     }

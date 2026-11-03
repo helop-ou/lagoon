@@ -47,6 +47,8 @@ enum Metrics {
     /// The hero's text column, bounded so it doesn't run under the artwork.
     static let heroTextWidth: CGFloat = 640
     static let heroTextInset: CGFloat = 56
+    /// The bar beside "28 min left" on a started title.
+    static let heroProgressWidth: CGFloat = 200
     /// A profile's round portrait in the "Who's watching?" picker: one row
     /// when every profile is on one server, and smaller when rows are
     /// grouped by server, so three servers fit one screen.
@@ -138,6 +140,7 @@ enum Metrics {
     static let heroLogoHeight: CGFloat = 54
     static let heroTextWidth: CGFloat = .infinity
     static let expandedHeroTextWidth: CGFloat = 520
+    static let heroProgressWidth: CGFloat = 100
     /// The detail header's info column in a regular-width iPad window,
     /// laid out beside the artwork as on the TV.
     static let expandedDetailColumnWidth: CGFloat = 640

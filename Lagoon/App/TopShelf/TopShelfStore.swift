@@ -201,16 +201,8 @@ extension MediaItem {
     var topShelfContext: String {
         let framing = "Continue Watching"
         if let episodeLabel { return "\(framing) · \(episodeLabel)" }
-        if let remaining = topShelfTimeRemaining { return "\(framing) · \(remaining)" }
+        if let remaining = timeRemainingLabel { return "\(framing) · \(remaining)" }
         return framing
-    }
-
-    private var topShelfTimeRemaining: String? {
-        guard let runTimeTicks, let progress = playbackProgress else { return nil }
-        let minutes = Int(Ticks.seconds(runTimeTicks) * (1 - progress) / 60)
-        guard minutes > 0 else { return nil }
-        if minutes >= 60 { return "\(minutes / 60) h \(minutes % 60) min left" }
-        return "\(minutes) min left"
     }
 
     /// Capability badges, from the same stream facts the detail page and
