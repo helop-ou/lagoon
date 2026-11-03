@@ -67,7 +67,8 @@ clean" in docs/README.md.
 - Ship through pull requests. Read "Pull requests" in the
   [standards](docs/standards.md#pull-requests) before creating a branch: its
   name, the title, the description and every commit are checked, and a
-  feature and its snapshot tests are two pull requests in a stack. Turn on
+  feature and its snapshot tests are two pull requests in a linked stack,
+  unless the feature's code counts for coverage. Turn on
   the pre-push hook once per clone (`git config core.hooksPath .githooks`),
   and run `scripts/check-pull-request.sh` with the title and description
   before opening the pull request. Never rename a pull request's branch on
