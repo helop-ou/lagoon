@@ -16,6 +16,18 @@ enum Snapshot {
         sourceLocation: SourceLocation = #_sourceLocation
     ) async throws {
         let image = try #require(await render(view, size: size), "The view did not render", sourceLocation: sourceLocation)
+        try verify(image, named: name, tolerance: tolerance, filePath: filePath, sourceLocation: sourceLocation)
+    }
+
+    /// For a picture `verify(_:named:size:)` cannot take, such as a focused
+    /// tvOS control, which needs a key window.
+    static func verify(
+        _ image: CGImage,
+        named name: String,
+        tolerance: Double = 0.002,
+        filePath: String = #filePath,
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) throws {
         let png = try #require(UIImage(cgImage: image).pngData(), sourceLocation: sourceLocation)
 
         let reference = referenceURL(for: name, filePath: filePath)
