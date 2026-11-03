@@ -57,8 +57,7 @@ struct HeroSection<Route: Hashable>: View {
     }
     #endif
 
-    /// The phone layout: smaller type, a wash only under the text and the
-    /// page dots below the card, so the artwork carries the banner.
+    /// The phone layout: smaller type and a smaller logo.
     private var isCompact: Bool {
         #if os(iOS)
         !usesExpandedLayout
@@ -67,7 +66,18 @@ struct HeroSection<Route: Hashable>: View {
         #endif
     }
 
-    private var showsDotsBelowCard: Bool { isCompact && items.count > 1 }
+    /// iPhone and iPad let the artwork carry the banner: a wash only under
+    /// the text, a shadow to keep the text legible, and the page dots below
+    /// the card.
+    private var usesLightBanner: Bool {
+        #if os(iOS)
+        true
+        #else
+        false
+        #endif
+    }
+
+    private var showsDotsBelowCard: Bool { usesLightBanner && items.count > 1 }
 
     private var logoBox: CGSize {
         #if os(iOS)
@@ -275,9 +285,9 @@ struct HeroSection<Route: Hashable>: View {
                     #endif
                     HeroDetails(item: item, isCompact: isCompact)
                 }
-                // The lighter phone wash leaves bright artwork under the title.
+                // The light wash leaves bright artwork under the title.
                 .shadow(
-                    color: .black.opacity(isCompact ? Metrics.artworkTitleShadowOpacity : 0),
+                    color: .black.opacity(usesLightBanner ? Metrics.artworkTitleShadowOpacity : 0),
                     radius: Metrics.artworkTitleShadowRadius
                 )
                 #if os(tvOS)
@@ -309,9 +319,8 @@ struct HeroSection<Route: Hashable>: View {
         #endif
     }
 
-    /// tvOS darkens only the text column. The wide layout's text spans the
-    /// width, so its wash does too. On a phone the text sits at the bottom,
-    /// so only the bottom darkens.
+    /// tvOS darkens only the text column. iPhone and iPad set the text at
+    /// the bottom, so only the bottom darkens.
     private var wash: LinearGradient {
         #if os(tvOS)
         LinearGradient(stops: [
@@ -320,19 +329,11 @@ struct HeroSection<Route: Hashable>: View {
             .init(color: .clear, location: 0.72),
         ], startPoint: .leading, endPoint: .trailing)
         #else
-        if isCompact {
-            LinearGradient(stops: [
-                .init(color: .clear, location: 0.15),
-                .init(color: Theme.background.opacity(0.6), location: 0.5),
-                .init(color: Theme.background.opacity(0.9), location: 1),
-            ], startPoint: .top, endPoint: .bottom)
-        } else {
-            LinearGradient(stops: [
-                .init(color: Theme.background.opacity(0.8), location: 0),
-                .init(color: Theme.background.opacity(0.7), location: 0.5),
-                .init(color: Theme.background.opacity(0.6), location: 1),
-            ], startPoint: .leading, endPoint: .trailing)
-        }
+        LinearGradient(stops: [
+            .init(color: .clear, location: 0.15),
+            .init(color: Theme.background.opacity(0.6), location: 0.5),
+            .init(color: Theme.background.opacity(0.9), location: 1),
+        ], startPoint: .top, endPoint: .bottom)
         #endif
     }
 
