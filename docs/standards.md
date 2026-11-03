@@ -142,6 +142,19 @@ are the commit types: `feat`, `fix`, `docs`, `test`, `refactor`, `perf`,
   (`gh stack`), one pull request per theme, merged from the bottom up, such
   as a feature and then its snapshot tests. Unrelated changes are separate
   pull requests, never one stack.
+- **Every stack is linked on GitHub**, not left as pull requests that only
+  target each other's branches. Open each with `gh pr create` against the
+  branch below it, so its title and description pass the checks, then link
+  them bottom to top with `gh stack link <bottom> <top>`. A linked stack is
+  rebased and merged as one, so a follow-up never lands on a stale base.
+- **Coverage decides where the tests go.** SonarCloud scores each pull
+  request on its own and wants 80 % of new code covered. New code in a file
+  that `sonar.coverage.exclusions` does not exclude needs the tests that run
+  it in the same pull request, snapshots included. Then the feature and its
+  tests are the bottom of the stack, and anything built on them goes above.
+  Views and `Lagoon/Shared/UI` are excluded, so their snapshots can still be
+  a pull request of their own. Check the changed files against the
+  exclusions before splitting.
 
 `.github/workflows/conventions.yml` runs `scripts/check-pull-request.sh` on
 every pull request and again when its title or description is edited, and
