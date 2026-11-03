@@ -413,3 +413,7 @@ request. `HomeCardSnapshotTests` is the pattern.
   change.
 - Snapshot views that render synchronously. A `.task` that fills `@State`
   may not have run when the window is drawn.
+- The snapshot window is never key, so nothing in it is focused. A focused
+  tvOS control needs a key window with focus moved into it.
+  `ProfileButtonSnapshotTests` does that and hands the picture to
+  `Snapshot.verify(_:named:)`.
