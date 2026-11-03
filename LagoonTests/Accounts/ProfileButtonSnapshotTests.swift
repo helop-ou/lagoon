@@ -28,6 +28,38 @@ struct ProfileButtonSnapshotTests {
         try Snapshot.verify(image, named: "profile-focused")
     }
 
+    /// The snapshots draw the control at a fixed time. The button itself
+    /// feeds it the current one, at Refresh's height.
+    @Test func theButtonShowsTheCurrentTime() async throws {
+        let before = Date()
+        let host = UIHostingController(rootView: ProfileButton(
+            image: nil,
+            profileName: "Jaagop",
+            isAvailable: true,
+            moveDownAction: nil,
+            moveLeftAction: nil,
+            action: {}
+        ))
+        host.safeAreaRegions = []
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        let window = UIWindow(windowScene: scene)
+        window.frame = CGRect(origin: .zero, size: Self.size)
+        window.rootViewController = host
+        window.isHidden = false
+        defer { window.isHidden = true }
+        host.view.layoutIfNeeded()
+        for _ in 0..<3 { await Task.yield() }
+        host.view.layoutIfNeeded()
+        let after = Date()
+
+        let button = try #require(host.view.firstSubview(of: TopChromeButton.self))
+        let shown = [before, after].map {
+            TVProfileControl.clockText(for: $0, locale: .autoupdatingCurrent, timeZone: .autoupdatingCurrent)
+        }
+        #expect(shown.contains(button.configuration?.title ?? ""))
+        #expect(button.bounds.height == Metrics.topChromeButtonSize)
+    }
+
     private func portrait() async -> UIImage? {
         let account = StoredAccount(
             serverURL: URL(string: "https://jellyfin.snapshot.test")!,
