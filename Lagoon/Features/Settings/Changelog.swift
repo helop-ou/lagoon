@@ -57,7 +57,7 @@ nonisolated enum Changelog {
             "Titles from Seerr have a Trailer button too, including ones not in your library yet.",
             "On Apple TV, choosing seasons to request opens a larger panel, with Request and Cancel below the seasons.",
             "On Apple TV, the time sits beside your profile picture at the top of the screen.",
-            "The banner on Home and Discover shows the year, genres and runtime, the age rating and score, and how much is left of something you've started. On iPhone and iPad it leaves the description to the title's page.",
+            "The banner on Home and Discover shows the year, genres and runtime, the age rating and score, and how much is left of something you've started. On iPhone and iPad it leaves the description to the title's page, and on iPhone it keeps its text small so more of the artwork shows.",
         ]),
         ChangelogSection(category: .bugFixes, changes: [
             "VoiceOver no longer reads icon names or unlabelled pictures on Discover, in Settings and in the player.",

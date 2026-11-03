@@ -18,6 +18,7 @@ screen-specific copies.
 | `expandedHeroHeight` | Not used | 360 in the wide layout |
 | `expandedHeroTextWidth` | Not used | 520 maximum in the wide layout |
 | `heroProgressWidth` | 200 | 100: the hero's progress bar beside the time left |
+| `compactHeroLogoWidth` / `compactHeroLogoHeight` | Not used | 180 / 40: the phone hero's logo box |
 | `detailPosterHeroMaxShare` / `detailPosterContentOverlap` | Not used | 0.72 / 0.36: portrait poster hero's cap as a share of window height, and how far the metadata rises over it |
 | `detailLandscapeRowShare` | Not used | 0.88: where the landscape row starts down the full-screen poster |
 | `detailBackdropHeroShare` | Not used | 0.6: portrait hero height as a share of the window for landscape key art |
@@ -213,7 +214,10 @@ notes](reference/design-system.md#themes).
   number and name), on Apple TV a three-line synopsis, the age rating and
   star score, and a started title's progress in the theme accent with the
   time left. Phones leave the synopsis to the detail page. A missing piece
-  leaves no gap. The progress stays in the column on the wash, never in a
+  leaves no gap. On a phone the artwork carries the banner: the wash
+  darkens only the lower part, the text is footnote size with the artwork
+  title shadow, the logo keeps to `compactHeroLogoWidth` by
+  `compactHeroLogoHeight`, and the page dots sit below the card. The progress stays in the column on the wash, never in a
   corner over raw artwork or along the bottom edge, where the Apple TV page
   dots are. No critic score: its heart would read as the favourites heart.
   Height grows for Dynamic Type. Ambient glow uses `AmbientGlowView`.
