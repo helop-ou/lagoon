@@ -47,25 +47,28 @@ nonisolated enum Changelog {
     /// action moves them into a new entry, so a pull request never bumps the
     /// build or edits a shipped entry.
     static let unreleased: [ChangelogSection] = [
+        ChangelogSection(category: .newFeatures, changes: [
+            "The banner on Home and Discover shows the year, genres, runtime, age rating and score, and how much is left of something you've started.",
+            "Titles from Seerr have a Trailer button too, including ones not in your library yet.",
+            "A show you've started shows how many episodes you have left on its poster.",
+            "On Apple TV, the time sits beside your profile picture at the top of the screen.",
+        ]),
         ChangelogSection(category: .improvements, changes: [
+            "On iPhone and iPad, the banner darkens only behind its text and leaves the description to the title's page, so more of the artwork shows.",
+            "Baby Pink has new colours: soft orchid over deep plum, and posters keep their own colours.",
+            "Discover, Library and the Settings categories have new icons, and favourites are now a heart.",
+            "On Apple TV, posters and cards are a little larger. On iPad, rails and grids have a little more room between cards and rows.",
             "On iPhone Duo, Lagoon uses its wide layouts when the phone is open, and Search opens its field when it is closed.",
             "With Maximum Quality on Auto, a slow connection is checked again after five minutes, so moving closer to the router brings back full quality sooner.",
-            "Discover, Library and the Settings categories have new icons, and favourites are now a heart.",
-            "Baby Pink has new colours: soft orchid over deep plum, and posters keep their own colours.",
-            "On Apple TV, posters and cards are a little larger. On iPad, rails and grids have a little more room between cards and rows.",
-            "A show you've started shows how many episodes you have left on its poster.",
-            "Titles from Seerr have a Trailer button too, including ones not in your library yet.",
             "On Apple TV, choosing seasons to request opens a larger panel, with Request and Cancel below the seasons.",
-            "On Apple TV, the time sits beside your profile picture at the top of the screen.",
-            "The banner on Home and Discover shows the year, genres and runtime, the age rating and score, and how much is left of something you've started. On iPhone and iPad it leaves the description to the title's page and darkens only behind the text, so more of the artwork shows.",
         ]),
         ChangelogSection(category: .bugFixes, changes: [
+            "On cellular or a slower connection, a video small enough for the quality limit plays in its original quality instead of being converted.",
+            "Starting a video on Apple TV no longer shows a Now Playing notification.",
             "VoiceOver no longer reads icon names or unlabelled pictures on Discover, in Settings and in the player.",
             "At the largest text sizes, the Playlists and Downloads rows in Library keep their titles whole.",
-            "About Lagoon on the sign-in screen is easier to tap.",
-            "Starting a video on Apple TV no longer shows a Now Playing notification.",
             "On iPhone and iPad, genre names sit in the middle of their cards, as they do on Apple TV.",
-            "On cellular or a slower connection, a video small enough for the quality limit plays in its original quality instead of being converted.",
+            "About Lagoon on the sign-in screen is easier to tap.",
         ]),
     ]
 
