@@ -2,7 +2,8 @@ import SwiftUI
 
 /// What the hero needs of a title, from Jellyfin (Home) or Seerr (Discover).
 /// `route` is generic so each keeps its own navigation identity. Seerr has no
-/// logos, so `logoURL` is nil there and the title is set in type.
+/// logos, age ratings or progress, so those stay nil there and the title is
+/// set in type.
 nonisolated struct HeroItem<Route: Hashable>: Identifiable {
     let id: String
     let title: String
@@ -10,6 +11,29 @@ nonisolated struct HeroItem<Route: Hashable>: Identifiable {
     let backdropURL: URL?
     let logoURL: URL?
     let route: Route
+    /// The info line under the title, joined with dots.
+    var facts: [String] = []
+    var ageRating: String?
+    /// Out of ten.
+    var starRating: Double?
+    var progress: Double?
+    var timeRemaining: String?
+}
+
+extension MediaItem {
+    /// "S2 E5 · Episode title" for an episode, else the year, up to two
+    /// genres and a film's runtime.
+    var heroFacts: [String] {
+        if type == .episode {
+            return [episodeLabel, name].compactMap(\.self)
+        }
+        var facts = productionYear.map { [String($0)] } ?? []
+        facts += (genres ?? []).prefix(2)
+        if type != .series, let runtimeLabel {
+            facts.append(runtimeLabel)
+        }
+        return facts
+    }
 }
 
 /// Hero panel with touch paging on iOS and remote paging on tvOS.
@@ -213,17 +237,7 @@ struct HeroSection<Route: Hashable>: View {
                     #if os(iOS)
                     .lineLimit(2)
                     #endif
-                    if let overview = item.overview {
-                        Text(overview)
-                            .font(.callout)
-                            #if os(tvOS)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(4)
-                            #else
-                            .foregroundStyle(.primary)
-                            .lineLimit(2)
-                            #endif
-                    }
+                    HeroDetails(item: item)
                 }
                 #if os(tvOS)
                 .id(item.id)
@@ -357,5 +371,55 @@ struct HeroSection<Route: Hashable>: View {
             guard !Task.isCancelled else { return }
             _ = await ArtworkPaletteCache.shared.palette(for: url)
         }
+    }
+}
+
+/// Under the title: the info line, on Apple TV the synopsis, the ratings,
+/// and a started title's progress. Phones leave the synopsis to the detail
+/// page.
+private struct HeroDetails<Route: Hashable>: View {
+    let item: HeroItem<Route>
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: Metrics.Space.m) {
+            if !item.facts.isEmpty {
+                Text(item.facts.joined(separator: " · "))
+                    .lineLimit(1)
+            }
+            #if os(tvOS)
+            if let overview = item.overview {
+                Text(overview)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            #endif
+            if item.ageRating != nil || item.starRating != nil {
+                HStack(spacing: Metrics.Space.l) {
+                    if let ageRating = item.ageRating {
+                        OfficialRatingBadge(rating: ageRating)
+                    }
+                    if let starRating = item.starRating {
+                        Text(CommunityRatingLabel.text(starRating))
+                    }
+                }
+            }
+            if let progress = item.progress {
+                HStack(spacing: Metrics.Space.m) {
+                    Capsule()
+                        .fill(.white.opacity(0.3))
+                        .overlay(alignment: .leading) {
+                            Capsule()
+                                .fill(Theme.accent)
+                                .frame(width: Metrics.heroProgressWidth * progress)
+                        }
+                        .frame(width: Metrics.heroProgressWidth, height: Metrics.progressBarHeight)
+                    if let timeRemaining = item.timeRemaining {
+                        Text(timeRemaining)
+                    }
+                }
+            }
+        }
+        .font(.callout)
     }
 }

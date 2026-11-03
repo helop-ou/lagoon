@@ -246,19 +246,7 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
                 #endif
         }
         if let official = officialRating {
-            Text(official)
-                #if os(tvOS)
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
-                #else
-                .fixedSize(horizontal: false, vertical: true)
-                #endif
-                .padding(.horizontal, Metrics.Space.s)
-                .padding(.vertical, Metrics.Space.hair)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 4)
-                        .strokeBorder(.white.opacity(0.5), lineWidth: 1.5)
-                )
+            OfficialRatingBadge(rating: official)
         }
     }
 
@@ -312,7 +300,7 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
     }
 
     private func communityRatingText(_ rating: Double) -> some View {
-        Text(String(format: "★ %.1f", rating))
+        Text(CommunityRatingLabel.text(rating))
             .font(.callout)
             #if os(tvOS)
             .foregroundStyle(.secondary)
@@ -343,5 +331,33 @@ private struct DetailOverview: View {
             .fixedSize(horizontal: false, vertical: true)
             .frame(maxWidth: Metrics.detailOverviewWidth, alignment: .leading)
             .accessibilityIdentifier("detail.overview")
+    }
+}
+
+/// An age rating such as "PG-13" in a thin outline.
+struct OfficialRatingBadge: View {
+    let rating: String
+
+    var body: some View {
+        Text(rating)
+            #if os(tvOS)
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            #else
+            .fixedSize(horizontal: false, vertical: true)
+            #endif
+            .padding(.horizontal, Metrics.Space.s)
+            .padding(.vertical, Metrics.Space.hair)
+            .overlay(
+                RoundedRectangle(cornerRadius: 4)
+                    .strokeBorder(.white.opacity(0.5), lineWidth: 1.5)
+            )
+    }
+}
+
+/// "★ 7.4", a score out of ten.
+nonisolated enum CommunityRatingLabel {
+    static func text(_ rating: Double) -> String {
+        String(format: "★ %.1f", rating)
     }
 }

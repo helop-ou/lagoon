@@ -550,6 +550,13 @@ extension MediaItem {
         return Self.runtimeLabel(minutes: Int(Ticks.seconds(runTimeTicks) / 60))
     }
 
+    /// "28 min left" on a started title.
+    var timeRemainingLabel: String? {
+        guard let runTimeTicks, let progress = playbackProgress else { return nil }
+        let minutes = Int(Ticks.seconds(runTimeTicks) * (1 - progress) / 60)
+        return Self.runtimeLabel(minutes: minutes).map { String(localized: "\($0) left") }
+    }
+
     /// "45 min", "1 h 30 min", nil for a runtime of zero or less.
     static func runtimeLabel(minutes: Int) -> String? {
         guard minutes > 0 else { return nil }

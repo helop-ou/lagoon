@@ -341,6 +341,7 @@ nonisolated struct SeerrDiscoverResult: Decodable, Hashable, Identifiable {
     let releaseDate: String?
     let firstAirDate: String?
     let voteAverage: Double?
+    let genreIds: [Int]
     let mediaInfo: SeerrMediaInfo?
 
     init(from decoder: Decoder) throws {
@@ -360,12 +361,13 @@ nonisolated struct SeerrDiscoverResult: Decodable, Hashable, Identifiable {
         releaseDate = try container.decodeIfPresent(String.self, forKey: .releaseDate)
         firstAirDate = try container.decodeIfPresent(String.self, forKey: .firstAirDate)
         voteAverage = try container.decodeIfPresent(Double.self, forKey: .voteAverage)
+        genreIds = (try? container.decodeIfPresent([Int].self, forKey: .genreIds)) ?? []
         mediaInfo = try container.decodeIfPresent(SeerrMediaInfo.self, forKey: .mediaInfo)
     }
 
     private enum CodingKeys: String, CodingKey {
         case id, mediaType, title, name, originalTitle, originalName, overview
-        case posterPath, backdropPath, profilePath, releaseDate, firstAirDate, voteAverage, mediaInfo
+        case posterPath, backdropPath, profilePath, releaseDate, firstAirDate, voteAverage, genreIds, mediaInfo
     }
 
     /// A person result, as the person page takes it.
@@ -377,6 +379,12 @@ nonisolated struct SeerrDiscoverResult: Decodable, Hashable, Identifiable {
     var displayTitle: String { title ?? name ?? originalTitle ?? originalName ?? "Untitled" }
     var date: String? { releaseDate ?? firstAirDate }
     var year: String? { date.map { String($0.prefix(4)) }.flatMap { $0.isEmpty ? nil : $0 } }
+
+    /// The hero's info line: the year and up to two genres, named from
+    /// `genreNames` by TMDB id.
+    func heroFacts(genreNames: [Int: String]) -> [String] {
+        [year].compactMap(\.self) + genreIds.lazy.compactMap { genreNames[$0] }.prefix(2)
+    }
 }
 
 nonisolated struct SeerrMediaDetails: Decodable, Hashable, Identifiable {
