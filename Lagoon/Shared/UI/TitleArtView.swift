@@ -24,7 +24,9 @@ struct TitleArtImage: View {
     @Environment(\.displayScale) private var displayScale
     let url: URL?
     let title: String
+    var maxWidth: CGFloat = Metrics.logoMaxWidth
     var maxHeight: CGFloat = Metrics.logoMaxHeight
+    var titleFont: Font = .largeTitle.bold()
     var alignment: HorizontalAlignment = .leading
 
     var body: some View {
@@ -45,7 +47,7 @@ struct TitleArtImage: View {
                 // Type, not a box: reserving the logo's height leaves a hole.
                 titleText
             }
-            .frame(maxWidth: Metrics.logoMaxWidth, maxHeight: maxHeight, alignment: Alignment(horizontal: alignment, vertical: .center))
+            .frame(maxWidth: maxWidth, maxHeight: maxHeight, alignment: Alignment(horizontal: alignment, vertical: .center))
         } else {
             titleText
         }
@@ -53,7 +55,7 @@ struct TitleArtImage: View {
 
     private var titleText: some View {
         Text(title)
-            .font(.largeTitle.bold())
+            .font(titleFont)
             #if os(tvOS)
             .lineLimit(2)
             #endif

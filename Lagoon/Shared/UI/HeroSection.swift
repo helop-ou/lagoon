@@ -57,6 +57,27 @@ struct HeroSection<Route: Hashable>: View {
     }
     #endif
 
+    /// The phone layout: smaller type, a wash only under the text and the
+    /// page dots below the card, so the artwork carries the banner.
+    private var isCompact: Bool {
+        #if os(iOS)
+        !usesExpandedLayout
+        #else
+        false
+        #endif
+    }
+
+    private var showsDotsBelowCard: Bool { isCompact && items.count > 1 }
+
+    private var logoBox: CGSize {
+        #if os(iOS)
+        if isCompact {
+            return CGSize(width: Metrics.compactHeroLogoWidth, height: Metrics.compactHeroLogoHeight)
+        }
+        #endif
+        return CGSize(width: Metrics.logoMaxWidth, height: Metrics.heroLogoHeight)
+    }
+
     private var panelHeight: CGFloat {
         #if os(tvOS)
         Metrics.heroHeight
@@ -128,7 +149,7 @@ struct HeroSection<Route: Hashable>: View {
                 GeometryReader { proxy in
                     heroBody(for: current, width: proxy.size.width)
                 }
-                .frame(height: panelHeight)
+                .frame(height: panelHeight + (showsDotsBelowCard ? Metrics.Space.l + Metrics.heroDotSize : 0))
                 .padding(.horizontal, Metrics.screenGutter)
                 .onScrollVisibilityChange { isVisible = $0 }
                 .onDisappear { isVisible = false }
@@ -169,6 +190,18 @@ struct HeroSection<Route: Hashable>: View {
                     }
                 }
             #else
+            VStack(spacing: Metrics.Space.l) {
+                carousel(current: current, width: width)
+                if showsDotsBelowCard {
+                    dots
+                }
+            }
+            #endif
+        }
+    }
+
+    #if os(iOS)
+    private func carousel(current: HeroItem<Route>, width: CGFloat) -> some View {
             ScrollView(.horizontal) {
                 HStack(spacing: 0) {
                     ForEach(items) { item in
@@ -190,12 +223,13 @@ struct HeroSection<Route: Hashable>: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: Metrics.heroCornerRadius))
             .overlay(alignment: .bottom) {
-                dots.padding(.bottom, Metrics.Space.l)
-                    .allowsHitTesting(false)
+                if !showsDotsBelowCard {
+                    dots.padding(.bottom, Metrics.Space.l)
+                        .allowsHitTesting(false)
+                }
             }
-            #endif
-        }
     }
+    #endif
 
     private func heroLink(for item: HeroItem<Route>, width: CGFloat) -> some View {
         NavigationLink(value: item.route) {
@@ -232,13 +266,20 @@ struct HeroSection<Route: Hashable>: View {
                     TitleArtImage(
                         url: item.logoURL,
                         title: item.title,
-                        maxHeight: Metrics.heroLogoHeight
+                        maxWidth: logoBox.width,
+                        maxHeight: logoBox.height,
+                        titleFont: isCompact ? .title2.bold() : .largeTitle.bold()
                     )
                     #if os(iOS)
                     .lineLimit(2)
                     #endif
-                    HeroDetails(item: item)
+                    HeroDetails(item: item, isCompact: isCompact)
                 }
+                // The lighter phone wash leaves bright artwork under the title.
+                .shadow(
+                    color: .black.opacity(isCompact ? Metrics.artworkTitleShadowOpacity : 0),
+                    radius: Metrics.artworkTitleShadowRadius
+                )
                 #if os(tvOS)
                 .id(item.id)
                 // The button stays outside this transitioning subtree so focus
@@ -253,9 +294,9 @@ struct HeroSection<Route: Hashable>: View {
             .frame(maxWidth: max(0, min(textColumnWidth, width - Metrics.heroTextInset * 2)), alignment: .leading)
             .padding(.leading, Metrics.heroTextInset)
             #if os(iOS)
-            // Text sits low, above a strip for the page dots.
+            // Text sits low, above the page dots unless they sit below the card.
             .frame(maxHeight: .infinity, alignment: .bottomLeading)
-            .padding(.bottom, Metrics.Space.xxl)
+            .padding(.bottom, showsDotsBelowCard ? Metrics.Space.xl : Metrics.Space.xxl)
             #endif
         }
         .frame(width: width, height: panelHeight)
@@ -268,21 +309,30 @@ struct HeroSection<Route: Hashable>: View {
         #endif
     }
 
-    /// tvOS darkens only the text column. On a phone the text spans the full
-    /// width, so the wash does too.
-    private static var washStops: [Gradient.Stop] {
+    /// tvOS darkens only the text column. The wide layout's text spans the
+    /// width, so its wash does too. On a phone the text sits at the bottom,
+    /// so only the bottom darkens.
+    private var wash: LinearGradient {
         #if os(tvOS)
-        [
+        LinearGradient(stops: [
             .init(color: Theme.background.opacity(0.85), location: 0),
             .init(color: Theme.background.opacity(0.55), location: 0.35),
             .init(color: .clear, location: 0.72),
-        ]
+        ], startPoint: .leading, endPoint: .trailing)
         #else
-        [
-            .init(color: Theme.background.opacity(0.8), location: 0),
-            .init(color: Theme.background.opacity(0.7), location: 0.5),
-            .init(color: Theme.background.opacity(0.6), location: 1),
-        ]
+        if isCompact {
+            LinearGradient(stops: [
+                .init(color: .clear, location: 0.15),
+                .init(color: Theme.background.opacity(0.6), location: 0.5),
+                .init(color: Theme.background.opacity(0.9), location: 1),
+            ], startPoint: .top, endPoint: .bottom)
+        } else {
+            LinearGradient(stops: [
+                .init(color: Theme.background.opacity(0.8), location: 0),
+                .init(color: Theme.background.opacity(0.7), location: 0.5),
+                .init(color: Theme.background.opacity(0.6), location: 1),
+            ], startPoint: .leading, endPoint: .trailing)
+        }
         #endif
     }
 
@@ -297,13 +347,7 @@ struct HeroSection<Route: Hashable>: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .clipped()
-        .overlay(
-            LinearGradient(
-                stops: Self.washStops,
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-        )
+        .overlay(wash)
     }
 
     @ViewBuilder
@@ -379,9 +423,10 @@ struct HeroSection<Route: Hashable>: View {
 /// page.
 private struct HeroDetails<Route: Hashable>: View {
     let item: HeroItem<Route>
+    let isCompact: Bool
 
     var body: some View {
-        VStack(alignment: .leading, spacing: Metrics.Space.m) {
+        VStack(alignment: .leading, spacing: isCompact ? Metrics.Space.s : Metrics.Space.m) {
             if !item.facts.isEmpty {
                 Text(item.facts.joined(separator: " · "))
                     .lineLimit(1)
@@ -395,7 +440,7 @@ private struct HeroDetails<Route: Hashable>: View {
             }
             #endif
             if item.ageRating != nil || item.starRating != nil {
-                HStack(spacing: Metrics.Space.l) {
+                HStack(spacing: isCompact ? Metrics.Space.m : Metrics.Space.l) {
                     if let ageRating = item.ageRating {
                         OfficialRatingBadge(rating: ageRating)
                     }
@@ -413,13 +458,16 @@ private struct HeroDetails<Route: Hashable>: View {
                                 .fill(Theme.accent)
                                 .frame(width: Metrics.heroProgressWidth * progress)
                         }
-                        .frame(width: Metrics.heroProgressWidth, height: Metrics.progressBarHeight)
+                        .frame(
+                            width: Metrics.heroProgressWidth,
+                            height: isCompact ? Metrics.progressBarHeight / 2 : Metrics.progressBarHeight
+                        )
                     if let timeRemaining = item.timeRemaining {
                         Text(timeRemaining)
                     }
                 }
             }
         }
-        .font(.callout)
+        .font(isCompact ? .footnote : .callout)
     }
 }
