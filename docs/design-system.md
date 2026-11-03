@@ -100,8 +100,9 @@ Keep the list short, because each theme is checked over every screen.
   theme change re-render through Observation.
 - **Text never takes a theme colour.** A scrim over artwork inside a card stays
   black.
-- **`signal` is for a few small marks only**: the accent's opposite, on a
-  started series' unwatched count (`UnwatchedMark`, black figures) and the
+- **`signal` is for a few small marks only**: a colour of the theme's own
+  family that stands apart from the accent, on a started series' unwatched
+  count (`UnwatchedMark`, black figures) and the
   hero's current page dot. Never text, never a large area. Adding a place
   for it is a design decision, not a styling one.
 - **A grouped form on iOS is a `ThemedForm`**, never a bare `Form` or `List`.
