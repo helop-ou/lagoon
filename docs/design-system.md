@@ -17,6 +17,7 @@ screen-specific copies.
 | `heroHeight` | 620 | 200 in the phone layouts |
 | `expandedHeroHeight` | Not used | 360 in the wide layout |
 | `expandedHeroTextWidth` | Not used | 520 maximum in the wide layout |
+| `heroProgressWidth` | 200 | 100: the hero's progress bar beside the time left |
 | `detailPosterHeroMaxShare` / `detailPosterContentOverlap` | Not used | 0.72 / 0.36: portrait poster hero's cap as a share of window height, and how far the metadata rises over it |
 | `detailLandscapeRowShare` | Not used | 0.88: where the landscape row starts down the full-screen poster |
 | `detailBackdropHeroShare` | Not used | 0.6: portrait hero height as a share of the window for landscape key art |
@@ -207,8 +208,15 @@ notes](reference/design-system.md#themes).
   with the native control.
 - **Heroes:** contained banner, artwork wash, native paging. The focused or
   tappable control stays stable while artwork transitions. Home and Discover
-  share the taller wide layout, with title and two-line synopsis in a bounded
-  column. Height grows for Dynamic Type. Ambient glow uses `AmbientGlowView`.
+  share the taller wide layout, with a bounded column under the title: an
+  info line (year, up to two genres and a film's runtime, or an episode's
+  number and name), on Apple TV a three-line synopsis, the age rating and
+  star score, and a started title's progress in the theme accent with the
+  time left. Phones leave the synopsis to the detail page. A missing piece
+  leaves no gap. The progress stays in the column on the wash, never in a
+  corner over raw artwork or along the bottom edge, where the Apple TV page
+  dots are. No critic score: its heart would read as the favourites heart.
+  Height grows for Dynamic Type. Ambient glow uses `AmbientGlowView`.
 - **Details:** `DetailPageScaffold`, `DetailMetadataHeader`,
   `DetailActionLayout`, `MetadataFlowLayout`, title art and cast components
   serve both Jellyfin and Seerr pages. Request state stands in for Play.
