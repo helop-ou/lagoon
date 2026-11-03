@@ -25,7 +25,7 @@ struct ProfileButtonSnapshotTests {
 
     @Test func focusLiftsTheWholeCapsule() async throws {
         let image = try await renderFocused(control(image: await portrait()))
-        try Snapshot.verify(image, named: "profile-focused")
+        try await Snapshot.verify(image, named: "profile-focused")
     }
 
     /// The snapshots draw the control at a fixed time. The button itself
