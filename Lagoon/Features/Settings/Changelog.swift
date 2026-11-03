@@ -56,6 +56,7 @@ nonisolated enum Changelog {
             "A show you've started shows how many episodes you have left on its poster.",
             "Titles from Seerr have a Trailer button too, including ones not in your library yet.",
             "On Apple TV, choosing seasons to request opens a larger panel, with Request and Cancel below the seasons.",
+            "On Apple TV, the time sits beside your profile picture at the top of the screen.",
         ]),
         ChangelogSection(category: .bugFixes, changes: [
             "VoiceOver no longer reads icon names or unlabelled pictures on Discover, in Settings and in the player.",

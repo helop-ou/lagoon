@@ -30,8 +30,8 @@ screen-specific copies.
 | `downloadMarkSize` | Not used | 18: download progress ring |
 | `cardMarkSize` / `cardMarkInset` | 28 / 8 | 18 / 4: a card's "downloaded" and "watched" badges and their corner inset |
 | `profilePortraitSize` / `groupedProfilePortraitSize` | 200 / 130 | 84 / 84: a profile's round portrait in "Who's watching?", one server / grouped by server |
-| `chromeProfilePortraitSize` | 44: the portrait in the top-left profile button, inside a glass ring the size of Refresh | 26: the Settings tab icon, drawn untinted |
-| `topChromeButtonSize` | 64: Refresh and the profile button, side by side at the top left | Not used |
+| `chromeProfilePortraitSize` | 44: the portrait in the top-left profile button, after the time, in a glass capsule as tall as Refresh | 26: the Settings tab icon, drawn untinted |
+| `topChromeButtonSize` | 64: Refresh's slot and the profile button's height, side by side at the top left | Not used |
 | `genreArtworkBlur` / `genreArtworkSaturation` / `genreArtworkDim` | 5 / 0.7 / 0.4 | 3 / 0.7 / 0.4: a genre card's artwork under its name |
 | `artworkTitleShadowRadius` / `artworkTitleShadowOpacity` | 6 / 0.6 | 6 / 0.6: the shadow lifting a name drawn over artwork |
 | `themeSwatchSize` | Not used | 28: swatch in Settings › Appearance |
