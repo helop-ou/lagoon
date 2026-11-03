@@ -189,7 +189,9 @@ wrapper. [Design system](design-system.md) owns the visual rules.
   Down from Refresh goes to Home's hero. It must never stay hittable over
   lower rails.
 - The profile button sits beside Refresh at the top left, on the tab bar's
-  side of it, on the same `TopChromeButton`: focusable only while the tab
+  side of it, with the time inside its glass before the portrait, as on the
+  Apple TV Home Screen. The time is part of the button, not a second focus
+  target. It is on the same `TopChromeButton`: focusable only while the tab
   bar or a top chrome control has focus, and one Left from Home, the first
   tab. The tab bar claims every sideways move in the top chrome and SwiftUI
   ignores a UIKit focus request, so Left to Refresh and Right back are
