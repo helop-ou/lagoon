@@ -76,7 +76,8 @@ struct WideLayoutSnapshotTests {
         try await Snapshot.verify(
             hero(.regular, .regular),
             named: "hero-duo-open",
-            size: CGSize(width: Self.duoOpen.width, height: Metrics.expandedHeroHeight + 40)
+            // Room below the card for the page dots.
+            size: CGSize(width: Self.duoOpen.width, height: Metrics.expandedHeroHeight + 80)
         )
     }
 
