@@ -169,7 +169,7 @@ final class ServerSyncUITests: XCTestCase {
     }
 
     /// The profile button sits beside Refresh at the top left, on the tab
-    /// bar's side of it: same size and chrome, one Left from Home, and Back
+    /// bar's side of it: same height and chrome, one Left from Home, and Back
     /// from the picker it opens returns focus to it.
     func testTvOSProfileButtonSitsBesideRefreshAndReturnsFromThePicker() throws {
         let app = launch(interval: 60)
@@ -187,7 +187,11 @@ final class ServerSyncUITests: XCTestCase {
         XCTAssertGreaterThan(profile.frame.minX, refresh.frame.maxX, "The profile button is not right of Refresh")
         XCTAssertLessThan(profile.frame.maxX, homeTab.frame.minX, "The profile button is not left of the tab bar")
         XCTAssertEqual(profile.frame.midY, refresh.frame.midY, accuracy: 1)
-        XCTAssertEqual(profile.frame.size.height, refresh.frame.size.height, accuracy: 1)
+        // Frames here are grown for focus, evenly until the longer side is a
+        // fixed amount longer, so the wider capsule reports less height than
+        // the circle. ProfileButtonSnapshotTests pins the resting height.
+        XCTAssertLessThanOrEqual(profile.frame.size.height, refresh.frame.size.height + 1)
+        XCTAssertGreaterThan(profile.frame.size.width, refresh.frame.size.width * 2, "The time is not inside the profile button")
         attachScreenshot(of: app, named: "profile-home-tab-bar")
 
         // Home content scrolls the chrome away. The button goes with it.

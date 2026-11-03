@@ -19,21 +19,24 @@ struct ProfileButton: View {
     @State private var topChromeOffset: CGFloat = 0
 
     var body: some View {
-        TVProfileControl(
-            image: image,
-            profileName: profileName,
-            allowsFocus: allowsFocus && isAvailable,
-            tracksTopChrome: isAvailable,
-            moveDownAction: moveDownAction,
-            moveLeftAction: moveLeftAction,
-            topChromeOffsetChanged: { [offset = $topChromeOffset] in offset.wrappedValue = $0 },
-            action: { action() }
-        )
+        TimelineView(.everyMinute) { timeline in
+            TVProfileControl(
+                image: image,
+                profileName: profileName,
+                time: timeline.date,
+                allowsFocus: allowsFocus && isAvailable,
+                tracksTopChrome: isAvailable,
+                moveDownAction: moveDownAction,
+                moveLeftAction: moveLeftAction,
+                topChromeOffsetChanged: { [offset = $topChromeOffset] in offset.wrappedValue = $0 },
+                action: { action() }
+            )
+        }
         .opacity(isAvailable ? 1 : 0)
         .allowsHitTesting(isAvailable)
         .accessibilityHidden(!isAvailable)
         .offset(y: topChromeOffset)
-        .frame(width: Metrics.topChromeButtonSize, height: Metrics.topChromeButtonSize)
+        .frame(height: Metrics.topChromeButtonSize)
         .task {
             // Let the selected tab take launch focus first.
             try? await Task.sleep(for: .milliseconds(500))
@@ -43,15 +46,26 @@ struct ProfileButton: View {
     }
 }
 
-private struct TVProfileControl: UIViewRepresentable {
+struct TVProfileControl: UIViewRepresentable {
     let image: UIImage?
     let profileName: String
+    let time: Date
     let allowsFocus: Bool
     let tracksTopChrome: Bool
     let moveDownAction: (@MainActor @Sendable () -> Void)?
     let moveLeftAction: (@MainActor @Sendable () -> Void)?
     let topChromeOffsetChanged: @MainActor @Sendable (CGFloat) -> Void
     let action: @MainActor () -> Void
+
+    /// Hours and minutes in the system's 12 or 24-hour cycle, without AM/PM,
+    /// as the Apple TV Home Screen shows it.
+    static func clockText(for date: Date, locale: Locale, timeZone: TimeZone) -> String {
+        date.formatted(
+            Date.FormatStyle(locale: locale, timeZone: timeZone)
+                .hour(.defaultDigits(amPM: .omitted))
+                .minute()
+        )
+    }
 
     func makeCoordinator() -> Coordinator {
         Coordinator(
@@ -83,9 +97,13 @@ private struct TVProfileControl: UIViewRepresentable {
             coordinator.moveDownAction?()
         }
         button.moveLeftAction = moveLeftAction
-        if coordinator.image !== image || button.configuration?.image == nil {
+        let clock = Self.clockText(
+            for: time, locale: context.environment.locale, timeZone: context.environment.timeZone
+        )
+        if coordinator.image !== image || coordinator.clock != clock || button.configuration?.image == nil {
             coordinator.image = image
-            button.configuration = configuration(for: image)
+            coordinator.clock = clock
+            button.configuration = configuration(for: image, clock: clock)
         }
         button.tracksTopChrome = tracksTopChrome
         button.allowsFocus = allowsFocus
@@ -94,21 +112,36 @@ private struct TVProfileControl: UIViewRepresentable {
         button.accessibilityIdentifier = tracksTopChrome ? "profile.button" : "profile.button.inactive"
     }
 
-    /// The portrait inside a thin glass ring, the size of Refresh's circle.
-    /// A person glyph until the portrait has rendered.
-    private func configuration(for image: UIImage?) -> UIButton.Configuration {
+    func sizeThatFits(_ proposal: ProposedViewSize, uiView button: TopChromeButton, context: Context) -> CGSize? {
+        CGSize(width: button.intrinsicContentSize.width, height: Metrics.topChromeButtonSize)
+    }
+
+    /// The time, then the portrait inside a thin glass ring, in a capsule as
+    /// tall as Refresh's circle. A person glyph until the portrait has
+    /// rendered.
+    private func configuration(for image: UIImage?, clock: String) -> UIButton.Configuration {
         var configuration = UIButton.Configuration.glass()
+        configuration.cornerStyle = .capsule
+        configuration.imagePlacement = .trailing
+        configuration.imagePadding = Metrics.Space.m
+        var title = AttributedString(clock)
+        title.font = UIFont.monospacedDigitSystemFont(
+            ofSize: UIFont.preferredFont(forTextStyle: .callout).pointSize,
+            weight: .medium
+        )
+        configuration.attributedTitle = title
+        let inset: CGFloat
         if let image {
             configuration.image = image
-            let inset = (Metrics.Space.xxl + Metrics.Space.l - Metrics.chromeProfilePortraitSize) / 2
-            configuration.contentInsets = NSDirectionalEdgeInsets(
-                top: inset, leading: inset, bottom: inset, trailing: inset
-            )
+            inset = (Metrics.topChromeButtonSize - Metrics.chromeProfilePortraitSize) / 2
         } else {
             configuration.image = UIImage(systemName: "person.fill")
             configuration.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(pointSize: 24)
-            configuration.contentInsets = NSDirectionalEdgeInsets(top: 16, leading: 16, bottom: 16, trailing: 16)
+            inset = Metrics.Space.xl
         }
+        configuration.contentInsets = NSDirectionalEdgeInsets(
+            top: inset, leading: Metrics.Space.xl, bottom: inset, trailing: inset
+        )
         return configuration
     }
 
@@ -117,6 +150,7 @@ private struct TVProfileControl: UIViewRepresentable {
         var moveDownAction: (@MainActor @Sendable () -> Void)?
         var topChromeOffsetChanged: @MainActor @Sendable (CGFloat) -> Void
         var image: UIImage?
+        var clock: String?
 
         init(
             action: @escaping @MainActor () -> Void,
