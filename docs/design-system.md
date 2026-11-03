@@ -214,10 +214,11 @@ notes](reference/design-system.md#themes).
   number and name), on Apple TV a three-line synopsis, the age rating and
   star score, and a started title's progress in the theme accent with the
   time left. Phones leave the synopsis to the detail page. A missing piece
-  leaves no gap. On a phone the artwork carries the banner: the wash
-  darkens only the lower part, the text is footnote size with the artwork
-  title shadow, the logo keeps to `compactHeroLogoWidth` by
-  `compactHeroLogoHeight`, and the page dots sit below the card. The progress stays in the column on the wash, never in a
+  leaves no gap. On iPhone and iPad the artwork carries the banner: the
+  wash darkens only the lower part, the text takes the artwork title
+  shadow, and the page dots sit below the card. Phones also set the text in
+  footnote size and keep the logo to `compactHeroLogoWidth` by
+  `compactHeroLogoHeight`. The progress stays in the column on the wash, never in a
   corner over raw artwork or along the bottom edge, where the Apple TV page
   dots are. No critic score: its heart would read as the favourites heart.
   Height grows for Dynamic Type. Ambient glow uses `AmbientGlowView`.
