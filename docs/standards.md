@@ -147,6 +147,13 @@ are the commit types: `feat`, `fix`, `docs`, `test`, `refactor`, `perf`,
   branch below it, so its title and description pass the checks, then link
   them bottom to top with `gh stack link <bottom> <top>`. A linked stack is
   rebased and merged as one, so a follow-up never lands on a stale base.
+- **Rebase a branch that falls behind `main`, never merge `main` into it.**
+  `main` takes rebase merges only, which replay each commit and drop merge
+  commits, so a conflict resolved in a merge commit comes back on merge and
+  GitHub refuses the pull request or its stack while every check is green.
+  Rebase the branch, and the ones stacked on it, onto `origin/main`, resolve
+  each conflict in the commit that causes it, and push with
+  `--force-with-lease` (`gh stack sync` does all of it for a stack).
 - **Coverage decides where the tests go.** SonarCloud scores each pull
   request on its own and wants 80 % of new code covered. New code in a file
   that `sonar.coverage.exclusions` does not exclude needs the tests that run
