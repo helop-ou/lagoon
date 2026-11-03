@@ -16,7 +16,7 @@ enum Snapshot {
         sourceLocation: SourceLocation = #_sourceLocation
     ) async throws {
         let image = try #require(await render(view, size: size), "The view did not render", sourceLocation: sourceLocation)
-        try verify(image, named: name, tolerance: tolerance, filePath: filePath, sourceLocation: sourceLocation)
+        try await verify(image, named: name, tolerance: tolerance, filePath: filePath, sourceLocation: sourceLocation)
     }
 
     /// For a picture `verify(_:named:size:)` cannot take, such as a focused
@@ -27,7 +27,7 @@ enum Snapshot {
         tolerance: Double = 0.002,
         filePath: String = #filePath,
         sourceLocation: SourceLocation = #_sourceLocation
-    ) throws {
+    ) async throws {
         let png = try #require(UIImage(cgImage: image).pngData(), sourceLocation: sourceLocation)
 
         let reference = referenceURL(for: name, filePath: filePath)
@@ -48,7 +48,9 @@ enum Snapshot {
             return
         }
 
-        let comparison = compare(image, with: expected)
+        // Off the main actor: a full-screen tvOS frame takes long enough to
+        // starve main-actor tests running beside it.
+        let comparison = await Task.detached { compare(image, with: expected) }.value
         guard comparison.fraction > tolerance else { return }
         try? png.write(to: failed)
         Attachment.record(png, named: failed.lastPathComponent)
@@ -134,7 +136,7 @@ enum Snapshot {
             .appending(path: "\(name).\(platform).png")
     }
 
-    struct Comparison {
+    nonisolated struct Comparison: Sendable {
         let fraction: Double
         let bounds: CGRect?
         let diff: CGImage?
