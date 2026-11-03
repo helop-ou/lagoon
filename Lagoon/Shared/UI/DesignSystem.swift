@@ -138,6 +138,9 @@ enum Metrics {
     static let logoMaxWidth: CGFloat = 240
     static let logoMaxHeight: CGFloat = 70
     static let heroLogoHeight: CGFloat = 54
+    /// The phone hero's logo box, small enough to leave the artwork the room.
+    static let compactHeroLogoWidth: CGFloat = 180
+    static let compactHeroLogoHeight: CGFloat = 40
     static let heroTextWidth: CGFloat = .infinity
     static let expandedHeroTextWidth: CGFloat = 520
     static let heroProgressWidth: CGFloat = 100
