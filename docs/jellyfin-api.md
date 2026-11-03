@@ -449,6 +449,12 @@ A Seerr title page reads `movie/{id}` or `tv/{id}`:
   `TrailerLink` picks among them as for Jellyfin. TMDB has no season videos
   here, so a show offers one trailer.
 
+Discover's hero takes trending titles as they come. A result carries
+`genreIds`, TMDB ids with no names, so the names come from
+`discover/genreslider/movie` and `/tv`. The two lists share ids under
+different names, so a title is named from its own type's list. Without
+them the info line shows the year alone.
+
 **Query encoding.** Seerr answers 400 to a query value with any reserved
 character left raw (`:` or `'` in a title), which Foundation's query items
 allow, so `SeerrClient` encodes everything but RFC 3986's unreserved set.
