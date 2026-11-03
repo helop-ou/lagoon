@@ -109,20 +109,22 @@ nonisolated struct ThemePalette: Equatable, Sendable {
         background: .black,
         surface: nil,
         glowDepth: Color(red: 0.16, green: 0.1, blue: 0.35),
-        signal: Color(red: 0xFF / 255, green: 0x7F / 255, blue: 0x66 / 255),
+        // Sand: the shore beside the aqua water.
+        signal: Color(red: 0xF2 / 255, green: 0xC4 / 255, blue: 0x6D / 255),
         controlTint: paleAqua,
         artworkTint: nil,
         chrome: nil
     )
 
-    /// Orchid over deep plum, with signal orange in the glow.
+    /// Orchid over deep plum, with orange in the glow.
     static let babyPink = ThemePalette(
         accent: Color(red: 0xE7 / 255, green: 0xB0 / 255, blue: 0xDE / 255),
         ground: Color(red: 0x40 / 255, green: 0x08 / 255, blue: 0x49 / 255),
         background: Color(red: 0x16 / 255, green: 0x04 / 255, blue: 0x14 / 255),
         surface: Color(red: 0x26 / 255, green: 0x09 / 255, blue: 0x2A / 255),
         glowDepth: Color(red: 0xFF / 255, green: 0x5A / 255, blue: 0x0A / 255),
-        signal: Color(red: 0xFF / 255, green: 0x5A / 255, blue: 0x0A / 255),
+        // Hot pink: louder than the orchid, but of the same family.
+        signal: Color(red: 0xFF / 255, green: 0x5F / 255, blue: 0xA2 / 255),
         controlTint: Color(red: 0xEF / 255, green: 0xC6 / 255, blue: 0xE8 / 255),
         artworkTint: nil,
         chrome: Color(red: 0x40 / 255, green: 0x08 / 255, blue: 0x49 / 255).opacity(0.25)
