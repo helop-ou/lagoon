@@ -302,6 +302,31 @@ nonisolated struct PlaybackTrackPlan {
         return (embedded, external)
     }
 
+    /// The engine's subtitle inputs for one attempt: what it demuxes, and the
+    /// files it loads, each paired with the stream it came from. A file whose
+    /// URL won't resolve is dropped from both, or every later ordinal names
+    /// the wrong track.
+    static func subtitleInputs(
+        _ subtitles: [MediaStream],
+        delivery: MediaDelivery,
+        defaultSubtitleIndex: Int?,
+        fileURL: (MediaStream) -> URL?
+    ) -> (embedded: [MediaStream], external: [(stream: MediaStream, track: ExternalSubtitleTrack)]) {
+        let split = splitSubtitles(subtitles, delivery: delivery)
+        let external = split.external.compactMap { stream -> (stream: MediaStream, track: ExternalSubtitleTrack)? in
+            guard let url = fileURL(stream) else { return nil }
+            return (stream, ExternalSubtitleTrack(
+                url: url,
+                title: stream.displayTitle,
+                language: stream.language,
+                select: stream.index == defaultSubtitleIndex,
+                isForced: stream.isForced == true,
+                isHearingImpaired: stream.isHearingImpaired == true
+            ))
+        }
+        return (split.embedded, external)
+    }
+
     private static func subtitleLayoutStream(_ stream: MediaStream) -> SubtitleLayoutStream {
         SubtitleLayoutStream(
             language: stream.language,

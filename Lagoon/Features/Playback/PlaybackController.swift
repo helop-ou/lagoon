@@ -537,24 +537,11 @@ final class PlaybackController {
         let source = resolved.source
         let streams = resolved.trackStreams
         let embeddedAudio = streams.filter(\.isAudio)
-        let (embeddedSubtitles, externalSubtitles) = PlaybackTrackPlan.splitSubtitles(
+        let (embeddedSubtitles, externalPairs) = PlaybackTrackPlan.subtitleInputs(
             streams.filter(\.isSubtitle),
-            delivery: resolved.method.delivery
-        )
-        // Kept paired: a sidecar whose URL won't resolve is dropped from
-        // both lists, or every later ordinal names the wrong track.
-        let externalPairs: [(stream: MediaStream, track: ExternalSubtitleTrack)] = externalSubtitles
-            .compactMap { stream in
-                guard let url = client.externalSubtitleURL(deliveryUrl: stream.deliveryUrl) else { return nil }
-                return (stream, ExternalSubtitleTrack(
-                    url: url,
-                    title: stream.displayTitle,
-                    language: stream.language,
-                    select: stream.index == source.defaultSubtitleStreamIndex,
-                    isForced: stream.isForced == true,
-                    isHearingImpaired: stream.isHearingImpaired == true
-                ))
-            }
+            delivery: resolved.method.delivery,
+            defaultSubtitleIndex: source.defaultSubtitleStreamIndex
+        ) { client.externalSubtitleURL(deliveryUrl: $0.deliveryUrl) }
         let memoryScope = AudioTrackMemoryStore.scope(seriesID: media.seriesId, itemID: media.id)
         let plan = PlaybackTrackPlan(
             audio: embeddedAudio,
