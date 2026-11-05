@@ -43,6 +43,7 @@ nonisolated extension MediaStream {
             deliveryUrl: nil,
             profile: nil,
             videoRangeType: nil,
+            colorTransfer: nil,
             channels: nil,
             width: nil,
             height: nil,
