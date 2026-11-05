@@ -431,4 +431,14 @@ struct DeviceProfileAlignmentTests {
         ))
     }
 
+    /// The engine signals profile 8.6 as 8.1, so HEVC offers DOVIInvalid.
+    /// `DolbyVisionBaseLayer` refuses the ones without a PQ base layer.
+    @Test func hevcOffersDolbyVisionOutsideTheSpec() {
+        let hevc = DeviceProfile.everything.codecProfiles.first { $0.type == "Video" && $0.codec == "hevc" }
+        let ranges = hevc?.conditions.first { $0.property == "VideoRangeType" }?.value.split(separator: "|") ?? []
+        #expect(ranges.contains("DOVIInvalid"))
+        #expect(ranges.contains("DOVIWithHDR10"))
+        let av1 = DeviceProfile.everything.codecProfiles.first { $0.type == "Video" && $0.codec == "av1" }
+        #expect(av1?.conditions.first { $0.property == "VideoRangeType" }?.value.contains("DOVI") == false)
+    }
 }
