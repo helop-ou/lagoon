@@ -5,7 +5,7 @@ import UIKit
 
 struct AboutSettingsView: View {
     @Environment(SessionStore.self) private var session
-    @State private var showingChangelog = false
+    @State private var showingWhatsNew = false
 
     var body: some View {
         #if os(tvOS)
@@ -27,12 +27,12 @@ struct AboutSettingsView: View {
                 ApplicationInfoRows(includesIdentifier: true)
 
                 Button {
-                    showingChangelog = true
+                    showingWhatsNew = true
                 } label: {
-                    TVSettingsRowLabel("Changelog", value: changelogDetail)
+                    TVSettingsRowLabel("What's New", value: whatsNewDetail)
                 }
                 .buttonStyle(.glass)
-                .accessibilityIdentifier("settings.about.changelog")
+                .accessibilityIdentifier("settings.about.whatsnew")
             }
 
             // Shared with the sign-in screens' About sheet. Legal info must not need an account.
@@ -50,10 +50,10 @@ struct AboutSettingsView: View {
                 }
             }
         }
-        .sheet(isPresented: $showingChangelog) {
+        .sheet(isPresented: $showingWhatsNew) {
             // No NavigationStack on tvOS: its title has no background and it
             // halves the sheet's width.
-            ChangelogView()
+            WhatsNewView()
         }
     }
     #endif
@@ -65,7 +65,8 @@ struct AboutSettingsView: View {
         TouchSettingsPage("About") {
             Section("Application") {
                 ApplicationInfoRows(includesIdentifier: true)
-                Button("Changelog") { showingChangelog = true }
+                Button("What's New") { showingWhatsNew = true }
+                    .accessibilityIdentifier("settings.about.whatsnew")
             }
             LegalSettingsSection()
             Section("Server") {
@@ -79,8 +80,8 @@ struct AboutSettingsView: View {
                 }
             }
         }
-        .sheet(isPresented: $showingChangelog) {
-            NavigationStack { ChangelogView() }
+        .sheet(isPresented: $showingWhatsNew) {
+            NavigationStack { WhatsNewView() }
         }
     }
     #endif
@@ -114,9 +115,9 @@ struct AboutSettingsView: View {
         #endif
     }
 
-    private var changelogDetail: String {
+    private var whatsNewDetail: String {
         Changelog.runningBuildIsListed()
-            ? Changelog.entries.first?.displayVersion ?? ""
+            ? Changelog.runningDisplayVersion()
             : String(localized: "This build isn't listed")
     }
 }
@@ -146,131 +147,6 @@ struct ApplicationInfoRows: View {
             #else
             LabeledContent(row.title, value: row.value)
             #endif
-        }
-    }
-}
-
-/// Every shipped build, newest first.
-struct ChangelogView: View {
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        #if os(tvOS)
-        TVModalPanel(title: Text("Changelog")) {
-            notesContent
-        }
-        .accessibilityIdentifier("settings.changelog")
-        #else
-        ScrollView {
-            notesContent
-                .padding(.horizontal, Metrics.Space.xl)
-                .padding(.bottom, Metrics.Space.xl)
-        }
-        .themedPageBackground()
-            .navigationTitle("Changelog")
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done", systemImage: "xmark", role: .close) { dismiss() }
-                }
-            }
-            .accessibilityIdentifier("settings.changelog")
-        #endif
-    }
-
-    /// Only the running build starts expanded.
-    @State private var expanded: Set<String> = Set(
-        Changelog.entries.filter { Changelog.isRunning($0) }.map(\.id)
-    )
-
-    private func toggle(_ entry: ChangelogEntry) {
-        withAnimation(.easeInOut(duration: Motion.fast)) {
-            if expanded.contains(entry.id) {
-                expanded.remove(entry.id)
-            } else {
-                expanded.insert(entry.id)
-            }
-        }
-    }
-
-    private func entryHeader(_ entry: ChangelogEntry) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: Metrics.Space.m) {
-            Image(systemName: expanded.contains(entry.id) ? "chevron.down" : "chevron.forward")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.secondary)
-            VStack(alignment: .leading, spacing: Metrics.Space.xs) {
-                HStack(alignment: .firstTextBaseline, spacing: Metrics.Space.m) {
-                    Text(entry.displayVersion)
-                        .font(.title3.bold())
-                    if Changelog.isRunning(entry) {
-                        Text("Installed")
-                            .font(.caption2.bold())
-                            .padding(.horizontal, Metrics.Space.s)
-                            .padding(.vertical, Metrics.Space.xs)
-                            .background(.regularMaterial, in: Capsule())
-                    }
-                    Spacer(minLength: 0)
-                    Text(entry.released)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Text(entry.headline)
-                    .font(.callout.weight(.medium))
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-    }
-
-    private var notesContent: some View {
-        VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
-            if !Changelog.runningBuildIsListed() {
-                // A development build may have no entry yet.
-                Text("You're running \(Changelog.version()) (\(Changelog.build())), which has no changelog entry yet.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
-
-            ForEach(Changelog.entries) { entry in
-                VStack(alignment: .leading, spacing: Metrics.Space.m) {
-                    Button {
-                        toggle(entry)
-                    } label: {
-                        entryHeader(entry)
-                    }
-                    .accessibilityIdentifier("settings.changelog.\(entry.build)")
-
-                    if expanded.contains(entry.id) {
-                        VStack(alignment: .leading, spacing: Metrics.Space.l) {
-                            ForEach(entry.sections) { section in
-                                VStack(alignment: .leading, spacing: Metrics.Space.s) {
-                                    Text(LocalizedStringKey(section.category.rawValue))
-                                        .accessibilityAddTraits(.isHeader)
-                                        .font(.callout.weight(.semibold))
-                                        .foregroundStyle(.primary)
-
-                                    ForEach(section.changes, id: \.self) { change in
-                                        HStack(alignment: .top, spacing: Metrics.Space.s) {
-                                            Text("•")
-                                                .accessibilityHidden(true)
-                                            Text(change)
-                                                .fixedSize(horizontal: false, vertical: true)
-                                        }
-                                        .font(.callout)
-                                        .foregroundStyle(.secondary)
-                                        .frame(maxWidth: .infinity, alignment: .leading)
-                                        #if os(tvOS)
-                                        // tvOS scrolls by focus. Unfocusable text cannot scroll.
-                                        .focusable()
-                                        #endif
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
         }
     }
 }

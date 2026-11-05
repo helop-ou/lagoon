@@ -7,6 +7,8 @@ struct RootView: View {
     private var syncPlay: SyncPlayStore { session.syncPlay }
     @State private var serverSync = ServerSyncState()
     @Environment(\.scenePhase) private var scenePhase
+    @State private var whatsNewPending = false
+    @State private var showingWhatsNew = false
 
     var body: some View {
         ZStack {
@@ -41,6 +43,21 @@ struct RootView: View {
         )) {
             AddAccountView(session: session)
         }
+        .sheet(isPresented: $showingWhatsNew) {
+            #if os(tvOS)
+            WhatsNewView()
+            #else
+            NavigationStack { WhatsNewView() }
+            #endif
+        }
+        .task {
+            #if DEBUG
+            // UI journeys expect Home, not a sheet over it.
+            if UserDefaults.standard.bool(forKey: "debug.playerRegression") { return }
+            #endif
+            whatsNewPending = WhatsNew.presentsAtLaunch(isExistingInstall: !session.accounts.isEmpty)
+            presentWhatsNewWhenSignedIn()
+        }
         .alert("Credential Cleanup Incomplete", isPresented: Binding(
             get: { session.cleanupErrorMessage != nil },
             set: { if !$0 { session.cleanupErrorMessage = nil } }
@@ -67,6 +84,7 @@ struct RootView: View {
         }
         .onChange(of: session.phase) { _, phase in
             guard phase == .signedIn else { return }
+            presentWhatsNewWhenSignedIn()
             serverSync.requestRefresh()
             #if os(tvOS)
             TopShelfStore.publishIfEmpty(client: session.client)
@@ -103,5 +121,11 @@ struct RootView: View {
             await session.bootstrapPublicDemoForRegressionIfRequested()
         }
         #endif
+    }
+
+    private func presentWhatsNewWhenSignedIn() {
+        guard whatsNewPending, session.phase == .signedIn else { return }
+        whatsNewPending = false
+        showingWhatsNew = true
     }
 }

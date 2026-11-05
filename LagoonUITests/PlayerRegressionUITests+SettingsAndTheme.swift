@@ -4,9 +4,9 @@ import XCTest
 #if os(tvOS)
 
 extension PlayerRegressionUITests {
-    /// Builds open collapsed and expand on Select, and the list still
-    /// scrolls, which on tvOS means focus has somewhere to go.
-    func testChangelogBuildsExpandAndCollapse() {
+    /// The sheet shows one build's notes, and focus has somewhere to go so
+    /// they scroll.
+    func testWhatsNewShowsTheInstalledBuild() {
         let app = XCUIApplication.regression(extra: ["-debug.settingsRegression", "YES"])
         app.launch()
 
@@ -17,43 +17,24 @@ extension PlayerRegressionUITests {
         moveFocus(to: about, maxPresses: 8) { remote.press(.down) }
         remote.press(.select)
 
-        let changelogButton = app.descendants(matching: .any)["settings.about.changelog"]
-        XCTAssertTrue(changelogButton.waitForExistence(timeout: 8))
-        moveFocus(to: changelogButton, maxPresses: 8) { remote.press(.right) }
-        moveFocus(to: changelogButton, maxPresses: 8) { remote.press(.down) }
+        let whatsNewButton = app.descendants(matching: .any)["settings.about.whatsnew"]
+        XCTAssertTrue(whatsNewButton.waitForExistence(timeout: 8))
+        moveFocus(to: whatsNewButton, maxPresses: 8) { remote.press(.right) }
+        moveFocus(to: whatsNewButton, maxPresses: 8) { remote.press(.down) }
         remote.press(.select)
 
         XCTAssertTrue(
-            app.descendants(matching: .any)["settings.changelog"].waitForExistence(timeout: 8),
-            "the changelog sheet did not open"
+            app.descendants(matching: .any)["settings.whatsnew"].waitForExistence(timeout: 8),
+            "the What's New sheet did not open"
         )
+        let entries = app.descendants(matching: .any)
+            .matching(NSPredicate(format: "identifier BEGINSWITH 'settings.whatsnew.'"))
+        XCTAssertTrue(entries.firstMatch.waitForExistence(timeout: 5))
+        XCTAssertEqual(entries.count, 1, "the sheet should show one build, not the history")
 
-        for build in ["55", "54", "53"] {
-            let row = app.descendants(matching: .any)["settings.changelog.\(build)"]
-            XCTAssertTrue(
-                row.waitForExistence(timeout: 5),
-                "build \(build) should have a row of its own"
-            )
-        }
-
-        // Matched on a fragment: XCUITest rejects queries over 128 characters.
-        let olderNote = app.staticTexts
-            .matching(NSPredicate(format: "label CONTAINS %@", "your server's reason"))
-            .firstMatch
-        XCTAssertFalse(olderNote.exists, "a collapsed build should not show its notes")
-
-        let build53 = app.descendants(matching: .any)["settings.changelog.53"]
-        // Every newer build adds a row above 53, so the budget is generous.
-        moveFocus(to: build53, maxPresses: 80) { remote.press(.down) }
-        remote.press(.select)
-        XCTAssertTrue(
-            olderNote.waitForExistence(timeout: 5),
-            "opening a build should reveal its notes"
-        )
-
-        remote.press(.select)
-        Thread.sleep(forTimeInterval: 1)
-        XCTAssertFalse(olderNote.exists, "pressing again should close it")
+        for _ in 0..<6 { remote.press(.down) }
+        remote.press(.menu)
+        XCTAssertTrue(whatsNewButton.waitForExistence(timeout: 5), "Menu should close the sheet")
     }
 
     /// Picks a theme, then navigates browse and settings. Screenshots wait
@@ -163,32 +144,20 @@ extension PlayerRegressionUITests {
         XCTAssertTrue(about.waitForExistence(timeout: 8))
         moveFocus(to: about, maxPresses: 14) { remote.press(.down) }
         remote.press(.select)
-        let changelog = app.descendants(matching: .any)["settings.about.changelog"]
-        XCTAssertTrue(changelog.waitForExistence(timeout: 5))
+        let whatsNew = app.descendants(matching: .any)["settings.about.whatsnew"]
+        XCTAssertTrue(whatsNew.waitForExistence(timeout: 5))
         remote.press(.right)
-        if !waitForFocus(changelog, timeout: 1) {
-            moveFocus(to: changelog, maxPresses: 8) { remote.press(.down) }
+        if !waitForFocus(whatsNew, timeout: 1) {
+            moveFocus(to: whatsNew, maxPresses: 8) { remote.press(.down) }
         }
-        capture("Baby Pink tvOS — About with focused Changelog action")
+        capture("Baby Pink tvOS — About with focused What's New action")
         remote.press(.select)
-        XCTAssertTrue(app.descendants(matching: .any)["settings.changelog"].waitForExistence(timeout: 8))
-        let build100 = app.descendants(matching: .any)["settings.changelog.100"]
-        XCTAssertTrue(build100.waitForExistence(timeout: 5))
-        capture("Baby Pink tvOS — Build 100 categorized release notes")
-
-        let build53 = app.descendants(matching: .any)["settings.changelog.53"]
-        moveFocus(to: build53, maxPresses: 80) { remote.press(.down) }
-        remote.press(.select)
-        let olderNote = app.staticTexts.matching(
-            NSPredicate(format: "label CONTAINS %@", "your server's reason")
-        ).firstMatch
-        XCTAssertTrue(olderNote.waitForExistence(timeout: 5))
-        capture("Baby Pink tvOS — deeply scrolled and expanded historical release notes")
-        remote.press(.select)
-        moveFocus(to: build100, maxPresses: 80) { remote.press(.up) }
-        XCTAssertTrue(build100.frame.intersects(app.frame), "Returning up should reveal Build 100 again")
+        XCTAssertTrue(app.descendants(matching: .any)["settings.whatsnew"].waitForExistence(timeout: 8))
+        capture("Baby Pink tvOS — categorized release notes")
+        for _ in 0..<6 { remote.press(.down) }
+        capture("Baby Pink tvOS — scrolled release notes")
         remote.press(.menu)
-        XCTAssertTrue(changelog.waitForExistence(timeout: 5))
+        XCTAssertTrue(whatsNew.waitForExistence(timeout: 5))
         remote.press(.menu)
         XCTAssertTrue(about.waitForExistence(timeout: 5))
 

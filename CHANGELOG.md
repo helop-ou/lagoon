@@ -20,6 +20,10 @@ report. One marketing version spans many builds.
 
 ## Unreleased
 
+### New features
+
+- What's New shows what changed in the version you just installed, once after each feature update, and any time from Settings, About.
+
 ## 0.8.1 (120)
 
 November 2026
