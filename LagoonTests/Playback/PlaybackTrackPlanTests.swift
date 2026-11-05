@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 import Testing
 @testable import Lagoon
 
@@ -364,6 +365,44 @@ struct PlaybackTrackPlanTests {
             captionDisplay: .forcedOnly
         )
         #expect(plan.initialSubtitleOrdinal == 1)
+    }
+
+    @Test func eachSubtitleFileBecomesAnEngineTrackPairedWithItsStream() throws {
+        let inputs = PlaybackTrackPlan.subtitleInputs([
+            try stream("Subtitle", index: 2, language: "eng", displayTitle: "Forced - English",
+                       forced: true, delivery: "External"),
+            try stream("Subtitle", index: 3, language: "spa", delivery: "Hls"),
+            try stream("Subtitle", index: 4, language: "eng", displayTitle: "SDH - English",
+                       hearingImpaired: true, delivery: "External"),
+        ], delivery: .segmentedManifest, defaultSubtitleIndex: 2) { stream in
+            URL(string: "https://media.test/subtitles/\(stream.index ?? -1).vtt")
+        }
+        #expect(inputs.embedded.map(\.index) == [3])
+        #expect(inputs.external.map(\.stream.index) == [2, 4])
+        let forced = try #require(inputs.external.first?.track)
+        #expect(forced.url.absoluteString == "https://media.test/subtitles/2.vtt")
+        #expect(forced.title == "Forced - English")
+        #expect(forced.language == "eng")
+        #expect(forced.select)
+        #expect(forced.isForced)
+        #expect(!forced.isHearingImpaired)
+        let sdh = try #require(inputs.external.last?.track)
+        #expect(!sdh.select)
+        #expect(sdh.isHearingImpaired)
+    }
+
+    @Test func aSubtitleFileWithoutAURLLeavesBothListsAlone() throws {
+        // Dropped from the files the engine loads and from the plan's list,
+        // so the ordinals after it still name the right tracks.
+        let inputs = PlaybackTrackPlan.subtitleInputs([
+            try stream("Subtitle", index: 2, language: "eng", delivery: "External"),
+            try stream("Subtitle", index: 3, language: "fra", delivery: "External"),
+        ], delivery: .segmentedManifest, defaultSubtitleIndex: nil) { stream in
+            stream.index == 2 ? nil : URL(string: "https://media.test/3.vtt")
+        }
+        #expect(inputs.embedded.isEmpty)
+        #expect(inputs.external.map(\.stream.index) == [3])
+        #expect(inputs.external.map(\.track.url.lastPathComponent) == ["3.vtt"])
     }
 
     // MARK: - Audio memory across plans
