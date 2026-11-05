@@ -232,4 +232,47 @@ struct PlaybackFallbackTests {
             )
         }
     }
+
+    @Test func dolbyVisionOutsideTheSpecDirectPlaysOnlyOverAPQBaseLayer() throws {
+        // Profile 8.6, as Jellyfin labels F1: Drive to Survive S07.
+        let pq = try dolbyVisionSource(range: "DOVIInvalid", transfer: "smpte2084")
+        #expect(DolbyVisionBaseLayer.directPlayRefusal(for: pq) == nil)
+        // No HDR10 base layer under it: the server delivers it.
+        for transfer in ["bt709", "arib-std-b67", nil] {
+            let other = try dolbyVisionSource(range: "DOVIInvalid", transfer: transfer)
+            #expect(DolbyVisionBaseLayer.directPlayRefusal(for: other)?.cause == "dolby vision", "\(transfer ?? "untagged")")
+        }
+        // Only DOVIInvalid is guarded, and only when direct play was offered.
+        let inSpec = try dolbyVisionSource(range: "DOVIWithHLG", transfer: "arib-std-b67")
+        #expect(DolbyVisionBaseLayer.directPlayRefusal(for: inSpec) == nil)
+        let remuxed = try dolbyVisionSource(range: "DOVIInvalid", transfer: "bt709", directPlay: false)
+        #expect(DolbyVisionBaseLayer.directPlayRefusal(for: remuxed) == nil)
+
+        // Refused before an attempt, at the remux rung.
+        let refused = try dolbyVisionSource(range: "DOVIInvalid", transfer: "bt709")
+        #expect(PlaybackFallbackPolicy.refusal(of: refused)?.rung == .remux)
+        #expect(PlaybackFallbackPolicy.refusal(of: pq) == nil)
+    }
+
+    @Test func aDiscRipIsRefusedAtTheRungItsLayoutStartsOn() throws {
+        let rip = try JellyfinClient.decoder.decode(MediaSource.self, from: Data(#"""
+        {"Id":"rip", "Container":"ts", "VideoType":"BluRay", "SupportsDirectPlay":true}
+        """#.utf8))
+        let refused = try #require(PlaybackFallbackPolicy.refusal(of: rip))
+        #expect(refused.rung == .remux)
+        #expect(refused.refusal.cause == "disc rip")
+    }
+
+    private func dolbyVisionSource(range: String, transfer: String?, directPlay: Bool = true) throws -> MediaSource {
+        let transferField = transfer.map { #","ColorTransfer":"\#($0)""# } ?? ""
+        return try JellyfinClient.decoder.decode(MediaSource.self, from: Data("""
+        {
+          "Id":"f1", "Container":"mkv", "SupportsDirectPlay":\(directPlay), "SupportsDirectStream":true,
+          "MediaStreams":[
+            {"Type":"Video","Codec":"hevc","VideoRangeType":"\(range)"\(transferField)},
+            {"Type":"Audio","Codec":"eac3"}
+          ]
+        }
+        """.utf8))
+    }
 }
