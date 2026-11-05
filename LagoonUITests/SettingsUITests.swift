@@ -120,7 +120,7 @@ final class SettingsUITests: XCTestCase {
         }
     }
 
-    func testBabyPinkThemeAndCategorizedChangelog() {
+    func testBabyPinkThemeAndCategorizedWhatsNew() {
         let app = launchSettings()
         defer { app.terminate() }
         openCategory("appearance", title: "Appearance", in: app)
@@ -132,19 +132,17 @@ final class SettingsUITests: XCTestCase {
         attachFullScreenshot(named: "baby-pink-settings")
 
         openCategory("about", title: "About", in: app)
-        app.buttons["Changelog"].tap()
-        XCTAssertTrue(app.navigationBars["Changelog"].waitForExistence(timeout: 5))
-        // The newest entry, whichever build that is, opens expanded with its
-        // notes under category headings.
+        app.buttons["What's New"].tap()
+        XCTAssertTrue(app.navigationBars["What's New"].waitForExistence(timeout: 5))
+        // The installed build's notes, whichever build that is, under
+        // category headings.
         let entry = app.descendants(matching: .any)
-            .matching(NSPredicate(format: "identifier BEGINSWITH 'settings.changelog.'")).firstMatch
+            .matching(NSPredicate(format: "identifier BEGINSWITH 'settings.whatsnew.'")).firstMatch
         XCTAssertTrue(entry.waitForExistence(timeout: 5))
         let category = app.staticTexts
             .matching(NSPredicate(format: "label IN %@", ["New features", "Improvements", "Bug fixes"])).firstMatch
         XCTAssertTrue(category.waitForExistence(timeout: 5))
-        attachFullScreenshot(named: "baby-pink-changelog")
-        app.swipeUp()
-        attachFullScreenshot(named: "baby-pink-changelog-scroll")
+        attachFullScreenshot(named: "baby-pink-whats-new")
         app.buttons["Done"].tap()
         XCTAssertTrue(app.navigationBars["About"].waitForExistence(timeout: 5))
         goBack(to: "Settings", in: app)

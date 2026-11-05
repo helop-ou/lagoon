@@ -48,8 +48,8 @@ nonisolated enum Changelog {
     /// pull request never bumps the build or edits a shipped entry.
     static var unreleased: [ChangelogSection] { document.unreleased }
 
-    /// Newest first. The About screen highlights whichever one matches the
-    /// running bundle.
+    /// Newest first. What's New shows whichever one matches the running
+    /// bundle.
     static var entries: [ChangelogEntry] { document.entries }
 
     private static let document = ChangelogDocument.bundled()
@@ -175,5 +175,39 @@ nonisolated struct ChangelogDocument: Sendable {
         }
         closeEntry()
         return document
+    }
+}
+
+/// What's New presents itself once after a minor or major update, never for
+/// a patch, a fresh install or a build without notes.
+nonisolated enum WhatsNew {
+    static let lastSeenVersionKey = "whatsNew.lastSeenVersion"
+
+    /// Builds before What's New recorded nothing, so an install with
+    /// accounts but no record presents only on a minor or major version.
+    static func presents(running: String, lastSeen: String?, isExistingInstall: Bool) -> Bool {
+        let now = components(running)
+        guard let lastSeen else { return isExistingInstall && now[2] == 0 }
+        return now.prefix(2) != components(lastSeen).prefix(2)
+    }
+
+    /// Records the running version whatever it decides, so one version never
+    /// presents twice.
+    static func presentsAtLaunch(isExistingInstall: Bool, defaults: UserDefaults = .standard) -> Bool {
+        let running = Changelog.version()
+        let lastSeen = defaults.string(forKey: lastSeenVersionKey)
+        defaults.set(running, forKey: lastSeenVersionKey)
+        return Changelog.runningBuildIsListed()
+            && presents(running: running, lastSeen: lastSeen, isExistingInstall: isExistingInstall)
+    }
+
+    /// The running build's notes, or the newest for a build that has none yet.
+    static var entry: ChangelogEntry? {
+        Changelog.entries.first { Changelog.isRunning($0) } ?? Changelog.entries.first
+    }
+
+    private static func components(_ version: String) -> [Int] {
+        let parts = version.split(separator: ".").map { Int($0) ?? 0 }
+        return parts + Array(repeating: 0, count: max(0, 3 - parts.count))
     }
 }
