@@ -60,7 +60,6 @@ where the picture is not the original file.
 
 - **Embedded in the file, decoded by Lagoon**: `subrip`, `srt`, `ass`, `ssa`, `mov_text`, `webvtt`, `vtt`, `pgssub`, `pgs`, `dvdsub`, `dvbsub`
 - **Sidecar files**: `vtt`, `ass`, `ssa`
-- **Delivered with an HLS transcode**: `vtt`
 
 ## Reading this table
 
