@@ -121,9 +121,10 @@ final class PlaybackSuccessorPreparation {
         guard !Task.isCancelled,
               info.errorCode == nil,
               let source = info.mediaSources.first else { return nil }
-        // Disc images negotiate their own rung at playback start.
+        // Disc images and refused Dolby Vision negotiate their own rung at
+        // playback start.
         let layout = PlaybackSourceLayout(videoType: source.videoType, isoType: source.isoType)
-        guard !layout.isDisc else { return nil }
+        guard !layout.isDisc, DolbyVisionBaseLayer.directPlayRefusal(for: source) == nil else { return nil }
         let (url, method) = try client.streamURL(itemId: itemID, source: source)
         return PreparedPlayback(
             mediaID: itemID, info: info, source: source, streamURL: url, method: method, offer: offer

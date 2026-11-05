@@ -69,6 +69,23 @@ nonisolated enum PlaybackSourceLayout: Equatable {
     }
 }
 
+/// Dolby Vision outside Dolby's spec, which Jellyfin calls `DOVIInvalid`:
+/// profile 8.6, or colour tags that disagree with the profile. The device
+/// profile accepts it because no condition can see the transfer, so direct
+/// play is refused here unless the base layer is PQ, as Jellyfin's own
+/// `IsDoviWithHdr10Bl` reads it.
+nonisolated enum DolbyVisionBaseLayer {
+    /// Why the server's direct play is not worth attempting, for the HUD.
+    /// Nil when it is, or when the server offered none.
+    static func directPlayRefusal(for source: MediaSource) -> (cause: String, message: String)? {
+        guard source.supportsDirectPlay == true,
+              let video = source.videoStream,
+              video.videoRangeType == "DOVIInvalid",
+              video.colorTransfer?.lowercased() != "smpte2084" else { return nil }
+        return ("dolby vision", "This Dolby Vision stream is outside Dolby's spec and has no HDR10 base layer.")
+    }
+}
+
 /// Which rung to try after a failure, or nil when the ladder is spent.
 ///
 /// Descend one rung at a time, and only on the engine's verdict: a transcode
@@ -83,6 +100,21 @@ nonisolated enum PlaybackFallbackPolicy {
         case .file, .blurayImage, .dvdImage: .negotiated
         case .discImage, .discFolder: .remux
         }
+    }
+
+    /// The rung to start on instead when the server's offer for `source`
+    /// is not worth attempting, and why. Nil when it is.
+    static func refusal(
+        of source: MediaSource
+    ) -> (rung: PlaybackDelivery, refusal: (cause: String, message: String))? {
+        let layout = PlaybackSourceLayout(videoType: source.videoType, isoType: source.isoType)
+        if let refusal = layout.directPlayRefusal {
+            return (start(for: layout), refusal)
+        }
+        if let refusal = DolbyVisionBaseLayer.directPlayRefusal(for: source) {
+            return (.remux, refusal)
+        }
+        return nil
     }
 
     static func next(
