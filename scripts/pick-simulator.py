@@ -60,17 +60,17 @@ def main():
                     return
 
     if create:
-        types = {kind["name"]: kind["identifier"] for kind in simctl("devicetypes")["devicetypes"]}
         for runtime in runtimes:
-            supported = {kind["identifier"] for kind in runtime.get("supportedDeviceTypes", [])}
             for name in names:
-                if types.get(name) in supported:
-                    udid = subprocess.check_output(
-                        ["xcrun", "simctl", "create", name, types[name], runtime["identifier"]], text=True
-                    ).strip()
-                    print(f"platform={platform} Simulator,id={udid}")
-                    print(f"Created {name}, {platform} {runtime['version']}", file=sys.stderr)
-                    return
+                for kind in runtime.get("supportedDeviceTypes", []):
+                    if kind.get("name") == name:
+                        udid = subprocess.check_output(
+                            ["xcrun", "simctl", "create", kind["name"], kind["identifier"], runtime["identifier"]],
+                            text=True,
+                        ).strip()
+                        print(f"platform={platform} Simulator,id={udid}")
+                        print(f"Created {name}, {platform} {runtime['version']}", file=sys.stderr)
+                        return
 
     print(f"error: no {platform} simulator named any of {names} on an installed runtime", file=sys.stderr)
     for runtime in runtimes:
