@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 
 /// One attempt's track selection: the ordinals the engine starts on, and
 /// what recording the viewer's later choices needs.
@@ -279,6 +280,26 @@ nonisolated struct PlaybackTrackPlan {
             title: stream.title,
             isDefault: stream.isDefault == true
         )
+    }
+
+    /// Which subtitles the engine demuxes and which it loads as files, in
+    /// engine order. On a manifest the server writes, a text track arrives as
+    /// a file and one the server burns in or drops is in neither list.
+    static func splitSubtitles(
+        _ subtitles: [MediaStream],
+        delivery: MediaDelivery
+    ) -> (embedded: [MediaStream], external: [MediaStream]) {
+        let manifest = delivery == .segmentedManifest
+        var embedded: [MediaStream] = []
+        var external: [MediaStream] = []
+        for stream in subtitles {
+            if stream.isExternal == true || (manifest && stream.deliveryMethod == "External") {
+                external.append(stream)
+            } else if !manifest || !["Encode", "Drop"].contains(stream.deliveryMethod) {
+                embedded.append(stream)
+            }
+        }
+        return (embedded, external)
     }
 
     private static func subtitleLayoutStream(_ stream: MediaStream) -> SubtitleLayoutStream {
