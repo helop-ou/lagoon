@@ -39,6 +39,7 @@ nonisolated extension MediaStream {
             isExternal: true,
             isForced: candidate.isForced,
             isHearingImpaired: candidate.isHearingImpaired,
+            deliveryMethod: nil,
             deliveryUrl: nil,
             profile: nil,
             videoRangeType: nil,
