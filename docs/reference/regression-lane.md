@@ -89,6 +89,11 @@ Which launches pass the reset, and why:
   domain instead: `-accounts () -session.activeAccountId ""` (and
   `-server.url ""` where the address is the subject). The argument domain
   never reaches disk, so nothing on the simulator is touched.
+- `WhatsNewUITests` passes it on every launch, relaunch included. The
+  version What's New last presented is app-wide, so the reset keeps it, and
+  the relaunch proves the sheet stays quiet. `debug.playerRegression` keeps
+  the sheet away from every other journey. This one turns it back on with
+  `-debug.whatsNewAtLaunch YES` and sets `-whatsNew.lastSeenVersion`.
 - `AccountPrivacyUITests` signs two fixture viewers in for real
   (`-debug.accountPrivacyRegression` on a loopback address) and then relaunches
   without the bootstrap to drive the ordinary picker.
