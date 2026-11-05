@@ -57,6 +57,16 @@ jobs:
       - name: Install the Metal toolchain
         run: xcodebuild -downloadComponent MetalToolchain
 
+      # The generators default to a simulator the runner image may not have.
+      - name: Pick the simulator
+        run: |
+          destination="$(scripts/pick-simulator.py --create tvOS "Apple TV 4K (4th generation)" "Apple TV 4K (3rd generation)")"
+          {
+            echo "LAGOON_CHANGELOG_DOC_DESTINATION=$destination"
+            echo "LAGOON_CODEC_DOC_DESTINATION=$destination"
+            echo "LAGOON_SITE_FACTS_DESTINATION=$destination"
+          } >> "$GITHUB_ENV"
+
       - name: Prepare
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
@@ -132,6 +142,16 @@ jobs:
       # The script checks the codec table against the profile, which builds.
       - name: Install the Metal toolchain
         run: xcodebuild -downloadComponent MetalToolchain
+
+      # The generators default to a simulator the runner image may not have.
+      - name: Pick the simulator
+        run: |
+          destination="$(scripts/pick-simulator.py --create tvOS "Apple TV 4K (4th generation)" "Apple TV 4K (3rd generation)")"
+          {
+            echo "LAGOON_CHANGELOG_DOC_DESTINATION=$destination"
+            echo "LAGOON_CODEC_DOC_DESTINATION=$destination"
+            echo "LAGOON_SITE_FACTS_DESTINATION=$destination"
+          } >> "$GITHUB_ENV"
 
       - name: Publish
         run: |
