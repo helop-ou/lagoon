@@ -184,7 +184,7 @@ keyboard when the field is empty.
   reaches the Seerr section.
 
 **Settings › About › Legal.** The Acknowledgements sheet follows the
-changelog sheet's tvOS pattern: no `NavigationStack`, its own header and
+What's New sheet's tvOS pattern: no `NavigationStack`, its own header and
 footer at `Metrics.modalPanelSize`, and licence text split into focusable
 paragraphs. Privacy Policy and Support rows appear only once
 `LegalDestinations` has a URL. iOS opens it, tvOS shows the address to type
