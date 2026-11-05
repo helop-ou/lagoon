@@ -1,7 +1,7 @@
 # Codec support
 
-**Generated file. Do not edit.** Run `scripts/generate-codec-support.sh`
-after changing `DeviceProfile`.
+**Generated file. Do not edit.** `CodecSupportDocTests` rewrites it from
+`DeviceProfile` when a unit test run finds it out of date.
 
 This is the capability profile Lagoon sends Jellyfin with every
 `PlaybackInfo` request. The server decides direct play against exactly
