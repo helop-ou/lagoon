@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 #
-# Opens the next release: the unreleased notes become a new Changelog entry,
-# the build number and marketing version advance, and CHANGELOG.md is
-# regenerated. The release workflow's prepare action runs it with --open-pr.
+# Opens the next release: CHANGELOG.md's Unreleased notes become the next
+# build's entry, and the build number and marketing version advance. The
+# release workflow's prepare action runs it with --open-pr.
 #
 #   scripts/prepare-release.sh patch "Up Next shows how long is left."
 #   scripts/prepare-release.sh minor "…" --dry-run   # print the entry only
 #   scripts/prepare-release.sh minor "…" --open-pr   # commit, push, open the PR
 #
-# The headline is the one line About and the GitHub release lead with.
+# The headline is the one line What's New and the GitHub release lead with.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 project="$root/Lagoon.xcodeproj/project.pbxproj"
-changelog="$root/Lagoon/Features/Settings/Changelog.swift"
+changelog="$root/CHANGELOG.md"
 
 usage() {
     echo "usage: $(basename "$0") <major|minor|patch> <headline> [--dry-run | --open-pr]" >&2
@@ -50,63 +50,53 @@ esac
 next_build="$((build + 1))"
 released="$(LC_ALL=C date +'%B %Y')"
 
-# Moves the unreleased sections into a new top entry and empties them.
+# Writes CHANGELOG.md with the Unreleased notes moved into a new entry below
+# an empty Unreleased heading.
 stamp() {
-    python3 -I - "$changelog" "$next_version" "$next_build" "$released" "$headline" "$1" <<'PYTHON'
-import sys
-
-path, version, build, released, headline, write = sys.argv[1:7]
-lines = open(path, encoding="utf-8").read().split("\n")
-
-opening = "    static let unreleased: [ChangelogSection] = ["
-start = next((i for i, line in enumerate(lines) if line.startswith(opening)), None)
-if start is None:
-    sys.exit("error: Changelog.unreleased not found")
-if lines[start] == opening + "]":
-    sys.exit("error: there are no unreleased notes to release")
-end = lines.index("    ]", start)
-body = [("        " + line) if line else line for line in lines[start + 1:end]]
-
-escaped = headline.replace("\\", "\\\\").replace('"', '\\"')
-entry = [
-    "        ChangelogEntry(",
-    f'            version: "{version}",',
-    f'            build: "{build}",',
-    f'            released: "{released}",',
-    f'            headline: "{escaped}",',
-    "            sections: [",
-    *body,
-    "            ]",
-    "        ),",
-]
-
-lines[start:end + 1] = [opening + "]"]
-anchor = lines.index("    static let entries: [ChangelogEntry] = [")
-lines[anchor + 1:anchor + 1] = entry
-
-if write == "write":
-    open(path, "w", encoding="utf-8").write("\n".join(lines))
-else:
-    print("\n".join(entry))
-PYTHON
+    HEADING="## ${next_version} (${next_build})" RELEASED="$released" HEADLINE="$headline" awk '
+        !done && $0 == "## Unreleased" { inside = 1; print; print ""; next }
+        inside && /^## / {
+            print ENVIRON["HEADING"]; print ""
+            print ENVIRON["RELEASED"]; print ""
+            print "**" ENVIRON["HEADLINE"] "**"; print ""
+            for (i = first; i <= last; i++) print body[i]
+            print ""
+            inside = 0; done = 1
+        }
+        inside {
+            body[++n] = $0
+            if ($0 != "") { if (!first) first = n; last = n }
+            if ($0 ~ /^- /) notes++
+            next
+        }
+        { print }
+        END {
+            if (!done) { print "error: CHANGELOG.md has no Unreleased section above a build" > "/dev/stderr"; exit 1 }
+            if (!notes) { print "error: there are no unreleased notes to release" > "/dev/stderr"; exit 1 }
+        }
+    ' "$changelog"
 }
 
 echo "Lagoon ${version} (${build}) -> ${next_version} (${next_build})"
 echo
 
+stamped="$(mktemp)"
+trap 'rm -f "$stamped"' EXIT
+stamp >"$stamped"
+
 if [ "$mode" = --dry-run ]; then
-    stamp print
+    awk -v heading="## ${next_version} (${next_build})" \
+        '$0 == heading { inside = 1 } inside && /^## / && $0 != heading { exit } inside' "$stamped"
     echo
     echo "(dry run, nothing was changed)"
     exit 0
 fi
 
 [ -z "$(git -C "$root" status --porcelain)" ] || die "the working tree is not clean"
-stamp write
+cp "$stamped" "$changelog"
 "$root/scripts/bump-build.sh" --set "$next_build" >/dev/null
-sed -i '' "s/MARKETING_VERSION = ${version};/MARKETING_VERSION = ${next_version};/g" "$project"
+perl -pi -e "s/MARKETING_VERSION = \Q${version}\E;/MARKETING_VERSION = ${next_version};/g" "$project"
 grep -q "MARKETING_VERSION = ${next_version};" "$project" || die "could not set MARKETING_VERSION"
-"$root/scripts/generate-changelog.sh"
 
 if [ "$mode" != --open-pr ]; then
     echo "Stamped ${next_version} (${next_build}). Review, then commit."
@@ -116,7 +106,7 @@ fi
 branch="chore/release-${next_version//./-}"
 subject="chore: release ${next_version} (${next_build})"
 git -C "$root" switch --create "$branch"
-git -C "$root" add "$changelog" "$project" "$root/CHANGELOG.md"
+git -C "$root" add "$changelog" "$project"
 git -C "$root" commit --quiet --message "$subject"
 git -C "$root" push --quiet --set-upstream origin "$branch"
 gh pr create --base main --head "$branch" --title "$subject" \

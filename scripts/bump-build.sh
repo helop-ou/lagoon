@@ -38,11 +38,10 @@ case "${1:-}" in
     *)  echo "usage: bump-build.sh [--set <number>]" >&2; exit 1 ;;
 esac
 
-sed -i '' "s/CURRENT_PROJECT_VERSION = ${current};/CURRENT_PROJECT_VERSION = ${next};/g" "$project"
+perl -pi -e "s/CURRENT_PROJECT_VERSION = ${current};/CURRENT_PROJECT_VERSION = ${next};/g" "$project"
 
 marketing="$(grep -m1 -o 'MARKETING_VERSION = [0-9.]*' "$project" | grep -o '[0-9.]*$')"
 echo "Build ${current} -> ${next} (version ${marketing})"
 echo
-echo "Next: add a ChangelogEntry for ${marketing} (${next}) at the top of"
-echo "Lagoon/Features/Settings/Changelog.swift, then commit both. ChangelogTests fails"
-echo "until that entry exists."
+echo "Next: add a ## ${marketing} (${next}) entry at the top of CHANGELOG.md, then"
+echo "commit both. ChangelogTests fails until that entry exists."

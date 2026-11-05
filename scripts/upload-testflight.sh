@@ -96,10 +96,10 @@ build="$(grep -m1 -o 'CURRENT_PROJECT_VERSION = [0-9]*' "$project" | grep -o '[0
 
 # Checked before the slow archive. ChangelogTests enforces the same rule, but
 # only after a build.
-changelog="$root/Lagoon/Features/Settings/Changelog.swift"
-if ! grep -A 2 "version: \"${version}\"" "$changelog" | grep -q "build: \"${build}\""; then
+changelog="$root/CHANGELOG.md"
+if ! grep -qxF "## ${version} (${build})" "$changelog"; then
     cat >&2 <<EOF
-error: no Changelog entry for ${version} (${build}).
+error: no CHANGELOG.md entry for ${version} (${build}).
 
 Run the release workflow's prepare action and merge the pull request it opens.
 It turns the unreleased notes into this entry. Shipping a build nobody wrote
@@ -115,7 +115,7 @@ released="$(gh release list --limit 200 --json tagName,isDraft \
     --jq '.[] | select(.isDraft | not) | .tagName' 2>/dev/null)" \
     || { echo "error: could not list the GitHub releases (is gh signed in?)" >&2; exit 1; }
 newest_released="$(printf '%s\n' "$released" | grep -oE -- '-[0-9]+$' | tr -d '-' | sort -n | tail -1)"
-unpublished="$(grep -A 1 'version: "' "$changelog" | grep -oE '"[0-9.]+"' | tr -d '"' | paste - - \
+unpublished="$(sed -nE 's/^## ([0-9.]+) \(([0-9]+)\)$/\1 \2/p' "$changelog" \
     | awk -v newest="${newest_released:-0}" -v current="$build" '$2 > newest && $2 != current { print $1 " (" $2 ")" }')"
 if [ -n "$unpublished" ]; then
     {

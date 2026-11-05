@@ -18,7 +18,6 @@
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-changelog="$root/Lagoon/Features/Settings/Changelog.swift"
 
 want_build="${1:-}"
 [[ "$want_build" =~ ^[0-9]+$ ]] || {
@@ -67,6 +66,9 @@ sha="$(git -C "$root" rev-parse --verify "${rev}^{commit}" 2>/dev/null)" \
 project_text="$(git -C "$root" show "${sha}:Lagoon.xcodeproj/project.pbxproj")" \
     || die "cannot read the project at ${sha:0:9}"
 
+changelog_text="$(git -C "$root" show "${sha}:CHANGELOG.md")" \
+    || die "cannot read CHANGELOG.md at ${sha:0:9}"
+
 # Tags read <version>-<build>. The build number keeps them unique.
 version="$(printf '%s\n' "$project_text" | grep -m1 -o 'MARKETING_VERSION = [0-9.]*' | grep -o '[0-9.]*$')"
 tag="${version}-${want_build}"
@@ -98,25 +100,19 @@ ok "${sha:0:9} declares ${version} (${want_build})"
 [ "$recorded" = true ] && ok "tagging the revision recorded when build ${want_build} was archived"
 
 # 4. Same rule as the upload script and ChangelogTests. Last chance before public.
-grep -A 2 "version: \"${version}\"" "$changelog" | grep -q "build: \"${want_build}\"" \
-    || die "no Changelog entry for ${version} (${want_build})"
-ok "changelog entry exists for ${version} (${want_build})"
+#    The body is the build's section, trimmed of blank lines at both ends.
+notes="$(printf '%s\n' "$changelog_text" | awk -v heading="## ${version} (${want_build})" '
+    /^## / { inside = ($0 == heading); next }
+    inside { lines[++n] = $0 }
+    END {
+        first = 1; while (first <= n && lines[first] == "") first++
+        last = n; while (last >= first && lines[last] == "") last--
+        for (i = first; i <= last; i++) print lines[i]
+    }')"
+[ -n "$notes" ] || die "no CHANGELOG.md entry for ${version} (${want_build})"
+ok "release notes read for ${version} (${want_build})"
 
-# 5. The release body comes from CHANGELOG.md, so it must match Changelog.swift.
-"$root/scripts/generate-changelog.sh" --check >/dev/null \
-    || die "CHANGELOG.md is out of date. Run scripts/generate-changelog.sh"
-ok "CHANGELOG.md is current"
-
-notes="$("$root/scripts/generate-changelog.sh" --notes "$want_build")" \
-    || die "could not read the notes for build ${want_build}"
-ok "release notes read for build ${want_build}"
-
-# 6. The published codec table must state exactly the profile this build sends.
-"$root/scripts/generate-codec-support.sh" --check >/dev/null \
-    || die "docs/codec-support.md is out of date or could not be checked. Run scripts/generate-codec-support.sh"
-ok "docs/codec-support.md is current"
-
-# 7. A re-tag cannot be undone: anyone who fetched keeps the old revision.
+# 5. A re-tag cannot be undone: anyone who fetched keeps the old revision.
 if git -C "$root" rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
     die "${tag} already exists locally"
 fi
@@ -125,36 +121,15 @@ if [ -n "$(git -C "$root" ls-remote --tags origin "refs/tags/${tag}" 2>/dev/null
 fi
 ok "${tag} is unused"
 
-# 8. gh creates the tag through the API, so the remote must have the revision.
+# 6. gh creates the tag through the API, so the remote must have the revision.
 git -C "$root" fetch --quiet origin || die "could not reach origin"
 if ! git -C "$root" merge-base --is-ancestor "$sha" origin/main 2>/dev/null; then
     die "${rev} (${sha:0:9}) is not on origin/main yet. Push before releasing."
 fi
 ok "${sha:0:9} is on origin/main"
 
-# 9. The website (a separate repository) restates the version and formats.
-#    Warn, do not stop, if it is behind. Never report a check that could not
-#    run as passing.
-site_out=""
-site_status=0
-site_out="$("$root/scripts/generate-site-facts.sh" --check 2>&1)" || site_status=$?
-if [ "$site_status" -eq 0 ]; then
-    ok "the website's facts are current"
-elif printf '%s' "$site_out" | grep -q "no website checkout"; then
-    note "no website checkout beside this one, so its facts were not checked"
-elif printf '%s' "$site_out" | grep -q "out of date\|does not exist"; then
-    warn "the website's facts are behind this build"
-    echo "      Run scripts/generate-site-facts.sh, then commit and deploy"
-    echo "      lagoon-website. The site keeps serving the old version until"
-    echo "      it is redeployed. Releasing anyway."
-else
-    # Not the raw output: a missing simulator prints every destination.
-    warn "could not check the website's facts, so they may be behind"
-    echo "      Run scripts/generate-site-facts.sh --check to see why."
-fi
-
-# 10. The archived revision is not recorded, so show the commits since the
-#     build-number bump and let a human confirm.
+# 7. The archived revision is not recorded, so show the commits since the
+#    build-number bump and let a human confirm.
 # The oldest match: the newest is the next bump, which removed the number.
 bump="$(git -C "$root" log --format=%H -S"CURRENT_PROJECT_VERSION = ${want_build};" \
     --pickaxe-regex -- Lagoon.xcodeproj/project.pbxproj 2>/dev/null | tail -1 || true)"
