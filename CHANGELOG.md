@@ -17,6 +17,20 @@ what identifies a binary: it is what About shows, what a release tag
 carries, and what to quote in a bug report. One marketing version spans
 many builds.
 
+## 0.8.1 (120)
+
+November 2026
+
+**Dolby Vision 8.6 titles play straight from the server, and subtitle-heavy episodes start again.**
+
+### Improvements
+
+- Dolby Vision profile 8.6 titles play straight from the server, keeping their embedded subtitles and starting sooner.
+
+### Bug fixes
+
+- Episodes with many subtitle tracks no longer get stuck loading when the server converts the stream.
+
 ## 0.8.0 (119)
 
 November 2026
