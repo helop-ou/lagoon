@@ -99,6 +99,13 @@ display-capability check is needed. When checking by eye:
   with it on is meaningless.
 - The panel shows no badge in Filmmaker Mode.
 
+**Dolby Vision outside the spec direct-plays only over an HDR10 base layer.**
+Jellyfin calls it `DOVIInvalid`: profile 8.6, or colour tags that disagree
+with the profile. No profile condition sees the transfer, so the profile
+accepts the range and `DolbyVisionBaseLayer` refuses direct play unless the
+transfer is PQ, sending the rest to the remux rung. The engine signals 8.6 as
+8.1, because VideoToolbox will not open an 8.6 session.
+
 Subtitles come from embedded streams or Jellyfin's permission-gated routes,
 and there is no direct provider login. Disc images use the app's bounded byte
 source and UDF handling.
