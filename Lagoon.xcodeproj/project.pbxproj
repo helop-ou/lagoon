@@ -11,6 +11,7 @@
 		4C41474F4F4E000000000022 /* ContentProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C41474F4F4E000000000021 /* ContentProvider.swift */; };
 		4C41474F4F4E000000000023 /* LagoonTopShelf.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 4C41474F4F4E000000000024 /* LagoonTopShelf.appex */; platformFilters = (tvos, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		4C41474F4F4E000000000072 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 4C41474F4F4E000000000071 /* PrivacyInfo.xcprivacy */; };
+		4C41474F4F4E000000000075 /* CHANGELOG.md in Resources */ = {isa = PBXBuildFile; fileRef = 4C41474F4F4E000000000074 /* CHANGELOG.md */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -60,6 +61,7 @@
 		4C41474F4F4E000000000030 /* LagoonTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LagoonTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4C41474F4F4E000000000041 /* LagoonUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = LagoonUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		4C41474F4F4E000000000071 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
+		4C41474F4F4E000000000074 /* CHANGELOG.md */ = {isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = CHANGELOG.md; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -113,6 +115,7 @@
 				4C41474F4F4E000000000031 /* LagoonTests */,
 				4C41474F4F4E000000000042 /* LagoonUITests */,
 				4C41474F4F4E000000000027 /* LagoonTopShelf */,
+				4C41474F4F4E000000000074 /* CHANGELOG.md */,
 				4C41474F4F4E000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -274,6 +277,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4C41474F4F4E000000000075 /* CHANGELOG.md in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
