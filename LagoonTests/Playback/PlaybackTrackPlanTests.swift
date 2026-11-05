@@ -13,7 +13,8 @@ struct PlaybackTrackPlanTests {
         isDefault: Bool = false,
         forced: Bool = false,
         hearingImpaired: Bool = false,
-        external: Bool = false
+        external: Bool = false,
+        delivery: String? = nil
     ) throws -> MediaStream {
         var json: [String: Any] = [
             "Type": type,
@@ -26,6 +27,7 @@ struct PlaybackTrackPlanTests {
         json["Language"] = language
         json["Title"] = title
         json["DisplayTitle"] = displayTitle
+        json["DeliveryMethod"] = delivery
         let data = try JSONSerialization.data(withJSONObject: json)
         return try JellyfinClient.decoder.decode(MediaStream.self, from: data)
     }
@@ -318,6 +320,50 @@ struct PlaybackTrackPlanTests {
         let plan = plan(audio: audio, defaultAudio: 4)
         #expect(plan.automaticAudioOrdinal == 2)
         #expect(plan.initialAudioOrdinal == 2)
+    }
+
+    // MARK: - Subtitles the engine demuxes and the ones it loads
+
+    @Test func aManifestDeliversTextSubtitlesAsFilesAndLeavesBurnedInOnesOut() throws {
+        let split = PlaybackTrackPlan.splitSubtitles([
+            try stream("Subtitle", index: 2, language: "eng", forced: true, delivery: "External"),
+            try stream("Subtitle", index: 3, language: "eng", delivery: "External"),
+            try stream("Subtitle", index: 4, language: "eng", delivery: "Encode"),
+            try stream("Subtitle", index: 5, language: "fra", delivery: "Drop"),
+            try stream("Subtitle", index: 6, language: "deu", external: true, delivery: "External"),
+            try stream("Subtitle", index: 7, language: "spa", delivery: "Hls"),
+        ], delivery: .segmentedManifest)
+        #expect(split.embedded.map(\.index) == [7])
+        #expect(split.external.map(\.index) == [2, 3, 6])
+    }
+
+    @Test func aStableFileKeepsEveryEmbeddedSubtitleWhateverTheServerCallsIt() throws {
+        // The engine lists every subtitle stream in the file.
+        let split = PlaybackTrackPlan.splitSubtitles([
+            try stream("Subtitle", index: 2, language: "eng", delivery: "Embed"),
+            try stream("Subtitle", index: 3, language: "eng", delivery: "External"),
+            try stream("Subtitle", index: 4, language: "eng", delivery: "Encode"),
+            try stream("Subtitle", index: 5, language: "deu", external: true, delivery: "External"),
+        ], delivery: .stableFile)
+        #expect(split.embedded.map(\.index) == [2, 3, 4])
+        #expect(split.external.map(\.index) == [5])
+    }
+
+    @Test func onAManifestTheForcedTrackIsTheFileItNames() throws {
+        // A burned-in track ahead of it must not push the ordinal past the
+        // file the engine loads.
+        let split = PlaybackTrackPlan.splitSubtitles([
+            try stream("Subtitle", index: 2, language: "eng", delivery: "Encode"),
+            try stream("Subtitle", index: 3, language: "eng", forced: true, delivery: "External"),
+            try stream("Subtitle", index: 4, language: "eng", delivery: "External"),
+        ], delivery: .segmentedManifest)
+        let plan = plan(
+            subtitles: split.embedded,
+            external: split.external,
+            defaultSubtitle: 3,
+            captionDisplay: .forcedOnly
+        )
+        #expect(plan.initialSubtitleOrdinal == 1)
     }
 
     // MARK: - Audio memory across plans
