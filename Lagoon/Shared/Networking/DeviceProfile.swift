@@ -246,7 +246,6 @@ nonisolated enum DeviceProfile {
             softwareDecoded("mpeg2video", rejectsInterlaced: false),
         ],
         subtitleProfiles: [
-            SubtitleProfile(format: "vtt", method: "Hls"),
             SubtitleProfile(format: "vtt", method: "External"),
             // Sidecar scripts as they are, for libass. Converted to vtt they
             // lose their styles and placement.
@@ -575,7 +574,6 @@ nonisolated enum DeviceProfile {
             softwareDecoded("vc1"),
         ],
         subtitleProfiles: [
-            SubtitleProfile(format: "vtt", method: "Hls"),
             SubtitleProfile(format: "vtt", method: "External"),
             SubtitleProfile(format: "subrip", method: "External"),
             SubtitleProfile(format: "srt", method: "External"),
