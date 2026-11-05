@@ -184,12 +184,16 @@ server. CI is a
 backstop, not a replacement: run the tests before pushing, because CI only
 reports after the push.
 
-- It uses GitHub's `xcode-27` runner image (a preview) with Xcode 27.1, the
+- It uses GitHub's `xcode-27` runner image (a preview) with Xcode 27.2, the
   version Lagoon is developed with. When the local Xcode moves, move
-  `DEVELOPER_DIR` in the workflow in the same change, after checking the
+  `DEVELOPER_DIR` in both workflows in the same change, after checking the
   [image's list](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md)
   has it.
-- iOS runs on iPhone 17, as the image has no iPhone 17 Pro.
+- iOS runs on iPhone 17, as the image has no iPhone 17 Pro. tvOS runs on the
+  Apple TV 4K (4th generation), or the 3rd on an image without tvOS 27.2.
+  `scripts/pick-simulator.py` chooses a device whose runtime is installed: an
+  image update once kept the 3rd generation listed after dropping its
+  runtime, and every tvOS job failed with "Unable to find a destination".
 - The image lacks the Metal toolchain, a separate Xcode download Lagoon's
   shaders need, so each run installs it first.
 - The engine resolves from `Package.resolved` and is cached by its hash, so
@@ -200,8 +204,8 @@ reports after the push.
   the [regression lane](reference/regression-lane.md). The exception is
   `DuoLayoutUITests`, because a closed iPhone Duo is the only place its bug
   shows and no unit test reaches it. A third job runs it on the image's
-  iPhone Duo (iOS 27.1), which starts closed, against the public demo. It
-  runs on pull requests only and is not a required check.
+  iPhone Duo on its newest iOS, which starts closed, against the public
+  demo. It runs on pull requests only and is not a required check.
 - Both test jobs collect coverage, and `scripts/coverage-to-sonar.py` turns
   each result bundle into Sonar's format. A third job then runs the SonarCloud
   scan with both reports, using the `SONAR_TOKEN` secret, and SonarCloud's
