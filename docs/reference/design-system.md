@@ -383,7 +383,7 @@ Where it applies:
 - `TouchSettingsPage` wraps `ThemedForm` for settings categories.
   Acknowledgements, Downloads, Home Rows and the Seerr season picker use it
   directly.
-- Plain scrolling pages (changelog, a licence, Seerr requests) sit on
+- Plain scrolling pages (What's New, a licence, Seerr requests) sit on
   `Theme.background` like browse screens.
 - Only the player's panel and the DEBUG Developer page keep the system form.
 - Every page's backdrop is `ThemePageBackground`, through
