@@ -6,22 +6,10 @@ import Testing
 /// the same envelope Lagoon sends in `PlaybackInfo` (`docs/release.md` forbids
 /// overstating formats).
 ///
-/// `scripts/generate-codec-support.sh` runs this and copies the result into
-/// `docs/codec-support.md`. `--check` fails on drift instead, and so does
-/// `theCommittedDocumentMatchesTheProfile`.
+/// The committed `docs/codec-support.md` must match it. A stale one fails
+/// the suite and is rewritten in place, ready to review and commit.
 @Suite("Codec support document")
 struct CodecSupportDocTests {
-    @Test func writesTheCodecSupportDocument() throws {
-        let markdown = CodecSupportDocument.render(DeviceProfile.everything)
-        let url = URL(fileURLWithPath: NSTemporaryDirectory())
-            .appendingPathComponent("codec-support.md")
-        try markdown.write(to: url, atomically: true, encoding: .utf8)
-        // The script reads this line rather than guessing the sandbox path.
-        print("CODEC_SUPPORT_DOC \(url.path)")
-    }
-
-    /// The committed table is what readers see, so a profile change that
-    /// skipped the generator fails here, not only in the release script.
     @Test func theCommittedDocumentMatchesTheProfile() throws {
         let document = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -29,10 +17,10 @@ struct CodecSupportDocTests {
             .deletingLastPathComponent()
             .appending(path: "docs/codec-support.md")
         let committed = try String(contentsOf: document, encoding: .utf8)
-        #expect(
-            committed == CodecSupportDocument.render(DeviceProfile.everything),
-            "docs/codec-support.md is out of date. Run scripts/generate-codec-support.sh"
-        )
+        let rendered = CodecSupportDocument.render(DeviceProfile.everything)
+        guard committed != rendered else { return }
+        try rendered.write(to: document, atomically: true, encoding: .utf8)
+        Issue.record("docs/codec-support.md was out of date and has been rewritten. Review and commit it.")
     }
 
     /// Guards the renderer against silently dropping a codec.
@@ -70,8 +58,8 @@ enum CodecSupportDocument {
         """
         # Codec support
 
-        **Generated file. Do not edit.** Run `scripts/generate-codec-support.sh`
-        after changing `DeviceProfile`.
+        **Generated file. Do not edit.** `CodecSupportDocTests` rewrites it from
+        `DeviceProfile` when a unit test run finds it out of date.
 
         This is the capability profile Lagoon sends Jellyfin with every
         `PlaybackInfo` request. The server decides direct play against exactly
