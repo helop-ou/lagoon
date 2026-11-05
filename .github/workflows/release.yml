@@ -29,12 +29,11 @@ jobs:
     name: prepare
     if: inputs.action == 'prepare'
     environment: release
-    runs-on: xcode-27
-    timeout-minutes: 45
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: read
     env:
-      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
       BUMP: ${{ inputs.bump }}
       HEADLINE: ${{ inputs.headline }}
     steps:
@@ -52,20 +51,6 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
-
-      # CHANGELOG.md is rendered by a test, which builds.
-      - name: Install the Metal toolchain
-        run: xcodebuild -downloadComponent MetalToolchain
-
-      # The generators default to a simulator the runner image may not have.
-      - name: Pick the simulator
-        run: |
-          destination="$(scripts/pick-simulator.py --create tvOS "Apple TV 4K (4th generation)" "Apple TV 4K (3rd generation)")"
-          {
-            echo "LAGOON_CHANGELOG_DOC_DESTINATION=$destination"
-            echo "LAGOON_CODEC_DOC_DESTINATION=$destination"
-            echo "LAGOON_SITE_FACTS_DESTINATION=$destination"
-          } >> "$GITHUB_ENV"
 
       - name: Prepare
         env:
@@ -126,32 +111,17 @@ jobs:
     name: publish
     if: inputs.action == 'publish'
     environment: release
-    runs-on: xcode-27
-    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
     env:
-      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
       BUILD: ${{ inputs.build }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-
-      # The script checks the codec table against the profile, which builds.
-      - name: Install the Metal toolchain
-        run: xcodebuild -downloadComponent MetalToolchain
-
-      # The generators default to a simulator the runner image may not have.
-      - name: Pick the simulator
-        run: |
-          destination="$(scripts/pick-simulator.py --create tvOS "Apple TV 4K (4th generation)" "Apple TV 4K (3rd generation)")"
-          {
-            echo "LAGOON_CHANGELOG_DOC_DESTINATION=$destination"
-            echo "LAGOON_CODEC_DOC_DESTINATION=$destination"
-            echo "LAGOON_SITE_FACTS_DESTINATION=$destination"
-          } >> "$GITHUB_ENV"
 
       - name: Publish
         run: |
