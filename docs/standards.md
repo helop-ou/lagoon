@@ -189,11 +189,13 @@ reports after the push.
   `DEVELOPER_DIR` in both workflows in the same change, after checking the
   [image's list](https://github.com/actions/runner-images/blob/main/images/macos/xcode-27-arm64-Readme.md)
   has it.
-- iOS runs on iPhone 17, as the image has no iPhone 17 Pro. tvOS runs on the
-  Apple TV 4K (4th generation), or the 3rd on an image without tvOS 27.2.
+- iOS runs on iPhone 17, as the image has no iPhone 17 Pro, and tvOS on the
+  Apple TV 4K (4th generation), both on the runtime the snapshot references
+  were recorded on (`SIMULATOR_RUNTIME` in the workflow). An image without
+  that runtime downloads it first, which adds a few minutes.
   `scripts/pick-simulator.py` chooses a device whose runtime is installed: an
-  image update once kept the 3rd generation listed after dropping its
-  runtime, and every tvOS job failed with "Unable to find a destination".
+  image update once kept the 3rd generation Apple TV listed after dropping
+  its runtime, and every tvOS job failed with "Unable to find a destination".
 - The image lacks the Metal toolchain, a separate Xcode download Lagoon's
   shaders need, so each run installs it first.
 - The engine resolves from `Package.resolved` and is cached by its hash, so
