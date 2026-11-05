@@ -87,7 +87,8 @@ enum SiteFacts {
     ]
 
     /// Dolby Vision arrives as range types. Name them by profile number.
-    /// `DOVIWithEL` is the dual-layer profile 7 converted in flight.
+    /// `DOVIWithEL` is the dual-layer profile 7 converted in flight, and
+    /// `DOVIInvalid` the profile 8.6 played as 8.1.
     static let rangeNames: [String: String] = [
         "SDR": "", // Accepted, never advertised.
         "HDR10": "HDR10",
@@ -100,6 +101,7 @@ enum SiteFacts {
         "DOVIWithSDR": "Dolby Vision profile 8",
         "DOVIWithEL": "Dolby Vision profile 7",
         "DOVIWithELHDR10Plus": "Dolby Vision profile 7",
+        "DOVIInvalid": "Dolby Vision profile 8",
     ]
 
     // MARK: - What the profile declares

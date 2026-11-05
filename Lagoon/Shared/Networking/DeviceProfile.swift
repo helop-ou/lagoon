@@ -94,6 +94,8 @@ nonisolated enum DeviceProfile {
             // Dolby Vision profile 5 is DOVI, profile 8 the DOVIWith* ranges.
             // Profile 7 (DOVIWithEL*) direct-plays too: the demuxer converts
             // it to profile 8.1 with libdovi and drops the enhancement layer.
+            // DOVIInvalid covers profile 8.6 and mistagged colour. Only a PQ
+            // base layer direct-plays (`DolbyVisionBaseLayer`).
             CodecProfile(
                 type: "Video",
                 codec: "hevc",
@@ -107,7 +109,7 @@ nonisolated enum DeviceProfile {
                     ProfileCondition(
                         condition: "EqualsAny",
                         property: "VideoRangeType",
-                        value: "SDR|HDR10|HLG|DOVI|DOVIWithHDR10|DOVIWithHDR10Plus|DOVIWithHLG|DOVIWithSDR|DOVIWithEL|DOVIWithELHDR10Plus|HDR10Plus",
+                        value: "SDR|HDR10|HLG|DOVI|DOVIWithHDR10|DOVIWithHDR10Plus|DOVIWithHLG|DOVIWithSDR|DOVIWithEL|DOVIWithELHDR10Plus|DOVIInvalid|HDR10Plus",
                         isRequired: false
                     ),
                     ProfileCondition(
