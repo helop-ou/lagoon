@@ -355,6 +355,8 @@ nonisolated struct MediaStream: Decodable, Hashable {
     let deliveryUrl: String?
     let profile: String?
     let videoRangeType: String?
+    /// `smpte2084` for PQ, `arib-std-b67` for HLG.
+    let colorTransfer: String?
     let channels: Int?
     let width: Int?
     let height: Int?
