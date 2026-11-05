@@ -458,14 +458,10 @@ final class PlaybackController {
             )
         }
         var negotiated = try await negotiatedSource(for: media, client: client)
-        // A disc this rung cannot play steps down before an attempt,
+        // A source this rung cannot play steps down before an attempt,
         // whatever the server says. The HUD still records why.
-        let layout = PlaybackSourceLayout(
-            videoType: negotiated.source.videoType,
-            isoType: negotiated.source.isoType
-        )
-        if delivery == .negotiated, let refusal = layout.directPlayRefusal {
-            skipDelivery(to: PlaybackFallbackPolicy.start(for: layout), refusal: refusal)
+        if delivery == .negotiated, let refused = PlaybackFallbackPolicy.refusal(of: negotiated.source) {
+            skipDelivery(to: refused.rung, refusal: refused.refusal)
             negotiated = try await negotiatedSource(for: media, client: client)
         }
         let (streamURL, method) = try client.streamURL(itemId: media.id, source: negotiated.source)
