@@ -46,18 +46,25 @@ nonisolated enum Changelog {
     /// Notes merged since the last release. The release workflow's prepare
     /// action moves them into a new entry, so a pull request never bumps the
     /// build or edits a shipped entry.
-    static let unreleased: [ChangelogSection] = [
-        ChangelogSection(category: .improvements, changes: [
-            "Dolby Vision profile 8.6 titles play straight from the server, keeping their embedded subtitles and starting sooner.",
-        ]),
-        ChangelogSection(category: .bugFixes, changes: [
-            "Episodes with many subtitle tracks no longer get stuck loading when the server converts the stream.",
-        ]),
-    ]
+    static let unreleased: [ChangelogSection] = []
 
     /// Newest first. The prepare action adds the top one. The About screen
     /// highlights whichever one matches the running bundle.
     static let entries: [ChangelogEntry] = [
+        ChangelogEntry(
+            version: "0.8.1",
+            build: "120",
+            released: "November 2026",
+            headline: "Dolby Vision 8.6 titles play straight from the server, and subtitle-heavy episodes start again.",
+            sections: [
+                ChangelogSection(category: .improvements, changes: [
+                    "Dolby Vision profile 8.6 titles play straight from the server, keeping their embedded subtitles and starting sooner.",
+                ]),
+                ChangelogSection(category: .bugFixes, changes: [
+                    "Episodes with many subtitle tracks no longer get stuck loading when the server converts the stream.",
+                ]),
+            ]
+        ),
         ChangelogEntry(
             version: "0.8.0",
             build: "119",
