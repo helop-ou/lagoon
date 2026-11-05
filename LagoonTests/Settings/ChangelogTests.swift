@@ -15,9 +15,98 @@ struct ChangelogTests {
             """
             No Changelog entry for \(version) (\(build)).
             The release workflow's prepare action adds it from \
-            Changelog.unreleased. See docs/release.md.
+            Unreleased in CHANGELOG.md. See docs/release.md.
             """
         )
+    }
+
+    /// The app reads the file it bundles, so a line it cannot place would
+    /// vanish from What's New while GitHub still shows it.
+    @Test func theBundledChangelogReadsCompletely() throws {
+        let document = ChangelogDocument.bundled()
+        #expect(document.unreadable.isEmpty, "Unreadable CHANGELOG.md lines: \(document.unreadable)")
+        let url = try #require(Bundle.main.url(forResource: "CHANGELOG", withExtension: "md"))
+        let builds = try String(contentsOf: url, encoding: .utf8)
+            .split(separator: "\n")
+            .filter { $0.hasPrefix("## ") && $0 != "## Unreleased" }
+        #expect(document.entries.count == builds.count)
+    }
+
+    @Test func aChangelogReadsUnreleasedNotesAndBuildsInOrder() throws {
+        let document = ChangelogDocument.parse("""
+            # Changelog
+
+            An introduction, which is not a note.
+
+            ## Unreleased
+
+            ### Bug fixes
+
+            - Fixed later.
+
+            ## 1.2.0 (41)
+
+            March 2027
+
+            **The headline.**
+
+            ### New features
+
+            - Something new.
+            - Something else.
+
+            ### Bug fixes
+
+            - Something fixed.
+
+            ## 1.1.0 (40)
+
+            February 2027
+
+            **Earlier.**
+
+            ### Improvements
+
+            - Something better.
+            """)
+
+        #expect(document.unreadable.isEmpty)
+        #expect(document.unreleased == [ChangelogSection(category: .bugFixes, changes: ["Fixed later."])])
+        #expect(document.entries.map(\.id) == ["1.2.0 (41)", "1.1.0 (40)"])
+        let newest = try #require(document.entries.first)
+        #expect(newest.released == "March 2027")
+        #expect(newest.headline == "The headline.")
+        #expect(newest.sections == [
+            ChangelogSection(category: .newFeatures, changes: ["Something new.", "Something else."]),
+            ChangelogSection(category: .bugFixes, changes: ["Something fixed."]),
+        ])
+    }
+
+    @Test func linesOutsideTheFormatAreReportedNotDropped() {
+        let document = ChangelogDocument.parse("""
+            ## Unreleased
+
+            - A note with no category.
+
+            ## 1.2.0 (41)
+
+            March 2027
+
+            **The headline.**
+
+            ### Fixes
+
+            - Under a category About does not know.
+
+            ## Version two
+            """)
+
+        #expect(document.unreadable == [
+            "- A note with no category.",
+            "### Fixes",
+            "- Under a category About does not know.",
+            "## Version two",
+        ])
     }
 
     /// House style. See docs/release.md.

@@ -1,21 +1,24 @@
 # Changelog
 
-**Generated file. Do not edit.** Run `scripts/generate-changelog.sh`
-after changing
-[`Changelog.swift`](Lagoon/Features/Settings/Changelog.swift), which is
-the source of truth. This file, the About screen inside the app, and
-the notes on a GitHub release are all renderings of it.
+The release notes for every build of Lagoon, newest first. The app bundles
+this file and shows the installed build's notes as What's New, and each
+GitHub release carries its build's section.
 
-These notes are written for someone watching rather than someone
-reading the diff. They say what changed on screen and leave out
-refactors, tests and documentation, so a build that changed nothing a
-viewer would notice has no entry here. The commit log is the record of
-everything else.
+They are written for someone watching rather than someone reading the
+diff. They say what changed on screen and leave out refactors, tests and
+documentation, so a build that changed nothing a viewer would notice has no
+entry here. The commit log is the record of everything else.
 
-Builds are newest first. The number in brackets is the build, which is
-what identifies a binary: it is what About shows, what a release tag
-carries, and what to quote in a bug report. One marketing version spans
-many builds.
+A pull request with a change a viewer would notice adds one line under
+Unreleased, in its category: New features, Improvements or Bug fixes, in
+that order. The release workflow's prepare action turns Unreleased into the
+next build's entry. Never edit a shipped entry.
+
+The number in brackets is the build, which is what identifies a binary: it
+is what About shows, what a release tag carries, and what to quote in a bug
+report. One marketing version spans many builds.
+
+## Unreleased
 
 ## 0.8.1 (120)
 
