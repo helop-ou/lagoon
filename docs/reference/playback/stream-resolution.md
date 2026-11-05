@@ -165,9 +165,17 @@ redelivering the same samples could help:
   failed): a stream copy returns the same bitstream, so **skip remux** and go
   straight to the re-encode.
 
-Both lower rungs are HLS, which loses the embedded subtitle track (the engine
-cannot demux subtitles from a Jellyfin transcode). Another reason the ladder
-descends only after a real failure.
+Both lower rungs are HLS. Text subtitles arrive there as sidecar files, and
+bitmap tracks are lost: another reason the ladder descends only after a real
+failure. The profile offers `vtt` as `External`, never `Hls`. Jellyfin would
+otherwise put every text track in the master playlist as a WebVTT rendition,
+and libavformat fetches those inside the audio and video read, one segment at
+a time. On the Apple TV a remux of an episode with 35 subtitle tracks blocked
+4 s at start against a server that had them cached, and 32 s on a first play
+while it extracted them, past the start watchdog. `PlaybackTrackPlan.splitSubtitles`
+maps what Jellyfin delivers as `External` onto the engine's sidecar tracks and
+leaves out a track it burns in or drops, so ordinals still match what the
+engine demuxes.
 
 **Only the bottom rung is bounded to HD** (`DeviceProfile.lagoon(for:)` →
 `boundedForRealtimeTranscode`): `MaxWidth=1920 MaxHeight=1080` and a 20 Mbps
