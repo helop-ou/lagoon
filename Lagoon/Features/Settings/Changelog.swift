@@ -47,6 +47,9 @@ nonisolated enum Changelog {
     /// action moves them into a new entry, so a pull request never bumps the
     /// build or edits a shipped entry.
     static let unreleased: [ChangelogSection] = [
+        ChangelogSection(category: .improvements, changes: [
+            "Dolby Vision profile 8.6 titles play straight from the server, keeping their embedded subtitles and starting sooner.",
+        ]),
         ChangelogSection(category: .bugFixes, changes: [
             "Episodes with many subtitle tracks no longer get stuck loading when the server converts the stream.",
         ]),
