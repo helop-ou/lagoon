@@ -24,18 +24,16 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # The image's tvOS 27.2 has the 4th generation. An image whose
-          # runtimes predate it has only the 3rd.
           - platform: tvOS
             simulator: Apple TV 4K (4th generation)
-            fallback: Apple TV 4K (3rd generation)
           # The image has no iPhone 17 Pro.
           - platform: iOS
             simulator: iPhone 17
-            fallback: iPhone 17
     env:
       # Keep in step with the local Xcode.
       DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
+      # The runtime the snapshot references were recorded on. Moves with Xcode.
+      SIMULATOR_RUNTIME: "27.2"
     steps:
       - uses: actions/checkout@v7
 
@@ -55,7 +53,15 @@ jobs:
       - name: Pick the simulator
         id: simulator
         run: |
-          destination="$(scripts/pick-simulator.py "${{ matrix.platform }}" "${{ matrix.simulator }}" "${{ matrix.fallback }}")"
+          pick() {
+            scripts/pick-simulator.py --minimum "$SIMULATOR_RUNTIME" --create \
+              "${{ matrix.platform }}" "${{ matrix.simulator }}"
+          }
+          # An image from before that runtime has older ones only.
+          if ! destination="$(pick)"; then
+            xcodebuild -downloadPlatform "${{ matrix.platform }}"
+            destination="$(pick)"
+          fi
           echo "destination=$destination" >> "$GITHUB_OUTPUT"
 
       # Serial: in parallel on the runner's three cores, tests that wait on
