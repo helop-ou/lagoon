@@ -74,9 +74,8 @@ clean" in docs/README.md.
   before opening the pull request. Never rename a pull request's branch on
   GitHub: that closes the pull request.
 - Build numbers belong to the repo. Never let Xcode manage them at upload. See
-  [Release](docs/release.md). A change a viewer would notice gets a line in
-  `Changelog.unreleased` (`Lagoon/Features/Settings/Changelog.swift`). An
-  invisible one does not. Never bump the build or the version, and never edit
+  [Release](docs/release.md). A change a viewer would notice gets a line
+  under Unreleased in `CHANGELOG.md`. An invisible one does not. Never bump the build or the version, and never edit
   a shipped entry: the release workflow's prepare action does both
   ([Release](docs/release.md#version-and-changelog)).
 - The only dependency is the `LagoonEngine` package, which carries the native

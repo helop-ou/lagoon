@@ -10,27 +10,27 @@ The whole sequence. Read the linked sections before doing it the first time.
 [Public release](#public-release) has further gates this list does not cover.
 
 ```sh
-#  1. pull requests add viewer-visible lines to Changelog.unreleased
+#  1. pull requests add viewer-visible lines under Unreleased in CHANGELOG.md
 #  2. Actions, Release, prepare: pick the bump, write the headline
 #  3. merge the release pull request it opens, once its checks pass
-scripts/generate-site-facts.sh                    #  4. the website's facts
+#  4. run the unit tests with lagoon-website beside this checkout
 #  5. Actions, Release, upload
 #  6. add the build to the external group, wait for review
 #  7. Actions, Release, publish
 ```
 
 1. **[Collect the notes](#version-and-changelog)** as work lands. A pull
-   request adds its lines to `Changelog.unreleased` and never touches the
-   build number, the version or a shipped entry.
+   request adds its lines under Unreleased in `CHANGELOG.md` and never
+   touches the build number, the version or a shipped entry.
 2. **[Prepare](#releasing-from-ci).** Choose patch for fixes only, minor for
    new features, major for a significant rework, and write the headline. The
    action opens a pull request that turns the unreleased notes into the new
-   entry, advances the build and version, and regenerates `CHANGELOG.md`.
+   entry and advances the build and version.
 3. **Merge it.** Its checks build both platforms and run both unit suites.
    Once merged, `main` declares the build that will ship.
-4. **[Regenerate the website's facts](#version-and-changelog)** from `main`
-   and commit them in `lagoon-website`. The site serves the old version until
-   its own, separate deploy.
+4. **[Update the website's facts](#website)** from `main` and
+   commit them in `lagoon-website`. The site serves the old version until its
+   own, separate deploy.
 5. **[Upload](#releasing-from-ci)** from `main`. It records the revision it
    archived.
 6. **Add the build to the external group** in App Store Connect and wait for
@@ -60,13 +60,12 @@ new-marketing-version`**: with `GENERATE_INFOPLIST_FILE = YES` the version
 keys come from build settings, so agvtool reports success and changes
 nothing.
 
-**Unreleased notes.** A change a viewer would notice adds its line to
-`Changelog.unreleased` in
-[`Changelog.swift`](../Lagoon/Features/Settings/Changelog.swift), in the pull
-request that makes the change. Anything there has not shipped, so nobody has
-to ask whether the top entry is still open. Prepare moves the lines into a new
-entry with the version, build, release month and headline, and empties the
-list. Entries are newest first. Tests require the installed version and
+**Unreleased notes.** A change a viewer would notice adds its line under
+`## Unreleased` in [`CHANGELOG.md`](../CHANGELOG.md), in the pull request
+that makes the change. Anything there has not shipped, so nobody has to ask
+whether the top entry is still open. Prepare moves the lines into a new entry
+with the version, build, release month and headline, and leaves Unreleased
+empty. Entries are newest first. Tests require the installed version and
 build to have an entry, and hold unreleased lines to the same rules. Builds
 from before the changelog are not reconstructed.
 
@@ -88,21 +87,13 @@ unreleased notes.
 
 ### The published changelog
 
-[`CHANGELOG.md`](../CHANGELOG.md) is generated from `Changelog.entries` by
-`scripts/generate-changelog.sh`, which prepare runs. Unreleased notes are not
-in it. Never edit it by hand. The About screen, the
-Markdown file and the GitHub release body are three renderings of one source,
-so they cannot disagree. `ChangelogTests` checks what it can: the declared
-build has an entry, categories are in order, no em dashes.
-
-```sh
-scripts/generate-changelog.sh             # regenerate the document
-scripts/generate-changelog.sh --check     # fail if it is out of date
-scripts/generate-changelog.sh --notes 107 # print one build's notes
-```
-
-`--notes` prints to stdout for a release body, and fails rather than printing
-nothing when the build has no entry.
+[`CHANGELOG.md`](../CHANGELOG.md) is the one source of the notes. The app
+bundles it and `Changelog.swift` reads it, and a GitHub release's body is its
+build's section, so the three cannot disagree. Each build is a `## <version>
+(<build>)` heading, the month, the bold headline, then `###` categories of
+`- ` notes, one line each. `ChangelogTests` checks what it can: every line
+reads, the declared build has an entry, categories are in order, no em
+dashes.
 
 ### Release tags
 
@@ -130,7 +121,6 @@ these mistakes are silent and a published tag is hard to withdraw. It refuses:
 - a dirty tree
 - a build number the project does not declare
 - a missing changelog entry
-- a `CHANGELOG.md` that has drifted from `Changelog.swift`
 - a tag already in use
 - a revision the remote does not have yet
 
@@ -147,11 +137,6 @@ be published after the project has moved on.
 newest published release, other than the build being uploaded, and refuses to
 start while there is one. Publish it first. `--dry-run` shows the list and
 carries on.
-
-It **warns** without stopping when the website's generated facts are behind
-the build, or could not be checked. The fix is
-`scripts/generate-site-facts.sh`, then a commit and deploy in
-`lagoon-website`.
 
 Tags are how someone holding a binary finds its source, which the vendored
 FFmpeg licence requires. See the native-component gate under [Public
@@ -477,6 +462,11 @@ and regenerate the inventory if an input changes.
   rights-cleared screenshots, and the App Store destination. Keep site and
   store copy consistent with the actual formats, devices, server setup and
   subtitle permissions.
+- The site's `app-facts.json` states the version and the formats, rendered
+  from the declared version and `DeviceProfile`. With `lagoon-website`
+  beside this checkout, `SiteFactsDocTests` compares them and rewrites a
+  stale file there, failing once. Commit and deploy it in `lagoon-website`.
+  Without the checkout, as in CI, the test is skipped.
 - The site links the external group's public TestFlight link
   (`site.testflight` in `lagoon-website`). Closing or replacing that group
   means changing the site in the same sitting.
