@@ -48,7 +48,7 @@ clean" in docs/README.md.
   tests there when new logic is pure enough to pin down:
 
   ```
-  xcodebuild test -scheme Lagoon -destination 'platform=tvOS Simulator,name=Apple TV 4K (3rd generation)' -collect-test-diagnostics never
+  xcodebuild test -scheme Lagoon -destination 'platform=tvOS Simulator,name=Apple TV 4K (4th generation)' -collect-test-diagnostics never
   xcodebuild test -scheme Lagoon -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -collect-test-diagnostics never
   ```
 

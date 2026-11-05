@@ -423,8 +423,8 @@ request. `HomeCardSnapshotTests` is the pattern.
   reference to the test result. A size change reports both sizes instead.
   On CI all three are in the failed run's artifacts.
 - References depend on the simulator runtime. CI and local runs use the same
-  tvOS 27.0 and iOS 27.0 runtimes. When Xcode moves, re-record in the same
-  change.
+  tvOS 27.2 and iOS 27.2 runtimes. When Xcode moves, re-record in the same
+  change. iOS 27.2 moved list rows' content 4 pt to the right.
 - Snapshot views that render synchronously. A `.task` that fills `@State`
   may not have run when the window is drawn.
 - The snapshot window is never key, so nothing in it is focused. A focused
