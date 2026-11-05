@@ -349,6 +349,9 @@ nonisolated struct MediaStream: Decodable, Hashable {
     let isExternal: Bool?
     let isForced: Bool?
     let isHearingImpaired: Bool?
+    /// How the server delivers a subtitle on this attempt: `Embed`,
+    /// `External`, `Hls`, `Encode` or `Drop`.
+    let deliveryMethod: String?
     let deliveryUrl: String?
     let profile: String?
     let videoRangeType: String?
