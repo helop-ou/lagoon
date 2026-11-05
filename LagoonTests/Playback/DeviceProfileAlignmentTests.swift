@@ -233,6 +233,19 @@ struct DeviceProfileAlignmentTests {
         #expect(avcodec_find_decoder(AV_CODEC_ID_DVB_SUBTITLE) != nil)
     }
 
+    @Test func subtitlesNeverTravelInsideAnHLSStream() {
+        // The engine reads no HLS subtitle rendition: libavformat fetches one
+        // inside the audio and video read, so a slow segment stalls playback.
+        var profiles = [DeviceProfile.everything]
+        #if DEBUG && targetEnvironment(simulator)
+        profiles.append(DeviceProfile.simulatorRegression)
+        #endif
+        for profile in profiles {
+            #expect(!profile.subtitleProfiles.contains { $0.method == "Hls" })
+            #expect(profile.subtitleProfiles.contains { $0.format == "vtt" && $0.method == "External" })
+        }
+    }
+
     @Test func hardwareWithoutHEVCIsNeverOfferedHEVC() throws {
         // The engine requires a hardware HEVC decoder. Without one HEVC fails
         // outright with -12906.
