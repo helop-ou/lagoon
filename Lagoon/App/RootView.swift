@@ -52,8 +52,9 @@ struct RootView: View {
         }
         .task {
             #if DEBUG
-            // UI journeys expect Home, not a sheet over it.
-            if UserDefaults.standard.bool(forKey: "debug.playerRegression") { return }
+            // UI journeys expect Home, not a sheet over it, unless one tests this.
+            if UserDefaults.standard.bool(forKey: "debug.playerRegression"),
+               !UserDefaults.standard.bool(forKey: "debug.whatsNewAtLaunch") { return }
             #endif
             whatsNewPending = WhatsNew.presentsAtLaunch(isExistingInstall: !session.accounts.isEmpty)
             presentWhatsNewWhenSignedIn()

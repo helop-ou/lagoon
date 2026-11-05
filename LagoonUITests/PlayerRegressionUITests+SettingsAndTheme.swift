@@ -39,7 +39,7 @@ extension PlayerRegressionUITests {
 
     /// Picks a theme, then navigates browse and settings. Screenshots wait
     /// for the bloom to end so they show the settled palette.
-    func testBabyPinkThemeFocusBrowseAndDeepChangelogNavigation() {
+    func testBabyPinkThemeFocusBrowseAndWhatsNewNavigation() {
         let app = XCUIApplication.regression(extra: ["-debug.settingsRegression", "YES"])
         app.launch()
 
