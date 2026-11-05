@@ -24,14 +24,13 @@ you are changing. The guides describe the code as it is today.
   and the [regression lane](reference/regression-lane.md). Some describe
   experiments on a specific build, and the code may have moved on.
 
-Generated files. Each script takes `--check` to fail on drift instead of
-writing:
+Generated files. A test that finds one out of date fails and rewrites it,
+ready to commit:
 
 | File | Generated from | By |
 | --- | --- | --- |
-| [Codec support](codec-support.md) | `DeviceProfile.everything`, the envelope the app sends Jellyfin, so it cannot overstate direct play | [`generate-codec-support.sh`](../scripts/generate-codec-support.sh) |
-| [CHANGELOG.md](../CHANGELOG.md) | `Changelog.swift`, the source of truth for About and release bodies (`--notes <build>` prints one build) | [`generate-changelog.sh`](../scripts/generate-changelog.sh) |
-| The website's `app-facts.json` | The declared version and `DeviceProfile`. The site's prose, Jellyfin floor and availability stay hand-written there | [`generate-site-facts.sh`](../scripts/generate-site-facts.sh) |
+| [Codec support](codec-support.md) | `DeviceProfile.everything`, the envelope the app sends Jellyfin, so it cannot overstate direct play | `CodecSupportDocTests` |
+| The website's `app-facts.json` | The declared version and `DeviceProfile`. The site's prose, Jellyfin floor and availability stay hand-written there | `SiteFactsDocTests`, with `lagoon-website` beside this checkout |
 | [Native dependency inventory](reference/native-dependency-inventory.json) | The resolved engine checkout. Regenerate whenever the engine pin moves (no `--check`) | [`inventory-native-dependencies.py`](../scripts/inventory-native-dependencies.py) |
 
 ## Keeping this clean
@@ -42,6 +41,5 @@ writing:
 - Validation evidence (revision, environment, result, what is owed) belongs
   where the work is tracked, not in a guide. Unresolved release gates go in
   [Release](release.md#public-release).
-- [Changelog.swift](../Lagoon/Features/Settings/Changelog.swift) owns release
-  history, and website copy lives in the `lagoon-website` repository. Neither
-  needs a copy here.
+- [CHANGELOG.md](../CHANGELOG.md) owns release history, and website copy
+  lives in the `lagoon-website` repository. Neither needs a copy here.
