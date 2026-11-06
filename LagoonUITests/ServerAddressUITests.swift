@@ -22,6 +22,7 @@ final class ServerAddressUITests: XCTestCase {
         #endif
         app.launch()
         #if os(iOS)
+        app.leaveWelcome()
         let field = app.textFields["server.address"]
         XCTAssertTrue(field.waitForExistence(timeout: 10))
         field.tap()
@@ -55,6 +56,7 @@ final class ServerAddressUITests: XCTestCase {
         username.tap()
         username.typeText("Fixture viewer\n")
         app.buttons["signin.submit"].tap()
+        app.skipSeerrOffer()
         #endif
         openSeerr(in: app)
         #if os(iOS)

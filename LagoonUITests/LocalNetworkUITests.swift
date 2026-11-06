@@ -18,6 +18,7 @@ final class LocalNetworkUITests: XCTestCase {
                                "-debug.regressionBootstrapPublicDemo", "NO"]
         app.launchEnvironment = ["LAGOON_TEST_DENIED_ORIGIN": address]
         app.launch()
+        app.leaveWelcome()
         let field = app.textFields["server.address"]
         XCTAssertTrue(field.waitForExistence(timeout: 10))
         field.tap()
@@ -44,6 +45,7 @@ final class LocalNetworkUITests: XCTestCase {
         username.tap()
         username.typeText("Fixture viewer\n")
         app.buttons["signin.submit"].tap()
+        app.skipSeerrOffer()
         openSeerr(in: app)
         try await control(server, path: "connectivity?drop=1")
         let seerrAddress = app.textFields["settings.seerr.server"]
