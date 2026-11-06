@@ -548,6 +548,7 @@ final class SessionStore {
             if UserDefaults.standard.bool(forKey: "debug.accountPrivacyRegression"), url.host == "127.0.0.1" {
                 // Fixture only: persist normally so tests drive the real picker.
                 try completeSignIn(with: result)
+                finishSeerrOffer()
                 if let term = environment["LAGOON_REGRESSION_SEARCH"] { recentSearches.record(term) }
                 return
             }
@@ -601,7 +602,8 @@ final class SessionStore {
         )
         // Only the install's first account. Adding one later, or signing in
         // again, goes straight to Home, and so does a server that has Seerr.
-        let offersSeerr = !isAccountDraft && accounts.isEmpty && !seerr.hasSavedServer(for: account)
+        let offersSeerr = !isAccountDraft && reauthenticationAccount == nil && accounts.isEmpty
+            && !seerr.hasSavedServer(for: account)
         if isAccountDraft {
             pendingAuthentication = result
         } else {
