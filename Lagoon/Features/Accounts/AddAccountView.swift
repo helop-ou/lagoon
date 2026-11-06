@@ -15,9 +15,10 @@ struct AddAccountView: View {
         NavigationStack {
             Group {
                 switch draft.phase {
-                case .needsServer: ServerConnectView()
+                // A draft never welcomes or offers Seerr.
+                case .welcome, .needsServer: ServerConnectView()
                 case .needsSignIn: SignInView(changeServerTitle: "Use Another Server")
-                case .signedIn, .choosingAccount: ProgressView("Signing In")
+                case .signedIn, .choosingAccount, .offeringSeerr: ProgressView("Signing In")
                 }
             }
             .environment(draft)

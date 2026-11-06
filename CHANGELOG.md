@@ -23,6 +23,7 @@ report. One marketing version spans many builds.
 ### New features
 
 - What's New shows what changed in the version you just installed, once after each feature update, and any time from Settings, About.
+- A new install opens with a short welcome, and after the first sign-in offers to connect Seerr, which you can skip.
 - Setup lists the Jellyfin servers on your local network, so you can pick yours instead of typing its address. On iPhone and iPad this arrives once Apple grants Lagoon local network discovery.
 
 ## 0.8.1 (120)

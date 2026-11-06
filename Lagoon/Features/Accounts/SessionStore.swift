@@ -6,10 +6,14 @@ import Observation
 @Observable
 final class SessionStore {
     enum Phase {
+        /// A fresh install's first screen, before the server.
+        case welcome
         case needsServer
         case needsSignIn
         /// Several accounts remembered, none active: the profile picker.
         case choosingAccount
+        /// The install's first sign-in, offering Seerr before Home.
+        case offeringSeerr
         case signedIn
     }
 
@@ -168,7 +172,7 @@ final class SessionStore {
         // No accounts: resume an interrupted sign-in.
         guard let urlString = defaults.string(forKey: DefaultsKey.serverURL),
               let url = URL(string: urlString) else {
-            phase = .needsServer
+            phase = .welcome
             return
         }
         client.configure(serverURL: url)
@@ -460,6 +464,18 @@ final class SessionStore {
         defaults.removeObject(forKey: DefaultsKey.legacyUserName)
     }
 
+    // MARK: - First run
+
+    func finishWelcome() {
+        guard phase == .welcome else { return }
+        phase = .needsServer
+    }
+
+    func finishSeerrOffer() {
+        guard phase == .offeringSeerr else { return }
+        phase = .signedIn
+    }
+
     // MARK: - Connect
 
     func connect(to input: String) async throws {
@@ -583,6 +599,9 @@ final class SessionStore {
             userName: result.user.name,
             primaryImageTag: result.user.primaryImageTag
         )
+        // Only the install's first account. Adding one later, or signing in
+        // again, goes straight to Home, and so does a server that has Seerr.
+        let offersSeerr = !isAccountDraft && accounts.isEmpty && !seerr.hasSavedServer(for: account)
         if isAccountDraft {
             pendingAuthentication = result
         } else {
@@ -598,7 +617,7 @@ final class SessionStore {
         activeAccount = account
         reauthenticationAccount = nil
         userName = result.user.name
-        phase = .signedIn
+        phase = offersSeerr ? .offeringSeerr : .signedIn
     }
 
     private func persistSignIn(_ result: AuthenticationResult, account: StoredAccount) throws {
