@@ -65,6 +65,11 @@ final class SeerrSessionStore {
     }
     #endif
 
+    /// Whether the account's Jellyfin server already has a Seerr address.
+    func hasSavedServer(for account: StoredAccount) -> Bool {
+        defaults.string(forKey: serverDefaultsKey(for: account)) != nil
+    }
+
     func activate(for account: StoredAccount?) async {
         select(account)
         await activationTask?.value

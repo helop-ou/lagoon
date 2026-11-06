@@ -13,12 +13,16 @@ struct RootView: View {
     var body: some View {
         ZStack {
             switch session.phase {
+            case .welcome:
+                WelcomeView()
             case .needsServer:
                 ServerConnectView()
             case .needsSignIn:
                 SignInView()
             case .choosingAccount:
                 AccountPickerView()
+            case .offeringSeerr:
+                SeerrSetupView()
             case .signedIn:
                 MainTabView()
                     .id(session.activeAccount?.id)
