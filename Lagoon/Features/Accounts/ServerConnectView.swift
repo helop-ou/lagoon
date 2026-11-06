@@ -10,6 +10,13 @@ struct ServerConnectView: View {
     @State private var connectionTask: Task<Void, Never>?
     @State private var headers: [CustomHTTPHeader] = []
     @State private var showsAdvanced = false
+    @State private var discovered: [DiscoveredServer] = []
+    @State private var isSearching = true
+    @State private var searchGeneration = 0
+    #if os(tvOS)
+    @FocusState private var addressFocused: Bool
+    @FocusState private var focusedServer: String?
+    #endif
 
     var body: some View {
         ZStack {
@@ -32,6 +39,7 @@ struct ServerConnectView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, Metrics.Space.l)
 
+                discoveredServers
                 OnboardingFieldGroup { addressField }
                 advancedSection
                     .buttonStyle(.glass)
@@ -60,6 +68,7 @@ struct ServerConnectView: View {
                             .foregroundStyle(.secondary)
                             .padding(.bottom, Metrics.Space.l)
 
+                        discoveredServers
                         addressField
                         advancedSection
                             .buttonStyle(.glass)
@@ -86,6 +95,7 @@ struct ServerConnectView: View {
             }
             #endif
         }
+        .task(id: searchGeneration) { await discoverServers() }
         .onDisappear { connectionTask?.cancel() }
     }
 
@@ -95,12 +105,49 @@ struct ServerConnectView: View {
             .textInputAutocapitalization(.never)
             .autocorrectionDisabled()
             .accessibilityIdentifier("server.address")
+            #if os(tvOS)
+            .focused($addressFocused)
+            #endif
             #if os(iOS)
             .modifier(OnboardingField())
             .keyboardType(.URL)
             .submitLabel(.go)
             #endif
             .onSubmit(connect)
+    }
+
+    private var discoveredServers: some View {
+        #if os(tvOS)
+        DiscoveredServersView(
+            servers: discovered, isSearching: isSearching, isConnecting: isConnecting,
+            focusedServer: $focusedServer, select: connect(to:), searchAgain: { searchGeneration += 1 }
+        )
+        #else
+        DiscoveredServersView(
+            servers: discovered, isSearching: isSearching, isConnecting: isConnecting,
+            select: connect(to:), searchAgain: { searchGeneration += 1 }
+        )
+        #endif
+    }
+
+    private func connect(to server: DiscoveredServer) {
+        address = server.address.absoluteString
+        connect()
+    }
+
+    private func discoverServers() async {
+        let generation = searchGeneration
+        discovered = []
+        isSearching = true
+        for await server in ServerDiscovery.servers() {
+            discovered.append(server)
+            discovered.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+            #if os(tvOS)
+            // Untouched setup moves to the first server, so Select connects to it.
+            if address.isEmpty, addressFocused { focusedServer = discovered.first?.id }
+            #endif
+        }
+        if generation == searchGeneration { isSearching = false }
     }
 
     /// Custom headers for a server behind an access proxy. Collapsed and
