@@ -547,6 +547,32 @@ restored sign-in, remote focus and a restored Seerr pairing. The HTTPS
 disclosure check is a UI check, not a TLS test. Physical-network acceptance is
 still owed.
 
+### Finding servers on the local network
+
+The connect screen lists the servers that answer Jellyfin's client discovery
+(`Shared/Networking/ServerDiscovery.swift`), above the address field.
+
+- Lagoon sends `who is JellyfinServer?` over UDP to port 7359, at the limited
+  broadcast `255.255.255.255` and at each IPv4 interface's own broadcast
+  address, because iOS does not always route the limited one. It sends again
+  after 1 s and 3 s, so a server still answers once the viewer allows local
+  network access, and listens for 6 s.
+- Each server replies with JSON: `Id`, `Name` and `Address`, its own idea of
+  its URL, plus `EndpointAddress`, which Lagoon ignores. One entry per `Id`.
+  A missing or non-HTTP `Address` falls back to the sender's IP on port 8096.
+  A reply with neither `Id` nor `Address` is not a server.
+- Picking a server puts its address in the field and connects through the
+  normal path, so the probe, proxy headers and errors are the typed ones.
+- On a physical iPhone or iPad the broadcast needs the multicast networking
+  entitlement (`com.apple.developer.networking.multicast`), which Apple grants
+  on request. Without it the send fails with "No route to host" and the list
+  stays empty. Apple TV and the simulators need no entitlement.
+- Servers in Docker on bridge networking or on another subnet never hear the
+  broadcast. Typing the address covers them.
+
+Coverage: `ServerDiscoveryTests` decodes replies and runs a search against a
+loopback responder.
+
 ## Home Screen Sections plugin
 
 An optional server plugin. Without it the route 404s and Home uses Lagoon's
