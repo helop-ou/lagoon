@@ -60,10 +60,17 @@ Sections](jellyfin-api.md#home-screen-sections-plugin).
   destinations:
 
 ```text
-needsServer → needsSignIn → signedIn
-                    ↑          ↓
-                 choosingAccount
+welcome → needsServer → needsSignIn → offeringSeerr → signedIn
+                              ↑                           ↓
+                           choosingAccount ←──────────────┘
 ```
+
+- A fresh install opens on `welcome`. Change Server and signing out of the
+  last account go to `needsServer`, never back to the welcome.
+- `offeringSeerr` follows only the install's first sign-in, and only when its
+  server has no Seerr address yet. Add Account, signing in again and every
+  later account go straight to `signedIn`. Its screen connects Seerr with the
+  Jellyfin sign-in, and Settings keeps the full setup.
 
 Accounts:
 

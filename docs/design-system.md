@@ -193,13 +193,14 @@ notes](reference/design-system.md#themes).
   tab bar. Names widen with Dynamic Type rather than truncate. On iOS the
   picker sheet opens full height when there are several servers, since half
   height cuts the second server's row in two.
-- **Onboarding (iOS):** server connect and sign-in centre their column while
-  it fits, like the picker (`OnboardingColumn`). The column stops at
+- **Onboarding (iOS):** the welcome, server connect, sign-in and the Seerr
+  offer centre their column while it fits, like the picker
+  (`OnboardingColumn`). The column stops at
   `onboardingColumnWidth`, so on iPad the fields and Sign In stay phone-sized.
   Text fields sit in one rounded card per group with a hairline between rows
   (`OnboardingFieldGroup`, each field `OnboardingField`), the system's own
   sign-in pattern: they read as inputs, where bare underlines read as
-  dividers. Connect and Sign In take the detail Play's prominence
+  dividers. Get Started, Connect and Sign In take the detail Play's prominence
   (extra-large glass, semibold title3). Every other action is a regular glass
   capsule, and About Lagoon is the footnote footer. Errors use
   `OnboardingErrorText`. Outside a Form, `CustomHeaderFields` gives each
