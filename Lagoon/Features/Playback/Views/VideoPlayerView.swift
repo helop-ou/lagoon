@@ -140,6 +140,7 @@ struct VideoPlayerView: View {
             controller.audioTrackMemory = audioTrackMemory
             subtitleTrackMemory.configure(accountID: session.activeAccount?.id)
             controller.subtitleTrackMemory = subtitleTrackMemory
+            controller.trackPreferencesStore = trackPreferences
             // Before start, so the group's hooks are in place before the
             // first engine is built.
             syncPlay.attach(controller)

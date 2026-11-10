@@ -62,10 +62,73 @@ nonisolated enum SubtitleDefaultMode: String, Codable, CaseIterable, Identifiabl
     }
 }
 
+/// The most channels audio is played with: wider tracks are downmixed.
+nonisolated enum AudioChannelLimit: String, Codable, CaseIterable, Identifiable {
+    case off
+    case surround
+    case stereo
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .off: String(localized: "Off")
+        case .surround: String(localized: "5.1")
+        case .stereo: String(localized: "Stereo")
+        }
+    }
+
+    var engineLimit: AudioShaping.ChannelLimit? {
+        switch self {
+        case .off: nil
+        case .surround: .surround
+        case .stereo: .stereo
+        }
+    }
+}
+
 nonisolated struct TrackPreferenceValues: Codable, Equatable {
     var audioMode: AudioDefaultMode = .serverDefault
     var audioLanguageOverrides: [String] = []
     var subtitleMode: SubtitleDefaultMode = .system
+    /// Set from the player: they suit a moment (late at night, a mumbled
+    /// film), and the next title keeps them.
+    var nightMode = false
+    var dialogueBoost = false
+    /// Set in Settings: it suits the room or the speakers.
+    var channelLimit = AudioChannelLimit.off
+
+    var audioShaping: AudioShaping {
+        AudioShaping(nightMode: nightMode, dialogueBoost: dialogueBoost, channelLimit: channelLimit.engineLimit)
+    }
+
+    init(
+        audioMode: AudioDefaultMode = .serverDefault,
+        audioLanguageOverrides: [String] = [],
+        subtitleMode: SubtitleDefaultMode = .system,
+        nightMode: Bool = false,
+        dialogueBoost: Bool = false,
+        channelLimit: AudioChannelLimit = .off
+    ) {
+        self.audioMode = audioMode
+        self.audioLanguageOverrides = audioLanguageOverrides
+        self.subtitleMode = subtitleMode
+        self.nightMode = nightMode
+        self.dialogueBoost = dialogueBoost
+        self.channelLimit = channelLimit
+    }
+
+    /// Every key optional, so preferences saved before a field existed keep
+    /// the rest instead of resetting.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        audioMode = try container.decodeIfPresent(AudioDefaultMode.self, forKey: .audioMode) ?? .serverDefault
+        audioLanguageOverrides = try container.decodeIfPresent([String].self, forKey: .audioLanguageOverrides) ?? []
+        subtitleMode = try container.decodeIfPresent(SubtitleDefaultMode.self, forKey: .subtitleMode) ?? .system
+        nightMode = try container.decodeIfPresent(Bool.self, forKey: .nightMode) ?? false
+        dialogueBoost = try container.decodeIfPresent(Bool.self, forKey: .dialogueBoost) ?? false
+        channelLimit = (try? container.decodeIfPresent(AudioChannelLimit.self, forKey: .channelLimit)) ?? .off
+    }
 }
 
 /// Per-account playback-language choices: which track to select at start.

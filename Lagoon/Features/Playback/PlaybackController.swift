@@ -115,6 +115,11 @@ final class PlaybackController {
     private var itemId = ""
     /// Follows each engine this player makes: see `PlayerSubtitleOffset`.
     let subtitleOffset = PlayerSubtitleOffset()
+    /// Night mode, dialogue boost and the channel limit, for every engine of
+    /// this player. Taken from the viewer's preferences at start.
+    private(set) var audioShaping = AudioShaping.off
+    /// Where a night mode or dialogue boost change from the player is kept.
+    @ObservationIgnored var trackPreferencesStore: TrackPreferencesStore?
     private var mediaSourceId = ""
     private var playMethod: PlayMethod = .directPlay
 
@@ -223,6 +228,7 @@ final class PlaybackController {
         queue: PlayQueue = .series
     ) async {
         self.queue = queue
+        audioShaping = trackPreferences.audioShaping
         selection = TrackSelectionSettings(
             audioMode: trackPreferences.audioMode,
             subtitleMode: trackPreferences.subtitleMode,
@@ -622,6 +628,8 @@ final class PlaybackController {
         let engine = SampleBufferPlayerEngine()
         // Carry the viewer's speed across hand-off and fallback swaps.
         engine.setRate(self.engine?.rate ?? 1)
+        // Before prepare, so the title opens shaped rather than re-demuxing.
+        engine.setAudioShaping(audioShaping)
         if startsPaused {
             // Before priming, so the clock anchors at rate 0 and the
             // member waits on its first frame.
@@ -1333,8 +1341,19 @@ final class PlaybackController {
 
     var adjustments: PlayerAdjustments {
         PlayerAdjustments(
-            setSubtitleOffset: { [subtitleOffset] seconds in subtitleOffset.set(seconds) }
+            setSubtitleOffset: { [subtitleOffset] seconds in subtitleOffset.set(seconds) },
+            setNightMode: { [weak self] isOn in self?.updateAudioShaping { $0.nightMode = isOn } },
+            setDialogueBoost: { [weak self] isOn in self?.updateAudioShaping { $0.dialogueBoost = isOn } }
         )
+    }
+
+    /// Applies at once, with a re-demux from here, and is kept for the next
+    /// title.
+    private func updateAudioShaping(_ change: (inout AudioShaping) -> Void) {
+        change(&audioShaping)
+        engine?.setAudioShaping(audioShaping)
+        trackPreferencesStore?.values.nightMode = audioShaping.nightMode
+        trackPreferencesStore?.values.dialogueBoost = audioShaping.dialogueBoost
     }
 
     func resumeBufferFill() {

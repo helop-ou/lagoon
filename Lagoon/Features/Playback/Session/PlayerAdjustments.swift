@@ -7,6 +7,8 @@ import LagoonEngine
 /// Closures rather than a controller reference, as `PlayerTransportActions`.
 struct PlayerAdjustments {
     let setSubtitleOffset: (_ seconds: Double) -> Void
+    let setNightMode: (_ isOn: Bool) -> Void
+    let setDialogueBoost: (_ isOn: Bool) -> Void
 }
 
 /// Subtitle offsets the viewer set, by item, while the app runs. An offset

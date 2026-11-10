@@ -1,4 +1,5 @@
 import Foundation
+import LagoonEngine
 import Testing
 @testable import Lagoon
 
@@ -82,6 +83,42 @@ struct PersistedPlaybackFormatTests {
                 audioLanguageOverrides: ["et", "en"],
                 subtitleMode: .forcedOnly
             ))
+        }
+    }
+
+    /// Preferences saved before the sound settings existed keep everything
+    /// else, and gain the sound settings off.
+    @MainActor
+    @Test func trackPreferencesFromBeforeTheSoundSettingsStillLoad() throws {
+        try withDefaults { defaults in
+            defaults.set(Data(#"""
+            {"audioMode":"original","audioLanguageOverrides":["et"],"subtitleMode":"always"}
+            """#.utf8), forKey: "playback.trackPreferences.account-1")
+            let store = TrackPreferencesStore(defaults: defaults)
+            store.configure(accountID: "account-1")
+            #expect(store.values.audioMode == .original)
+            #expect(store.values.subtitleMode == .always)
+            #expect(!store.values.nightMode && !store.values.dialogueBoost)
+            #expect(store.values.channelLimit == .off)
+        }
+    }
+
+    @MainActor
+    @Test func soundSettingsAreWrittenAndReadBack() throws {
+        try withDefaults { defaults in
+            let store = TrackPreferencesStore(defaults: defaults)
+            store.configure(accountID: "account-1")
+            store.values.nightMode = true
+            store.values.channelLimit = .stereo
+
+            let data = try #require(defaults.data(forKey: "playback.trackPreferences.account-1"))
+            let root = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+            #expect(root["nightMode"] as? Bool == true)
+            #expect(root["channelLimit"] as? String == "stereo")
+
+            let reopened = TrackPreferencesStore(defaults: defaults)
+            reopened.configure(accountID: "account-1")
+            #expect(reopened.values.audioShaping == AudioShaping(nightMode: true, channelLimit: .stereo))
         }
     }
 
