@@ -626,6 +626,7 @@ private final class PlayerPanelPreviewEngine: PlayerEngine {
     var currentSubtitleText: String?
     var currentSubtitleImages: [SubtitleImage] = []
     var audioDelay = 0.0
+    var subtitleOffset = 0.0
     var rate = 1.0
     var displayMatchRequest: DisplayMatchRequest?
 
@@ -667,6 +668,10 @@ private final class PlayerPanelPreviewEngine: PlayerEngine {
     }
 
     func addExternalSubtitle(_ track: ExternalSubtitleTrack) {}
+
+    func setSubtitleOffset(_ seconds: Double) {
+        subtitleOffset = (min(max(seconds, -30), 30) * 10).rounded() / 10
+    }
 
     func setAudioDelay(_ seconds: Double) {
         audioDelay = (min(max(seconds, -5), 5) * 10).rounded() / 10

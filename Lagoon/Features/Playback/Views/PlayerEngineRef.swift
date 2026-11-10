@@ -45,6 +45,7 @@ final class DetachedPlayerEngine: PlayerEngine {
     var currentSubtitleText: String? { nil }
     var currentSubtitleImages: [SubtitleImage] { [] }
     var audioDelay: Double { 0 }
+    var subtitleOffset: Double { 0 }
     var displayMatchRequest: DisplayMatchRequest? { nil }
 
     func play() {}
@@ -57,4 +58,5 @@ final class DetachedPlayerEngine: PlayerEngine {
     func selectSubtitleTrack(id: Int?) {}
     func addExternalSubtitle(_ track: ExternalSubtitleTrack) {}
     func setAudioDelay(_ seconds: Double) {}
+    func setSubtitleOffset(_ seconds: Double) {}
 }

@@ -63,6 +63,7 @@ private final class TestEngine: PlayerEngine {
     var currentSubtitleText: String?
     var currentSubtitleImages: [SubtitleImage] = []
     var audioDelay: Double = 0
+    var subtitleOffset: Double = 0
     var displayMatchRequest: DisplayMatchRequest?
 
     func play() {}
@@ -75,4 +76,5 @@ private final class TestEngine: PlayerEngine {
     func selectSubtitleTrack(id: Int?) {}
     func addExternalSubtitle(_ track: ExternalSubtitleTrack) {}
     func setAudioDelay(_ seconds: Double) {}
+    func setSubtitleOffset(_ seconds: Double) {}
 }
