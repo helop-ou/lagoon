@@ -86,6 +86,53 @@ nonisolated enum DolbyVisionBaseLayer {
     }
 }
 
+/// A read failure no other rung can fix. Remux and transcode come from the
+/// same server with the same credential over the same network, so a refused
+/// sign-in, a missing file, an untrusted certificate or a lost network fails
+/// them all, and the viewer would wait through three failures for the same
+/// answer.
+nonisolated enum PlaybackSourceRefusal: Equatable {
+    case signedOut
+    case forbidden
+    case missing
+    case untrustedCertificate
+    case offline
+    case unreachable
+
+    /// Nil for anything a lower rung might still get past, a 5xx or a
+    /// dropped connection included.
+    init?(_ transport: PlaybackTransportFailure?) {
+        switch transport {
+        case .httpStatus(401): self = .signedOut
+        case .httpStatus(403): self = .forbidden
+        case .httpStatus(404), .httpStatus(410): self = .missing
+        case .urlError(let code) where Self.certificateErrors.contains(code): self = .untrustedCertificate
+        case .urlError(let code) where Self.offlineErrors.contains(code): self = .offline
+        case .urlError(let code) where Self.unreachableErrors.contains(code): self = .unreachable
+        default: return nil
+        }
+    }
+
+    var message: String {
+        switch self {
+        case .signedOut: "The server no longer accepts this sign-in. Sign in again and try once more."
+        case .forbidden: "The server refused to play this item for this account."
+        case .missing: "The server could not find this item's file."
+        case .untrustedCertificate: "The server's certificate isn't trusted, so the video could not load."
+        case .offline: "You're offline. Connect to the internet and try again."
+        case .unreachable: "The server can't be reached. Check that it's running and try again."
+        }
+    }
+
+    /// `NSURLErrorServerCertificate…` and `NSURLErrorSecureConnectionFailed`,
+    /// `NSURLErrorClientCertificate…`.
+    private static let certificateErrors: Set<Int> = [-1200, -1201, -1202, -1203, -1204, -1205, -1206]
+    /// Not connected, roaming off, data not allowed.
+    private static let offlineErrors: Set<Int> = [-1009, -1018, -1020]
+    /// Cannot find or connect to the host.
+    private static let unreachableErrors: Set<Int> = [-1003, -1004]
+}
+
 /// Which rung to try after a failure, or nil when the ladder is spent.
 ///
 /// Descend one rung at a time, and only on the engine's verdict: a transcode
