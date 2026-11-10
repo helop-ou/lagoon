@@ -206,6 +206,83 @@ final class SubtitlePreferencesStore {
         return values.followsSystemAppearance ? systemRenderStyle : customRenderStyle
     }
 
+    /// The same look for the engine to draw into the frames, where Picture
+    /// in Picture shows them.
+    var burnedInStyle: BurnedInSubtitleStyle {
+        guard values.followsSystemAppearance else {
+            return Self.burnedInStyle(
+                text: CGColor(gray: 1, alpha: 1),
+                background: CGColor(gray: 0, alpha: 1),
+                backgroundOpacity: values.background.opacity,
+                edge: values.edgeStyle,
+                scale: values.textSize.scale,
+                fontName: nil
+            )
+        }
+        var behavior = MACaptionAppearanceBehavior.useValue
+        let foreground = MACaptionAppearanceCopyForegroundColor(.user, &behavior).takeRetainedValue()
+        let foregroundOpacity = MACaptionAppearanceGetForegroundOpacity(.user, &behavior)
+        let background = MACaptionAppearanceCopyBackgroundColor(.user, &behavior).takeRetainedValue()
+        let backgroundOpacity = MACaptionAppearanceGetBackgroundOpacity(.user, &behavior)
+        let relativeSize = MACaptionAppearanceGetRelativeCharacterSize(.user, &behavior)
+        let descriptor = MACaptionAppearanceCopyFontDescriptorForStyle(.user, &behavior, .default).takeRetainedValue()
+        let edge: SubtitleEdgeStyle = switch MACaptionAppearanceGetTextEdgeStyle(.user, &behavior) {
+        case .none: .none
+        case .uniform: .outline
+        default: .shadow
+        }
+        return Self.burnedInStyle(
+            text: foreground.copy(alpha: CGFloat(foregroundOpacity)) ?? foreground,
+            background: background,
+            backgroundOpacity: backgroundOpacity,
+            edge: edge,
+            scale: max(relativeSize > 4 ? relativeSize / 100 : relativeSize, 0.5),
+            fontName: CTFontDescriptorCopyAttribute(descriptor, kCTFontNameAttribute) as? String
+        )
+    }
+
+    /// Text height as a share of the picture at the default size: about a
+    /// line in eighteen, as subtitles usually sit.
+    nonisolated static let burnedInRelativeSize = 0.055
+
+    nonisolated static func burnedInStyle(
+        text: CGColor,
+        background: CGColor,
+        backgroundOpacity: Double,
+        edge: SubtitleEdgeStyle,
+        scale: Double,
+        fontName: String?
+    ) -> BurnedInSubtitleStyle {
+        let burnedInEdge: BurnedInSubtitleStyle.Edge = switch edge {
+        case .none: .none
+        case .shadow: .dropShadow
+        case .outline: .outline
+        }
+        return BurnedInSubtitleStyle(
+            textColor: subtitleColor(text),
+            edgeColor: SubtitleTextColor(red: 0, green: 0, blue: 0, alpha: 242),
+            edge: burnedInEdge,
+            backgroundColor: subtitleColor(background, opacity: backgroundOpacity),
+            relativeSize: burnedInRelativeSize * scale,
+            fontName: fontName
+        )
+    }
+
+    /// sRGB bytes, with `opacity` multiplied into the colour's own alpha.
+    nonisolated static func subtitleColor(_ color: CGColor, opacity: Double = 1) -> SubtitleTextColor {
+        let sRGB = CGColorSpace(name: CGColorSpace.sRGB)!
+        let converted = color.converted(to: sRGB, intent: .defaultIntent, options: nil) ?? color
+        let components = converted.components ?? [1, 1, 1, 1]
+        func byte(_ value: CGFloat) -> UInt8 { UInt8(clamping: Int((min(max(value, 0), 1) * 255).rounded())) }
+        let rgb = components.count >= 3 ? Array(components.prefix(3)) : Array(repeating: components.first ?? 1, count: 3)
+        return SubtitleTextColor(
+            red: byte(rgb[0]),
+            green: byte(rgb[1]),
+            blue: byte(rgb[2]),
+            alpha: byte(converted.alpha * CGFloat(opacity))
+        )
+    }
+
     static var systemCaptionLanguages: [String] {
         let selected = MACaptionAppearanceCopySelectedLanguages(.user).takeRetainedValue() as? [String] ?? []
         return deduplicated((selected + Locale.preferredLanguages).compactMap(normalizedLanguage))

@@ -16,6 +16,9 @@ final class SampleBufferPictureInPicture: NSObject {
     @ObservationIgnored var onStarted: (() -> Void)?
     @ObservationIgnored var onStopped: (() -> Void)?
     @ObservationIgnored var onRestore: ((@escaping (Bool) -> Void) -> Void)?
+    /// How the engine should draw subtitles into the frames while the
+    /// window shows, where the player's own overlay is gone. Nil draws none.
+    @ObservationIgnored var subtitleStyle: (() -> BurnedInSubtitleStyle?)?
 
     @ObservationIgnored private weak var engine: (any PlayerEngine)?
     @ObservationIgnored private var controller: AVPictureInPictureController?
@@ -25,8 +28,7 @@ final class SampleBufferPictureInPicture: NSObject {
         if controller?.contentSource?.sampleBufferDisplayLayer === displayLayer {
             // Handoff keeps the layer. Swap only the engine so active PiP
             // survives.
-            self.engine = engine
-            invalidatePlaybackState()
+            handOff(to: engine)
             return
         }
         detach()
@@ -54,6 +56,17 @@ final class SampleBufferPictureInPicture: NSObject {
         }
     }
 
+    /// The next engine takes the same window: the outgoing one stops drawing
+    /// subtitles and the incoming one starts.
+    func handOff(to engine: any PlayerEngine) {
+        self.engine?.setPictureInPictureSubtitles(nil)
+        self.engine = engine
+        if isActive {
+            engine.setPictureInPictureSubtitles(subtitleStyle?() ?? nil)
+        }
+        invalidatePlaybackState()
+    }
+
     func toggle() {
         guard let controller else { return }
         if controller.isPictureInPictureActive || isTransitioning {
@@ -69,6 +82,7 @@ final class SampleBufferPictureInPicture: NSObject {
     }
 
     func detach() {
+        engine?.setPictureInPictureSubtitles(nil)
         possibilityObservation?.invalidate()
         possibilityObservation = nil
         if controller?.isPictureInPictureActive == true {
@@ -87,6 +101,7 @@ final class SampleBufferPictureInPicture: NSObject {
         onStarted = nil
         onStopped = nil
         onRestore = nil
+        subtitleStyle = nil
         detach()
     }
 }
@@ -146,6 +161,7 @@ extension SampleBufferPictureInPicture: AVPictureInPictureControllerDelegate {
     ) {
         isTransitioning = false
         isActive = true
+        engine?.setPictureInPictureSubtitles(subtitleStyle?() ?? nil)
         onStarted?()
     }
 
@@ -168,6 +184,7 @@ extension SampleBufferPictureInPicture: AVPictureInPictureControllerDelegate {
     ) {
         isTransitioning = false
         isActive = false
+        engine?.setPictureInPictureSubtitles(nil)
         onStopped?()
     }
 
