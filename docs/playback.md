@@ -368,6 +368,15 @@ An offset fixes a subtitle file rather than one viewing, so
 for that item: a fallback rung, a replay or a reopened player starts in
 step.
 
+**Sound:** Night Mode and Dialogue Boost sit in the same tab and the channel
+limit (Off, 5.1, Stereo) in Settings, Audio: the toggles suit a moment, the
+limit suits the room. All three are per-account preferences
+(`TrackPreferenceValues`), become the engine's `AudioShaping`, and are set
+before `prepare` so a title opens shaped. A toggle in the player applies at
+once with a short re-demux and is kept for the next title. While any of them
+is on, audio decodes on the device, so Atmos plays without its height
+channels, which both places say.
+
 **iPhone and iPad controls:**
 
 - A surface tap toggles the transport. Centre play/pause and ±10 s buttons use
