@@ -61,6 +61,13 @@ failure-driven delivery ladder go direct play → remux → video transcode.
 - **A `.delivery` verdict never skips to the re-encode.** It goes to remux
   first, and only a remux that fails too, for either cause, falls to the
   transcode.
+- **A source that refused ends the ladder.** When the engine reports what
+  the network answered (`PlaybackEngineFailure.transport`), a 401, 403, 404
+  or 410, an untrusted certificate, no network or an unreachable host stops
+  the ladder at once (`PlaybackSourceRefusal`). Every rung comes from the same
+  server with the same sign-in over the same network, so each would fail the
+  same way. The viewer is told what they can do instead. A 5xx, a timeout or
+  a dropped connection still descends.
 - **A start that stops getting anywhere ends in an error, not a rung.** The
   engine has no stall detection before its first frame, so the controller's
   start watchdog gives up and reports `playback.startStalled`. It is not a
