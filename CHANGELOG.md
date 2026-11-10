@@ -27,6 +27,7 @@ report. One marketing version spans many builds.
 - Setup lists the Jellyfin servers on your local network, so you can pick yours instead of typing its address.
 - The player says when the server converts what you're watching, and when a quality limit was the only reason, offers to play the original instead.
 - Settings, About links to Lagoon's source code on GitHub. On Apple TV it shows a code to scan.
+- Subtitles keep showing in Picture in Picture, in your chosen subtitle style.
 
 ### Improvements
 

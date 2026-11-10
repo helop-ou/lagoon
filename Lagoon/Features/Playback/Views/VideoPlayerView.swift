@@ -101,6 +101,7 @@ struct VideoPlayerView: View {
                 pictureInPicture.reset()
                 controller.close()
             }
+            pictureInPicture.subtitleStyle = { [subtitlePreferences] in subtitlePreferences.burnedInStyle }
             pictureInPicture.onStarted = { [weak controller] in
                 #if os(iOS)
                 controller?.pictureRouteDidChange()
