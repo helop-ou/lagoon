@@ -136,6 +136,7 @@ struct PlaybackFallbackTests {
 
     private func retry(
         _ cause: PlaybackEngineFailure.Cause,
+        transport: PlaybackTransportFailure? = nil,
         from current: PlaybackDelivery = .negotiated,
         isClosed: Bool = false,
         isFallingBack: Bool = false,
@@ -143,11 +144,45 @@ struct PlaybackFallbackTests {
     ) -> PlaybackDelivery? {
         PlaybackController.fallbackDelivery(
             after: cause,
+            transport: transport,
             from: current,
             isClosed: isClosed,
             isFallingBack: isFallingBack,
             canNegotiate: canNegotiate
         )
+    }
+
+    /// A refused sign-in, a missing file, an untrusted certificate or a lost
+    /// network fails every rung the same way, so the ladder stops at once.
+    @Test func aSourceThatRefusedEndsTheLadder() {
+        for transport: PlaybackTransportFailure in [
+            .httpStatus(401), .httpStatus(403), .httpStatus(404), .httpStatus(410),
+            .urlError(-1202), .urlError(-1009), .urlError(-1004),
+        ] {
+            #expect(retry(.delivery, transport: transport) == nil, "\(transport)")
+            #expect(retry(.delivery, transport: transport, from: .remux) == nil, "\(transport)")
+            #expect(PlaybackSourceRefusal(transport) != nil)
+        }
+    }
+
+    /// A server error or a dropped connection may not happen on another
+    /// rung, and a damaged sample is still a verdict on the bitstream.
+    @Test func whatALowerRungMightGetPastStillDescends() {
+        #expect(retry(.delivery, transport: .httpStatus(500)) == .remux)
+        #expect(retry(.delivery, transport: .httpStatus(503)) == .remux)
+        #expect(retry(.delivery, transport: .urlError(-1005)) == .remux)
+        #expect(retry(.delivery, transport: .urlError(-1001)) == .remux)
+        #expect(retry(.undecodable) == .transcode)
+    }
+
+    @Test func eachRefusalSaysWhatTheViewerCanDo() {
+        #expect(PlaybackSourceRefusal(.httpStatus(401)) == .signedOut)
+        #expect(PlaybackSourceRefusal(.httpStatus(404)) == .missing)
+        #expect(PlaybackSourceRefusal(.urlError(-1202)) == .untrustedCertificate)
+        #expect(PlaybackSourceRefusal(.urlError(-1009)) == .offline)
+        #expect(PlaybackSourceRefusal(.urlError(-1003)) == .unreachable)
+        #expect(PlaybackSourceRefusal(nil) == nil)
+        #expect(PlaybackSourceRefusal.signedOut.message.contains("Sign in again"))
     }
 
     /// A delivery failure on the first rung costs a remux, never a straight
