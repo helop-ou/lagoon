@@ -75,6 +75,11 @@ struct EngineDiagnosticsBridge: EngineDiagnosticSink {
         case .playbackRendererRecovery: .playbackRendererRecovery
         case .playbackCacheFallback: .playbackCacheFallback
         case .playbackSubtitleLoadFailed: .playbackSubtitleLoadFailed
+        case .playbackStartup: .playbackStartup
+        case .playbackSlowStart: .playbackSlowStart
+        // The engine adds values in minor releases. Until mapped, a new one
+        // still reaches the history, under one code.
+        default: .engineUnknown
         }
     }
 
@@ -83,6 +88,7 @@ struct EngineDiagnosticsBridge: EngineDiagnosticSink {
         case .playbackStall: .playbackStall
         case .playbackRendererRecovery: .playbackRendererRecovery
         case .playbackSubtitleLoadFailed: .playbackSubtitleLoadFailed
+        default: .engineUnknown
         }
     }
 

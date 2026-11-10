@@ -21,6 +21,13 @@ nonisolated enum DiagnosticEventCode: String, Sendable, CaseIterable {
     case playbackFinished = "playback.finished"
     case playbackStop = "playback.stop"
     case playbackFailure = "playback.failure"
+    /// Milliseconds from the request to each startup step and the first
+    /// frame.
+    case playbackStartup = "playback.startup"
+    /// Nothing back from the source five seconds into a start.
+    case playbackSlowStart = "playback.slowStart"
+    /// An engine event this build has no code for yet.
+    case engineUnknown = "engine.unknown"
     /// Watch Together: membership and transport, never which group, item
     /// or people.
     case syncPlayJoin = "syncplay.join"
