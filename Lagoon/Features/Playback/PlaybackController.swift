@@ -1473,6 +1473,7 @@ final class PlaybackController {
         lastKnownPosition = currentPosition
         let next = Self.fallbackDelivery(
             after: failure.cause,
+            transport: failure.transport,
             from: delivery,
             isClosed: isClosed,
             isFallingBack: isFallingBack,
@@ -1499,22 +1500,24 @@ final class PlaybackController {
         finishEpisodeHandoff(outcome: "failed")
         incidents.endAttempt(engine: engine, outcome: "failed")
         let report = beginStop()
-        errorMessage = failure.message
+        errorMessage = PlaybackSourceRefusal(failure.transport)?.message ?? failure.message
         // beginStop claims the report, so a later onDisappear stays idempotent.
         _ = report
     }
 
     /// The rung to retry on after an engine failure, or nil when the failure
     /// is final: the player is closing, a fallback is already under way and
-    /// owns the next attempt, or there is nothing to negotiate with.
+    /// owns the next attempt, there is nothing to negotiate with, or the
+    /// source itself refused (`PlaybackSourceRefusal`).
     nonisolated static func fallbackDelivery(
         after cause: PlaybackEngineFailure.Cause,
+        transport: PlaybackTransportFailure? = nil,
         from current: PlaybackDelivery,
         isClosed: Bool,
         isFallingBack: Bool,
         canNegotiate: Bool
     ) -> PlaybackDelivery? {
-        guard !isClosed, !isFallingBack, canNegotiate else { return nil }
+        guard !isClosed, !isFallingBack, canNegotiate, PlaybackSourceRefusal(transport) == nil else { return nil }
         return PlaybackFallbackPolicy.next(after: current, cause: cause)
     }
 
