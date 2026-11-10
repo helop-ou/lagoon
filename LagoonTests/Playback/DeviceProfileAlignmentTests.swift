@@ -374,9 +374,9 @@ struct DeviceProfileAlignmentTests {
         // which has no High 10 decoder.
         let capabilities = PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: true)
         #expect(!FFmpegDemuxer.usesCompressedVideoPath(
-            codecID: AV_CODEC_ID_H264, capabilities: capabilities, highBitDepth: true
+            codecID: AV_CODEC_ID_H264, capabilities: capabilities, outsideHardwareProfile: true
         ))
-        #expect(SoftwareVideoDecoder.supports(codecID: AV_CODEC_ID_H264, highBitDepth: true))
+        #expect(SoftwareVideoDecoder.supports(codecID: AV_CODEC_ID_H264, outsideHardwareProfile: true))
     }
 
     @Test func sidecarScriptsAreRequestedAsScriptsNotVTT() {
