@@ -12,6 +12,7 @@ struct PlayerControlPanel: View {
     let subtitleTracks: [PlayerTrack]
     let audioDelay: Double
     var subtitleOffset: Double = 0
+    var audioShaping = AudioShaping.off
     let playbackRate: Double
     var subtitleSearch: SubtitleSearchCoordinator? = nil
     var subtitleLoadState: SubtitleLoadState = .idle
@@ -26,10 +27,14 @@ struct PlayerControlPanel: View {
     let onSelectSubtitleTrack: (Int?) -> Void
     let onSetAudioDelay: (Double) -> Void
     var onSetSubtitleOffset: ((Double) -> Void)? = nil
+    var onSetNightMode: ((Bool) -> Void)? = nil
+    var onSetDialogueBoost: ((Bool) -> Void)? = nil
     let onSetPlaybackRate: (Double) -> Void
     var onDismiss: (() -> Void)? = nil
 
     private static var togetherIgnoreWaitID: String { "together-ignore-wait" }
+    private static var nightModeID: String { "night-mode" }
+    private static var dialogueBoostID: String { "dialogue-boost" }
     private static var togetherLeaveID: String { "together-leave" }
     private static var subtitleOffID: String { "subtitle-off" }
     private static var subtitleSearchID: String { "subtitle-search" }
@@ -406,7 +411,51 @@ struct PlayerControlPanel: View {
                     onDecrement: { onSetSubtitleOffset(subtitleOffset - 0.1) }
                 )
             }
+            if let onSetNightMode, let onSetDialogueBoost {
+                shapingToggle(
+                    "Night Mode",
+                    isOn: audioShaping.nightMode,
+                    focusID: Self.nightModeID,
+                    identifier: "player.nightMode",
+                    action: onSetNightMode
+                )
+                shapingToggle(
+                    "Dialogue Boost",
+                    isOn: audioShaping.dialogueBoost,
+                    focusID: Self.dialogueBoostID,
+                    identifier: "player.dialogueBoost",
+                    action: onSetDialogueBoost
+                )
+                Text("Night Mode evens out loud and quiet scenes. While either is on, audio is decoded on this device, so Dolby Atmos plays as surround.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
+    }
+
+    @ViewBuilder
+    private func shapingToggle(
+        _ title: LocalizedStringKey,
+        isOn: Bool,
+        focusID: String,
+        identifier: String,
+        action: @escaping (Bool) -> Void
+    ) -> some View {
+        #if os(tvOS)
+        Button {
+            action(!isOn)
+        } label: {
+            TVCheckmarkToggleLabel(title: title, isOn: isOn)
+        }
+        .buttonStyle(.glass)
+        .focused(focus, equals: .track(focusID))
+        .accessibilityValue(isOn ? "On" : "Off")
+        .accessibilityIdentifier(identifier)
+        #else
+        Toggle(title, isOn: Binding(get: { isOn }, set: action))
+            .accessibilityIdentifier(identifier)
+        #endif
     }
 
     private var videoCard: some View {

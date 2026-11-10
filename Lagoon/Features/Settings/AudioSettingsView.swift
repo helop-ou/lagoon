@@ -3,6 +3,9 @@ import SwiftUI
 struct AudioSettingsView: View {
     @Bindable var trackPreferences: TrackPreferencesStore
 
+    private static let channelLimitFooter: LocalizedStringKey =
+        "Downmixes wider audio for TV speakers or headphones. While a limit is on, audio is decoded on this device, so Dolby Atmos plays without its height channels. Night Mode and Dialogue Boost are in the player's Audio tab."
+
     private var audioMode: AudioDefaultMode { trackPreferences.values.audioMode }
 
     private var primaryLanguage: Binding<String?> {
@@ -61,6 +64,15 @@ struct AudioSettingsView: View {
                     options: SettingsLanguageOptions.tvOptions(includeNone: true)
                 )
             }
+
+            TVSettingsSection("Sound", footer: Self.channelLimitFooter) {
+                TVSettingsMenuPicker(
+                    title: "Channel Limit",
+                    accessibilityIdentifier: "settings.audio.channelLimit",
+                    selection: $trackPreferences.values.channelLimit,
+                    optionTitle: \.title
+                )
+            }
         }
     }
     #else
@@ -82,6 +94,19 @@ struct AudioSettingsView: View {
                 Text("Language Selection")
             } footer: {
                 Text(audioMode.settingsDescription)
+            }
+
+            Section {
+                Picker("Channel Limit", selection: $trackPreferences.values.channelLimit) {
+                    ForEach(AudioChannelLimit.allCases) { limit in
+                        Text(limit.title).tag(limit)
+                    }
+                }
+                .accessibilityIdentifier("settings.audio.channelLimit")
+            } header: {
+                Text("Sound")
+            } footer: {
+                Text(Self.channelLimitFooter)
             }
         }
     }

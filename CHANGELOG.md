@@ -29,6 +29,7 @@ report. One marketing version spans many builds.
 - Settings, About links to Lagoon's source code on GitHub. On Apple TV it shows a code to scan.
 - Subtitles keep showing in Picture in Picture, in your chosen subtitle style.
 - Subtitles that run early or late can be moved from the player's Audio tab, and the title keeps the fix while Lagoon runs.
+- Night Mode and Dialogue Boost in the player's Audio tab make quiet speech easier to follow, and Settings, Audio can limit sound to 5.1 or stereo for TV speakers and headphones.
 
 ### Improvements
 
