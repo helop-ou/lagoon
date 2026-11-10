@@ -56,6 +56,11 @@ struct EngineConfigurationTests {
 
         let incidentCodes = EngineDiagnosticIncident.allCases.map(EngineDiagnosticsBridge.code(for:))
         #expect(Set(incidentCodes).count == EngineDiagnosticIncident.allCases.count)
+        // The fallback is for values a newer engine adds, never for ones
+        // this build knows.
+        #expect(!eventCodes.contains(.engineUnknown))
+        #expect(!incidentCodes.contains(.engineUnknown))
+        #expect(EngineDiagnosticsBridge.code(for: EngineDiagnosticEvent(rawValue: "somethingNew")) == .engineUnknown)
 
         #expect(EngineDiagnosticsBridge.code(for: .playbackCacheFallback) == .playbackCacheFallback)
         #expect(EngineDiagnosticsBridge.level(for: .warning) == .warning)

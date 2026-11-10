@@ -144,6 +144,11 @@ nonisolated enum DiagnosticSchema {
         "videoSuspended": .bool,
         "playedSeconds": .double,
         "elapsedMs": .double,
+        // Milliseconds from the request to each step of a start.
+        "firstByteMs": .int,
+        "containerOpenedMs": .int,
+        "streamsProbedMs": .int,
+        "firstFrameMs": .int,
         "sinceSeekMs": .double,
         "sinceTrackSwitchMs": .double,
         "frozenSeconds": .double,

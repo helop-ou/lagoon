@@ -28,6 +28,8 @@ nonisolated enum DiagnosticIncidentCode: String, Sendable, CaseIterable {
     case apiRequestFailed = "api.requestFailed"
     /// A response the app could not decode.
     case apiDecodeFailed = "api.decodeFailed"
+    /// An engine incident this build has no code for yet.
+    case engineUnknown = "engine.unknown"
 }
 
 /// One report, built by `DiagnosticsHub`.
