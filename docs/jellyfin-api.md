@@ -564,9 +564,10 @@ The connect screen lists the servers that answer Jellyfin's client discovery
 - Picking a server puts its address in the field and connects through the
   normal path, so the probe, proxy headers and errors are the typed ones.
 - On a physical iPhone or iPad the broadcast needs the multicast networking
-  entitlement (`com.apple.developer.networking.multicast`), which Apple grants
-  on request. Without it the send fails with "No route to host" and the list
-  stays empty. Apple TV and the simulators need no entitlement.
+  entitlement (`com.apple.developer.networking.multicast`), which Apple granted
+  on request. Only device builds for iOS carry it, through
+  `Lagoon-iOS.entitlements`. Without it the send fails with "No route to host"
+  and the list stays empty. Apple TV and the simulators need no entitlement.
 - Servers in Docker on bridge networking or on another subnet never hear the
   broadcast. Typing the address covers them.
 
