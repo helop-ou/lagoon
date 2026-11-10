@@ -11,6 +11,7 @@ struct PlayerControlPanel: View {
     let audioTracks: [PlayerTrack]
     let subtitleTracks: [PlayerTrack]
     let audioDelay: Double
+    var subtitleOffset: Double = 0
     let playbackRate: Double
     var subtitleSearch: SubtitleSearchCoordinator? = nil
     var subtitleLoadState: SubtitleLoadState = .idle
@@ -24,6 +25,7 @@ struct PlayerControlPanel: View {
     let onSelectAudioTrack: (Int?) -> Void
     let onSelectSubtitleTrack: (Int?) -> Void
     let onSetAudioDelay: (Double) -> Void
+    var onSetSubtitleOffset: ((Double) -> Void)? = nil
     let onSetPlaybackRate: (Double) -> Void
     var onDismiss: (() -> Void)? = nil
 
@@ -391,6 +393,19 @@ struct PlayerControlPanel: View {
                 onIncrement: { onSetAudioDelay(audioDelay + 0.1) },
                 onDecrement: { onSetAudioDelay(audioDelay - 0.1) }
             )
+            // Beside the audio delay: both put sound and text back in step
+            // with the picture. Positive shows subtitles later.
+            if let onSetSubtitleOffset, !subtitleTracks.isEmpty {
+                adjustmentRow(
+                    "Subtitle Offset",
+                    value: String(format: "%+.1f s", subtitleOffset),
+                    isDefault: subtitleOffset == 0,
+                    accessibilityValue: String(format: "%.1f seconds", subtitleOffset),
+                    identifier: "player.subtitleOffset",
+                    onIncrement: { onSetSubtitleOffset(subtitleOffset + 0.1) },
+                    onDecrement: { onSetSubtitleOffset(subtitleOffset - 0.1) }
+                )
+            }
         }
     }
 
@@ -853,8 +868,10 @@ private enum PlayerPanelMetrics {
     static let cardPadding: CGFloat = 24
     static let posterWidth: CGFloat = 112
     static let posterHeight = posterWidth * 1.5
-    static let audioTrackColumnWidth: CGFloat = 720
-    static let audioOptionsColumnWidth: CGFloat = 520
+    static let audioTrackColumnWidth: CGFloat = 660
+    /// Wide enough for an adjustment row with the longest title, so every
+    /// row's controls end on the same edge.
+    static let audioOptionsColumnWidth: CGFloat = 580
     static let videoTrackColumnWidth: CGFloat = 560
 }
 #endif
