@@ -101,7 +101,9 @@ asserts none reach the envelope bytes.
 `.play`, `.pause`, `.seek`, `.track`, `.subtitleLoadFailed`, `.stallBegin`,
 `.stallEnd`, `.rendererRecovery`, `.cacheFallback`, `.sample`, `.fallback`,
 `.handoffBegin`, `.handoffEnd`, `.finished`, `.stop`, `.failure`,
-`audio.interruption`, `audio.route`, `api.failure`, `api.sessionExpired`,
+`.startup` (milliseconds to each step and the first frame), `.slowStart`
+(nothing back from the source five seconds in), `engine.unknown` (an engine
+event this build has no code for yet), `audio.interruption`, `audio.route`, `api.failure`, `api.sessionExpired`,
 `app.memoryWarning`, `app.thermal`, `app.foreground`, `app.background`.
 
 `DiagnosticIncidentCode` names the reports and their fingerprints:
@@ -120,6 +122,7 @@ asserts none reach the envelope bytes.
 | `playback.startStalled` | error | `noProgress` / `tooSlow` | no first frame, and no bytes or queued packets for 30 s, or no first frame after 120 s |
 | `api.requestFailed` | warning (5xx) / error | client, route token, status or domain+code | non-2xx, or a transport error that is not expected |
 | `api.decodeFailed` | error | client, route token, kind, key | a 2xx body the app could not decode |
+| `engine.unknown` | the engine's | the engine's variant | an engine incident this build has no code for yet; none of the engine's current ones lands here |
 
 Sentry groups on the fingerprint verbatim: `[code] + variant`. The build is a
 tag and part of the release, but the fingerprint excludes it. Values that
