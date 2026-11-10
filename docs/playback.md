@@ -413,6 +413,13 @@ integration](reference/playback/system-integration.md).
 - The swipe down requests PiP, and only PiP's successful start callback hides
   fullscreen. Restore reuses the same controller. Closing PiP or withdrawing
   the request cleans up, and `onDismiss` still reaches the requesting screen.
+- PiP shows only the display layer, so the subtitle overlay is gone there.
+  While the window shows, `SampleBufferPictureInPicture` has the engine draw
+  the chosen subtitles into the frames (`setPictureInPictureSubtitles`) in the
+  viewer's subtitle look (`SubtitlePreferencesStore.burnedInStyle`), moves
+  that to the next engine on a handoff inside the window, and turns it off
+  when the window closes or the player goes. On H.264 with subtitles on, the
+  engine re-demuxes as the window opens, a short rebuffer.
 - **Never present the host from inside a `NavigationStack` destination.** A
   presenter in a pushed detail page closed the player about a second after it
   opened, from any detail page.
