@@ -359,6 +359,14 @@ playhead's 0.1 s updates move only the fills. It keeps one height,
 `Metrics.scrubberHeight`, so it is easy to see and to drag. Glass over live
 video costs the compositor, so bench any change to it.
 
+**Audio options:** the panel's Audio tab keeps Audio Delay and, when the
+title has subtitles, Subtitle Offset side by side, both 0.1 s steps.
+Positive shows subtitles later, and text, bitmap and styled tracks all move.
+An offset fixes a subtitle file rather than one viewing, so
+`PlaybackController` keeps it per item while the app runs
+(`SubtitleOffsetMemory`) and gives it to every engine for that item: a
+fallback rung, a replay or a reopened player starts in step.
+
 **iPhone and iPad controls:**
 
 - A surface tap toggles the transport. Centre play/pause and ±10 s buttons use
