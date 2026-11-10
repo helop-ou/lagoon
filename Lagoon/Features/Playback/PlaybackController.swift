@@ -113,6 +113,8 @@ final class PlaybackController {
     /// `errorMessage`.
     private(set) var deliveryFallbacks: [PlaybackDeliveryFallbackRecord] = []
     private var itemId = ""
+    /// For the app's lifetime, across players: see `SubtitleOffsetMemory`.
+    private static var subtitleOffsets = SubtitleOffsetMemory()
     private var mediaSourceId = ""
     private var playMethod: PlayMethod = .directPlay
 
@@ -645,6 +647,10 @@ final class PlaybackController {
         )
         engine.setVideoOutputSuspended(videoOutputSuspended)
         engine.setHostInBackground(isInBackground)
+        let subtitleOffset = Self.subtitleOffsets.offset(for: media.id)
+        if subtitleOffset != 0 {
+            engine.setSubtitleOffset(subtitleOffset)
+        }
         return engine
     }
 
@@ -1326,6 +1332,19 @@ final class PlaybackController {
             seek: { [weak self] seconds, resume in self?.userSeek(to: seconds, resume: resume) },
             seekBy: { [weak self] seconds in self?.userSeek(by: seconds) }
         )
+    }
+
+    var adjustments: PlayerAdjustments {
+        PlayerAdjustments(
+            setSubtitleOffset: { [weak self] seconds in self?.setSubtitleOffset(seconds) }
+        )
+    }
+
+    /// Kept for the item, so the next engine for it starts in step.
+    private func setSubtitleOffset(_ seconds: Double) {
+        guard let engine else { return }
+        engine.setSubtitleOffset(seconds)
+        Self.subtitleOffsets.remember(engine.subtitleOffset, for: itemId)
     }
 
     func resumeBufferFill() {

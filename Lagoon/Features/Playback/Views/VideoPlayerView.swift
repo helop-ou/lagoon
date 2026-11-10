@@ -375,6 +375,7 @@ struct VideoPlayerView: View {
                 isWaitingForGroup: syncPlay.isWaitingForGroup,
                 subtitleStyle: subtitlePreferences.renderStyle,
                 subtitleSearch: controller.subtitleSearch,
+                adjustments: controller.adjustments,
                 qualityOffer: controller.qualityOffer,
                 transcodeNotice: controller.transcodeNotice
             ) { [weak engine] in

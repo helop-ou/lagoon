@@ -10,6 +10,7 @@ struct PlayerControlPanelHost: View, Equatable {
     let focus: FocusState<PlayerControlFocus?>.Binding
     let info: PlayerItemInfo
     var subtitleSearch: SubtitleSearchCoordinator? = nil
+    var adjustments: PlayerAdjustments? = nil
     var isPictureInPicturePossible = false
     var isPictureInPictureActive = false
     var onTogglePictureInPicture: (() -> Void)? = nil
@@ -35,6 +36,7 @@ struct PlayerControlPanelHost: View, Equatable {
             audioTracks: engine.audioTracks,
             subtitleTracks: engine.subtitleTracks,
             audioDelay: engine.audioDelay,
+            subtitleOffset: engine.subtitleOffset,
             playbackRate: engine.rate,
             subtitleSearch: subtitleSearch,
             subtitleLoadState: engine.subtitleLoadState,
@@ -51,6 +53,13 @@ struct PlayerControlPanelHost: View, Equatable {
                 engine.selectSubtitleTrack(id: id)
             },
             onSetAudioDelay: { engine.setAudioDelay($0) },
+            onSetSubtitleOffset: { seconds in
+                if let adjustments {
+                    adjustments.setSubtitleOffset(seconds)
+                } else {
+                    engine.setSubtitleOffset(seconds)
+                }
+            },
             onSetPlaybackRate: { engine.setRate($0) },
             onDismiss: onDismiss
         )

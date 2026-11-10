@@ -57,6 +57,7 @@ struct CustomPlayerView<Surface: View>: View {
     var isWaitingForGroup = false
     var subtitleStyle: SubtitleRenderStyle = .fallback
     var subtitleSearch: SubtitleSearchCoordinator? = nil
+    var adjustments: PlayerAdjustments? = nil
     /// A lower quality after repeated stalls, nil where nothing offers one.
     var qualityOffer: PlaybackQualityOffer? = nil
     /// The server converting what plays, nil where nothing says so.
@@ -830,6 +831,7 @@ struct CustomPlayerView<Surface: View>: View {
             focus: $playerFocus,
             info: info,
             subtitleSearch: subtitleSearch,
+            adjustments: adjustments,
             isPictureInPicturePossible: isPictureInPicturePossible,
             isPictureInPictureActive: isPictureInPictureActive,
             onTogglePictureInPicture: onTogglePictureInPicture,
