@@ -20,6 +20,10 @@ report. One marketing version spans many builds.
 
 ## Unreleased
 
+### Improvements
+
+- On a partly folded iPhone Duo, titles, buttons and poster grids stay clear of the fold.
+
 ## 0.9.0 (121)
 
 November 2026

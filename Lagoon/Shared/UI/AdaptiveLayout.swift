@@ -135,7 +135,7 @@ struct PosterLayout: DynamicProperty {
     /// iOS sizes cards to the column. The larger minimum needs regular size
     /// classes both ways (a Pro Max is regular width in landscape), and scales
     /// with Dynamic Type. tvOS keeps five columns. Zero width means not measured.
-    func grid(fitting availableWidth: CGFloat) -> PosterGrid {
+    func grid(fitting availableWidth: CGFloat, fold: FoldCrossing? = nil) -> PosterGrid {
         #if os(tvOS)
         return PosterGrid(columns: Metrics.posterGridColumns, columnCount: Metrics.gridColumns, cardWidth: nil)
         #else
@@ -144,18 +144,18 @@ struct PosterLayout: DynamicProperty {
         }
         let baseMinimum = PosterGridSizing.baseMinimum(horizontalSizeClass, verticalSizeClass)
         let spacing = browseSpacing.card
-        let count = PosterGridSizing.columnCount(
+        let split = PosterGridSizing.split(
             availableWidth: availableWidth,
+            fold: fold,
             baseMinimum: baseMinimum,
             scaledPosterWidth: scaledWidth,
             spacing: spacing
         )
-        let cardWidth = ((availableWidth - spacing * CGFloat(count - 1)) / CGFloat(count)).rounded(.down)
-        return PosterGrid(
-            columns: Array(repeating: GridItem(.flexible(), spacing: spacing), count: count),
-            columnCount: count,
-            cardWidth: cardWidth
-        )
+        var columns = Array(repeating: GridItem(.flexible(), spacing: spacing), count: split.count)
+        if let gutter = split.gutter {
+            columns[split.count / 2 - 1].spacing = gutter
+        }
+        return PosterGrid(columns: columns, columnCount: split.count, cardWidth: split.cardWidth)
         #endif
     }
 
@@ -209,10 +209,17 @@ struct PosterGridView<Item: Identifiable, Card: View, Trailing: View>: View {
     @ViewBuilder var trailing: () -> Trailing
 
     @State private var gridWidth: CGFloat = 0
+    #if os(iOS)
+    @State private var fold: FoldCrossing?
+    #endif
     private let layout = PosterLayout()
 
     var body: some View {
+        #if os(iOS)
+        let grid = layout.grid(fitting: gridWidth, fold: fold)
+        #else
         let grid = layout.grid(fitting: gridWidth)
+        #endif
         LazyVGrid(columns: grid.columns, spacing: layout.rowSpacing) {
             ForEach(Array(items.enumerated()), id: \.element.id) { index, item in
                 card(item)
@@ -225,6 +232,9 @@ struct PosterGridView<Item: Identifiable, Card: View, Trailing: View>: View {
         }
         .environment(\.posterCardWidth, grid.cardWidth)
         .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { gridWidth = $0 }
+        #if os(iOS)
+        .onFoldCrossingChange { fold = $0 }
+        #endif
     }
 }
 
@@ -264,6 +274,36 @@ enum PosterGridSizing {
         let typeScale = max(scaledPosterWidth / Metrics.posterWidth, 1)
         let minimum = min(baseMinimum * typeScale, Metrics.accessibilityPosterWidth)
         return max(1, Int(((availableWidth + spacing) / (minimum + spacing)).rounded(.down)))
+    }
+
+    /// Across a fold, the same number of columns on each side, with the gap
+    /// between the two halves over the fold. Gutter is nil without a fold.
+    static func split(
+        availableWidth: CGFloat,
+        fold: FoldCrossing?,
+        baseMinimum: CGFloat,
+        scaledPosterWidth: CGFloat,
+        spacing: CGFloat
+    ) -> (count: Int, gutter: CGFloat?, cardWidth: CGFloat) {
+        guard let fold else {
+            let count = columnCount(
+                availableWidth: availableWidth,
+                baseMinimum: baseMinimum,
+                scaledPosterWidth: scaledPosterWidth,
+                spacing: spacing
+            )
+            return (count, nil, ((availableWidth - spacing * CGFloat(count - 1)) / CGFloat(count)).rounded(.down))
+        }
+        let gutter = FoldLayout.gutter(width: availableWidth, crossing: fold, spacing: spacing)
+        let half = columnCount(
+            availableWidth: (availableWidth - gutter) / 2,
+            baseMinimum: baseMinimum,
+            scaledPosterWidth: scaledPosterWidth,
+            spacing: spacing
+        )
+        let count = half * 2
+        let cardWidth = ((availableWidth - gutter - spacing * CGFloat(count - 2)) / CGFloat(count)).rounded(.down)
+        return (count, gutter, cardWidth)
     }
 }
 #endif
