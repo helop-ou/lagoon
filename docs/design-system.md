@@ -350,9 +350,23 @@ A closed Duo moves the tab bar and toolbars into a vertical strip at the side.
   `VerticalBarSearchActivation` sets `.searchTabSelection` while
   `toolbarVerticalEdge` is set.
 
+Partly folded like a book, the fold runs down the middle of the open Duo.
+`onFoldCrossingChange` reads the active `.division` region in a view's own
+coordinates, and `FoldLayout` keeps text and controls on one side of it:
+
+- The detail page's leading column and the Home hero's text end
+  `FoldLayout.margin` before the fold.
+- A poster grid puts the same number of columns on each side, with the gap
+  between the halves over the fold.
+- Content that scrolls through a fold running across (the laptop pose) is
+  left alone, as system lists leave it.
+
+`foldFramesOverride` stands in for the fold in snapshot tests, since no
+simulator API can fold the device.
+
 `AdaptiveLayoutRulesTests` fails on a read of the idiom outside diagnostics
 and on a toolbar button without a symbol. `WideLayoutSnapshotTests` pins the
-open-Duo, portrait and landscape pages. `DuoLayoutUITests` opens Search on a
+open-Duo, folded-Duo, portrait and landscape pages. `DuoLayoutUITests` opens Search on a
 closed Duo, in CI on every pull request.
 
 ## iPhone accessibility and browsing
