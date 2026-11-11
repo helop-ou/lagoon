@@ -115,6 +115,13 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
         DetailLayout.usesLeadingColumn(horizontalSizeClass, verticalSizeClass)
     }
 
+    @State private var fold: FoldCrossing?
+
+    private var columnWidth: CGFloat {
+        guard usesLeadingColumn else { return .infinity }
+        return min(Metrics.expandedDetailColumnWidth, FoldLayout.leadingWidth(before: fold, inset: 0) ?? .infinity)
+    }
+
     private var compactAlignment: Alignment {
         usesLeadingColumn || usesLandscapeRow ? .leading : .center
     }
@@ -173,11 +180,9 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
         #if os(iOS)
         // Sizes the glass labels, circles and hit areas together.
         .controlSize(.large)
-        .frame(
-            maxWidth: usesLeadingColumn ? Metrics.expandedDetailColumnWidth : .infinity,
-            alignment: .leading
-        )
+        .frame(maxWidth: columnWidth, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .leading)
+        .onFoldCrossingChange { fold = $0 }
         #endif
         .padding(.horizontal, Metrics.screenGutter)
     }

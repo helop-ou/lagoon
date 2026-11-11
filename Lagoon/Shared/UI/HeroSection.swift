@@ -55,6 +55,8 @@ struct HeroSection<Route: Hashable>: View {
     private var usesExpandedLayout: Bool {
         DetailLayout.usesLeadingColumn(horizontalSizeClass, verticalSizeClass)
     }
+
+    @State private var fold: FoldCrossing?
     #endif
 
     /// The phone layout: smaller type and a smaller logo.
@@ -97,6 +99,18 @@ struct HeroSection<Route: Hashable>: View {
             : Metrics.heroHeight
         return max(baseHeight, textHeight + Metrics.heroLogoHeight + Metrics.Space.xxl)
         #endif
+    }
+
+    /// Card button labels get unbounded width. Keep text in the panel, and
+    /// before the fold.
+    private func textWidth(in width: CGFloat) -> CGFloat {
+        var limit = min(textColumnWidth, width - Metrics.heroTextInset * 2)
+        #if os(iOS)
+        if let beforeFold = FoldLayout.leadingWidth(before: fold, inset: Metrics.heroTextInset) {
+            limit = min(limit, beforeFold)
+        }
+        #endif
+        return max(0, limit)
     }
 
     private var textColumnWidth: CGFloat {
@@ -159,6 +173,9 @@ struct HeroSection<Route: Hashable>: View {
                 GeometryReader { proxy in
                     heroBody(for: current, width: proxy.size.width)
                 }
+                #if os(iOS)
+                .onFoldCrossingChange { fold = $0 }
+                #endif
                 .frame(height: panelHeight + (showsDotsBelowCard ? Metrics.Space.l + Metrics.heroDotSize : 0))
                 .padding(.horizontal, Metrics.screenGutter)
                 .onScrollVisibilityChange { isVisible = $0 }
@@ -300,8 +317,7 @@ struct HeroSection<Route: Hashable>: View {
                 ))
                 #endif
             }
-            // Card button labels get unbounded width. Keep text in the panel.
-            .frame(maxWidth: max(0, min(textColumnWidth, width - Metrics.heroTextInset * 2)), alignment: .leading)
+            .frame(maxWidth: textWidth(in: width), alignment: .leading)
             .padding(.leading, Metrics.heroTextInset)
             #if os(iOS)
             // Text sits low, above the page dots unless they sit below the card.
