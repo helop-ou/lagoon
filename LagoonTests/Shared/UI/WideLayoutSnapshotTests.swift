@@ -15,6 +15,9 @@ struct WideLayoutSnapshotTests {
     private static let duoOpen = CGSize(width: 669, height: 951)
     private static let phonePortrait = CGSize(width: 402, height: 874)
     private static let proMaxLandscape = CGSize(width: 956, height: 440)
+    /// Partly folded like a book: a fold down the middle of the open Duo,
+    /// in the coordinates of a view inset by the screen gutter.
+    private static let bookFold = CGRect(x: duoOpen.width / 2 - 6 - Metrics.screenGutter, y: 0, width: 12, height: 2000)
 
     private static let backdropURL = URL(string: "https://jellyfin.snapshot.test/Items/arrival/Images/Backdrop")!
     private static let posterURL = URL(string: "https://jellyfin.snapshot.test/Items/arrival/Images/Primary")!
@@ -53,6 +56,14 @@ struct WideLayoutSnapshotTests {
         )
     }
 
+    @Test func aFoldedDuoKeepsTheDetailColumnBeforeTheFold() async throws {
+        try await Snapshot.verify(
+            folded(detailPage(.regular, .regular)),
+            named: "detail-duo-book",
+            size: Self.duoOpen
+        )
+    }
+
     @Test func aPortraitPhoneGetsThePosterHero() async throws {
         try await Snapshot.verify(
             detailPage(.compact, .regular),
@@ -81,6 +92,15 @@ struct WideLayoutSnapshotTests {
         )
     }
 
+    @Test func aFoldedDuoKeepsTheHeroTextBeforeTheFold() async throws {
+        try await Snapshot.verify(
+            // Long enough to reach the fold unless it wraps before it.
+            folded(hero(.regular, .regular, title: "The Lord of the Rings: The Fellowship of the Ring")),
+            named: "hero-duo-book",
+            size: CGSize(width: Self.duoOpen.width, height: Metrics.expandedHeroHeight + 80)
+        )
+    }
+
     @Test func aPhoneGetsTheShortHero() async throws {
         try await Snapshot.verify(
             hero(.compact, .regular),
@@ -95,6 +115,14 @@ struct WideLayoutSnapshotTests {
         try await Snapshot.verify(
             try posterGrid(.regular, .regular),
             named: "grid-duo-open",
+            size: CGSize(width: Self.duoOpen.width, height: 360)
+        )
+    }
+
+    @Test func aFoldedDuoGridSplitsAroundTheFold() async throws {
+        try await Snapshot.verify(
+            folded(try posterGrid(.regular, .regular)),
+            named: "grid-duo-book",
             size: CGSize(width: Self.duoOpen.width, height: 360)
         )
     }
@@ -138,6 +166,19 @@ struct WideLayoutSnapshotTests {
     }
 
     // MARK: - Fixtures
+
+    /// The view as the book pose lays it out, with the fold drawn in so the
+    /// reference shows what must stay clear of it.
+    private func folded(_ view: some View) -> some View {
+        view
+            .environment(\.foldFramesOverride, [Self.bookFold])
+            .overlay(alignment: .leading) {
+                Color.red.opacity(0.5)
+                    .frame(width: Self.bookFold.width)
+                    .offset(x: Self.bookFold.minX + Metrics.screenGutter)
+                    .allowsHitTesting(false)
+            }
+    }
 
     /// A server that serves SyncPlay to a viewer who may join groups.
     private func joinableSyncPlay() async throws -> SyncPlayStore {
@@ -187,11 +228,15 @@ struct WideLayoutSnapshotTests {
         .environment(\.verticalSizeClass, vertical)
     }
 
-    private func hero(_ horizontal: UserInterfaceSizeClass, _ vertical: UserInterfaceSizeClass) -> some View {
+    private func hero(
+        _ horizontal: UserInterfaceSizeClass,
+        _ vertical: UserInterfaceSizeClass,
+        title: String = "Arrival"
+    ) -> some View {
         // No artwork: its palette arrives asynchronously.
         HeroSection(
             items: [
-                HeroItem(id: "arrival", title: "Arrival", overview: "A linguist works with the military to communicate with alien lifeforms.", backdropURL: nil, logoURL: nil, route: "arrival"),
+                HeroItem(id: "arrival", title: title, overview: "A linguist works with the military to communicate with alien lifeforms.", backdropURL: nil, logoURL: nil, route: "arrival"),
                 HeroItem(id: "dune", title: "Dune", overview: "A noble family becomes embroiled in a war for control of the galaxy's most valuable asset.", backdropURL: nil, logoURL: nil, route: "dune"),
             ],
             isActive: false
