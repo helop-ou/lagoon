@@ -369,9 +369,11 @@ for that item: a fallback rung, a replay or a reopened player starts in
 step.
 
 **Sound:** Night Mode, Dialogue Boost and the channel limit (Off, 5.1,
-Stereo) live behind the player's own Sound button, not in the panel: a native
-menu in the iOS toolbar beside Info, and a system menu on the tvOS row's
-Sound button (`PlayerSoundOptions`). The channel limit is in Settings, Audio too, since it
+Stereo) live behind the player's own Sound button, not in the panel: in the
+iOS toolbar beside Info, and on the tvOS row. On both it is a UIKit `UIButton`
+with a system `UIMenu` (`PlayerRowMenuButton`), which reports when it opens:
+a SwiftUI `Menu` does not, so the iPhone's controls faded under an open menu
+and took it with them. The channel limit is in Settings, Audio too, since it
 suits the room. A limit changed in the player is kept as the preference. All
 three are per-account preferences
 (`TrackPreferenceValues`), become the engine's `AudioShaping`, and are set
