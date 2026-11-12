@@ -2,7 +2,8 @@
 import LagoonEngine
 import SwiftUI
 
-/// The iOS centre cluster: play/pause with a ±10 s skip either side.
+/// The iOS centre cluster: play/pause with a ±10 s skip either side, and the
+/// previous and next titles outside those when a queue has them.
 ///
 /// Holds the engine weakly via `@PlayerEngineRef`, never strongly, so a stale
 /// copy after a handoff cannot leak the drained engine. Reading `isPaused`
@@ -12,13 +13,49 @@ struct PlayerTouchTransportCluster: View {
     /// `true` for the forward button, `false` for back.
     var onSkip: (Bool) -> Void
     var onTogglePlayPause: () -> Void
+    var episodes: PlayerEpisodeButtons? = nil
+    var onPrevious: () -> Void = {}
+    var onNext: () -> Void = {}
 
     var body: some View {
-        HStack(spacing: Metrics.Space.xl) {
+        HStack(spacing: isCompact ? Metrics.Space.s : Metrics.Space.xl) {
+            if let episodes {
+                episodeButton(forward: false, isAvailable: episodes.hasPrevious)
+            }
             skipButton(forward: false)
             playPauseButton
             skipButton(forward: true)
+            if let episodes {
+                episodeButton(forward: true, isAvailable: episodes.hasNext)
+            }
         }
+    }
+
+    /// Five buttons fit a phone held upright only with the skips and gaps
+    /// tightened.
+    private var isCompact: Bool { episodes != nil }
+
+    /// A missing side keeps its slot, so play/pause stays in the centre.
+    private func episodeButton(forward: Bool, isAvailable: Bool) -> some View {
+        Button {
+            forward ? onNext() : onPrevious()
+        } label: {
+            Label(
+                forward ? "Next" : "Previous",
+                systemImage: forward ? "forward.end.fill" : "backward.end.fill"
+            )
+            .labelStyle(.iconOnly)
+            .font(.title3.weight(.semibold))
+            .padding(Metrics.Space.s)
+        }
+        .buttonStyle(.glass(.clear))
+        .buttonBorderShape(.circle)
+        .foregroundStyle(.white)
+        .contentShape(Circle())
+        .opacity(isAvailable ? 1 : 0)
+        .disabled(!isAvailable)
+        .accessibilityHidden(!isAvailable)
+        .accessibilityIdentifier(forward ? "player.next" : "player.previous")
     }
 
     private func skipButton(forward: Bool) -> some View {
@@ -32,7 +69,7 @@ struct PlayerTouchTransportCluster: View {
             .labelStyle(.iconOnly)
             .font(.title.weight(.semibold))
             // Inside the label, so it grows the glass circle (~60pt).
-            .padding(Metrics.Space.l)
+            .padding(isCompact ? Metrics.Space.s : Metrics.Space.l)
         }
         .buttonStyle(.glass(.clear))
         .buttonBorderShape(.circle)

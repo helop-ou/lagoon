@@ -3,7 +3,7 @@ import SwiftUI
 
 /// The bottom transport. No tick-rate reads in this body: only the rail and
 /// the timestamps follow the playhead, each in its own child view.
-struct PlayerTransportOverlay: View {
+struct PlayerTransportOverlay<Controls: View>: View {
     @PlayerEngineRef var engine: any PlayerEngine
     let info: PlayerItemInfo
     /// The view stays mounted at zero opacity. This tells the tick-rate
@@ -19,6 +19,8 @@ struct PlayerTransportOverlay: View {
     var onCommitScrub: (Double, Bool) -> Void = { _, _ in }
     var onCancelScrub: () -> Void = {}
     var onPoke: () -> Void = {}
+    /// The tvOS row above the scrubber, beside the title.
+    let controls: Controls
 
     private var isScrubbing: Bool { scrubTarget != nil }
 
@@ -31,7 +33,13 @@ struct PlayerTransportOverlay: View {
             Spacer()
 
             VStack(alignment: .leading, spacing: Metrics.Space.m) {
-                titleRow
+                // White on everything but the controls: a tvOS lozenge
+                // inherits it and turns white on white when focused.
+                HStack(alignment: .bottom, spacing: Metrics.Space.xl) {
+                    titleRow
+                        .foregroundStyle(.white)
+                    controls
+                }
 
                 PlayerScrubber(
                     engine: engine,
@@ -45,6 +53,7 @@ struct PlayerTransportOverlay: View {
                     onCancelScrub: onCancelScrub,
                     onPoke: onPoke
                 )
+                .foregroundStyle(.white)
 
                 PlayerTimelineLabels(
                     engine: engine,
@@ -52,11 +61,11 @@ struct PlayerTransportOverlay: View {
                     scrubTarget: scrubTarget,
                     showsEndTime: showsEndTime
                 )
+                .foregroundStyle(.white)
             }
             .padding(Metrics.screenGutter)
             .background(scrim)
         }
-        .foregroundStyle(.white)
     }
 
     #if os(tvOS)

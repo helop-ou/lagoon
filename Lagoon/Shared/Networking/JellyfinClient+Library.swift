@@ -466,6 +466,27 @@ extension JellyfinClient {
         guard page.items.first?.id == episode.id else { return nil }
         return page.items.dropFirst().first
     }
+
+    /// The episode before this one, for the player's previous button, or nil
+    /// at the start of the series. `AdjacentTo` yields [before, this, after]
+    /// in series order, across seasons.
+    func episodeBefore(_ episode: MediaItem) async throws -> MediaItem? {
+        guard let seriesId = episode.seriesId else { return nil }
+        let userId = try requireUserId()
+        let page: ItemsPage = try await get("Shows/\(seriesId)/Episodes", query: [
+            URLQueryItem(name: "UserId", value: userId),
+            URLQueryItem(name: "AdjacentTo", value: episode.id),
+            URLQueryItem(name: "Fields", value: Self.defaultFields),
+        ])
+        return Self.item(before: episode.id, in: page.items)
+    }
+
+    /// Nil when the anchor is missing or first: no guess beats the wrong
+    /// episode.
+    nonisolated static func item(before id: String, in items: [MediaItem]) -> MediaItem? {
+        guard let index = items.firstIndex(where: { $0.id == id }), index > 0 else { return nil }
+        return items[index - 1]
+    }
 }
 
 // MARK: - Images

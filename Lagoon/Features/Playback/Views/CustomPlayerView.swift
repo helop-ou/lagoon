@@ -60,6 +60,10 @@ struct CustomPlayerView<Surface: View>: View {
     var adjustments: PlayerAdjustments? = nil
     /// A lower quality after repeated stalls, nil where nothing offers one.
     var qualityOffer: PlaybackQualityOffer? = nil
+    /// Previous and next in the player itself. Next goes through Up Next's
+    /// path, so a group or a countdown sees it.
+    var episodeButtons: PlayerEpisodeButtons? = nil
+    var onPreviousEpisode: (() -> Void)? = nil
     /// The server converting what plays, nil where nothing says so.
     var transcodeNotice: PlaybackTranscodeNoticePrompt? = nil
     @ViewBuilder let surface: () -> Surface
@@ -93,6 +97,8 @@ struct CustomPlayerView<Surface: View>: View {
     @State private var trickplay: TrickplayLoader?
     @FocusState private var playerFocus: PlayerControlFocus?
     #if os(tvOS)
+    /// The sound list above the control row.
+    @State private var soundListOpen = false
     @Namespace private var panelFocusScope
     @Environment(\.resetFocus) private var resetFocus
     #endif
@@ -116,7 +122,8 @@ struct CustomPlayerView<Surface: View>: View {
         MenuPressGate(onMenu: {
             handleMenu()
         }, canTakeSelect: {
-            !panelOpen
+            // The row's buttons take their own press.
+            !panelOpen && !isOnTransportControl
         }, onSelect: {
             handleSelect()
         }, onRemoteTouchTap: {
@@ -137,6 +144,7 @@ struct CustomPlayerView<Surface: View>: View {
                             .accessibilityIdentifier("player.close")
                     }
                     ToolbarItemGroup(placement: .topBarTrailing) {
+                        PlayerSoundMenu(options: soundOptions)
                         Button("Info", systemImage: "info.circle", action: openPanel)
                             .accessibilityIdentifier("player.info")
                     }
@@ -257,14 +265,15 @@ struct CustomPlayerView<Surface: View>: View {
                         commitScrub(to: seconds, resume: resume)
                     },
                     onCancelScrub: cancelScrub,
-                    onPoke: pokeControls
+                    onPoke: pokeControls,
+                    controls: transportControls
                 )
                     .opacity(transportVisible ? 1 : 0)
                     // A faded overlay still hit-tests and would swallow
-                    // drags. On tvOS Select belongs to the focused surface, so
-                    // nothing here may take a press.
+                    // drags. On tvOS only the control row takes focus, and
+                    // only while the transport is up.
                     #if os(tvOS)
-                    .allowsHitTesting(false)
+                    .allowsHitTesting(transportVisible)
                     #else
                     .allowsHitTesting(transportVisible)
                     .accessibilityHidden(!transportVisible)
@@ -289,7 +298,10 @@ struct CustomPlayerView<Surface: View>: View {
                     onTogglePlayPause: {
                         requestTogglePause()
                         pokeControls()
-                    }
+                    },
+                    episodes: episodeButtons,
+                    onPrevious: previousEpisode,
+                    onNext: nextEpisode
                 )
                 .opacity(transportVisible && !isScrubbing ? 1 : 0)
                 .allowsHitTesting(transportVisible && !isScrubbing)
@@ -334,10 +346,14 @@ struct CustomPlayerView<Surface: View>: View {
                 // arrow press.
                 selectedTab = tab
             }
+            // Each move along the row starts the dwell over.
+            if focus?.isTransportControl == true { pokeControls() }
         }
         .task(id: interactionToken) {
             try? await Task.sleep(for: .seconds(4))
-            guard !Task.isCancelled, !panelOpen, !engine.isPaused, !isScrubbing, !benchPinnedTransport else { return }
+            // Never while a control has focus: hiding it would strand focus.
+            guard !Task.isCancelled, !panelOpen, !engine.isPaused, !isScrubbing, !isOnTransportControl,
+                  !benchPinnedTransport else { return }
             controlsVisible = false
         }
         // Only show the spinner when buffering persists.
@@ -402,6 +418,12 @@ struct CustomPlayerView<Surface: View>: View {
             PlayerInputTrace.log("menu -> keep quality")
         } else if !isTranscodeNoticeSuppressed, transcodeNotice?.dismiss() == true {
             PlayerInputTrace.log("menu -> dismiss transcode notice")
+        } else if soundListOpen {
+            PlayerInputTrace.log("menu -> close sound")
+            closeSoundList()
+        } else if isOnTransportControl {
+            PlayerInputTrace.log("menu -> surface")
+            returnFocusToSurface()
         } else if panelOpen,
                   selectedTab == .subtitles,
                   let subtitleSearch,
@@ -526,6 +548,10 @@ struct CustomPlayerView<Surface: View>: View {
                     jumpChapter(direction: 1)
                 case .down where isScrubbing:
                     jumpChapter(direction: -1)
+                // Up was the one free direction: it reaches the row above
+                // the scrubber.
+                case .up:
+                    focusControlRow()
                 case .down:
                     openPanel()
                 default:
@@ -557,7 +583,7 @@ struct CustomPlayerView<Surface: View>: View {
     /// `onTapGesture` (see its comment).
     private func handleSelect() {
         traceInput("select via=pressesEnded")
-        guard !panelOpen else { return }
+        guard !panelOpen, !isOnTransportControl else { return }
         if let target = scrubTarget {
             commitScrub(to: target, resume: true)
         } else if let segment = automation.activeSegment, automation.skipMode != .instant {
@@ -607,6 +633,7 @@ struct CustomPlayerView<Surface: View>: View {
         trickplay = info.trickplay.map(TrickplayLoader.init(source:))
         reportDisplayedCaption(nil)
         #if os(tvOS)
+        soundListOpen = false
         playerFocus = .surface
         #endif
     }
@@ -821,6 +848,131 @@ struct CustomPlayerView<Surface: View>: View {
         if case .failed = engine.subtitleLoadState { return false }
         return !isScrubbing
     }
+
+    // MARK: - Sound, previous and next
+
+    private var soundOptions: PlayerSoundOptions {
+        PlayerSoundOptions(
+            shaping: engine.audioShaping,
+            setNightMode: { isOn in
+                if let adjustments {
+                    adjustments.setNightMode(isOn)
+                } else {
+                    var shaping = engine.audioShaping
+                    shaping.nightMode = isOn
+                    engine.setAudioShaping(shaping)
+                }
+                pokeControls()
+            },
+            setDialogueBoost: { isOn in
+                if let adjustments {
+                    adjustments.setDialogueBoost(isOn)
+                } else {
+                    var shaping = engine.audioShaping
+                    shaping.dialogueBoost = isOn
+                    engine.setAudioShaping(shaping)
+                }
+                pokeControls()
+            },
+            setChannelLimit: { limit in
+                if let adjustments {
+                    adjustments.setChannelLimit(limit)
+                } else {
+                    var shaping = engine.audioShaping
+                    shaping.channelLimit = limit.engineLimit
+                    engine.setAudioShaping(shaping)
+                }
+                pokeControls()
+            }
+        )
+    }
+
+    private func previousEpisode() {
+        onPreviousEpisode?()
+    }
+
+    private func nextEpisode() {
+        automation.playNext()
+    }
+
+    @ViewBuilder
+    private var transportControls: some View {
+        #if os(tvOS)
+        VStack(alignment: .trailing, spacing: Metrics.Space.l) {
+            if soundListOpen {
+                PlayerSoundList(options: soundOptions, focus: $playerFocus)
+            }
+            PlayerTVControlRow(
+                episodes: episodeButtons,
+                focus: $playerFocus,
+                onPrevious: previousEpisode,
+                onToggleSound: toggleSoundList,
+                onNext: nextEpisode
+            )
+            .onMoveCommand { direction in
+                if direction == .down, case .control? = playerFocus {
+                    returnFocusToSurface()
+                }
+            }
+        }
+        // Hidden controls must not take focus.
+        .disabled(!transportVisible)
+        #else
+        EmptyView()
+        #endif
+    }
+
+    private var isOnTransportControl: Bool {
+        playerFocus?.isTransportControl == true
+    }
+
+    #if os(tvOS)
+    /// Up from the surface. A transport just revealed is not focusable in the
+    /// same update, so focus follows a beat later.
+    private func focusControlRow() {
+        let wasVisible = transportVisible
+        pokeControls()
+        guard !wasVisible else {
+            playerFocus = .control(PlayerTVControlRow.soundID)
+            return
+        }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(50))
+            guard transportVisible, !panelOpen else { return }
+            playerFocus = .control(PlayerTVControlRow.soundID)
+        }
+    }
+
+    private func toggleSoundList() {
+        if soundListOpen {
+            closeSoundList()
+            return
+        }
+        soundListOpen = true
+        pokeControls()
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(50))
+            guard soundListOpen else { return }
+            playerFocus = .sound(PlayerSoundList.nightModeID)
+        }
+    }
+
+    private func closeSoundList() {
+        soundListOpen = false
+        playerFocus = .control(PlayerTVControlRow.soundID)
+        pokeControls()
+    }
+
+    private func returnFocusToSurface() {
+        soundListOpen = false
+        playerFocus = .surface
+        pokeControls()
+    }
+    #else
+    private var soundListOpen: Bool { false }
+    private func closeSoundList() {}
+    private func returnFocusToSurface() {}
+    #endif
 
     // MARK: - Panel
 

@@ -378,6 +378,12 @@ struct VideoPlayerView: View {
                 subtitleSearch: controller.subtitleSearch,
                 adjustments: controller.adjustments,
                 qualityOffer: controller.qualityOffer,
+                episodeButtons: PlayerEpisodeButtons.offered(
+                    hasPrevious: controller.previousItem != nil,
+                    hasNext: controller.nextUp != nil,
+                    inGroup: togetherState != nil
+                ),
+                onPreviousEpisode: { Task { await controller.playPrevious() } },
                 transcodeNotice: controller.transcodeNotice
             ) { [weak engine] in
                 // Weak, like `PlayerEngineRef`: SwiftUI keeps copies of this
