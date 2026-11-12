@@ -368,11 +368,12 @@ An offset fixes a subtitle file rather than one viewing, so
 for that item: a fallback rung, a replay or a reopened player starts in
 step.
 
-**Sound:** Night Mode and Dialogue Boost sit in the same tab and the channel
-limit (Off, 5.1, Stereo) in Settings, Audio: the toggles suit a moment, the
-limit suits the room. The player's own Sound button has all three: a native
+**Sound:** Night Mode, Dialogue Boost and the channel limit (Off, 5.1,
+Stereo) live behind the player's own Sound button, not in the panel: a native
 menu in the iOS toolbar beside Info, and a short list above the tvOS row
-(`PlayerSoundOptions`). A limit changed there is kept as the preference. All three are per-account preferences
+(`PlayerSoundOptions`). The channel limit is in Settings, Audio too, since it
+suits the room. A limit changed in the player is kept as the preference. All
+three are per-account preferences
 (`TrackPreferenceValues`), become the engine's `AudioShaping`, and are set
 before `prepare` so a title opens shaped. A toggle in the player applies at
 once with a short re-demux and is kept for the next title. While any of them
