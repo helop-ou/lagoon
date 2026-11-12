@@ -25,10 +25,6 @@ struct PlayerRegressionValue: ViewModifier {
     let playerSurfaceIdentity: String
     let playbackMethod: PlayMethod
     let deliveryRung: PlaybackDelivery
-    let isPlaybackCacheActive: Bool
-    let bufferedFraction: Double?
-    let bufferedRanges: [PlaybackBufferedRange]
-    let playheadPrefetchCount: Int
     let handoffMilliseconds: Double?
     /// Where the Up Next card is due, already resolved from `engine.duration`.
     let nextUpCardStart: Double?
@@ -95,10 +91,10 @@ struct PlayerRegressionValue: ViewModifier {
             "surface=\(playerSurfaceIdentity)",
             "method=\(playbackMethod.rawValue)",
             "rung=\(deliveryRung.rawValue)",
-            "cache=\(isPlaybackCacheActive ? 1 : 0)",
-            String(format: "buffered=%.3f", bufferedFraction ?? -1),
-            "bufferRanges=\(bufferedRanges.count)",
-            "playheadPrefetches=\(playheadPrefetchCount)",
+            "cache=\(engine.bufferState.isActive ? 1 : 0)",
+            String(format: "buffered=%.3f", engine.bufferState.bufferedFraction ?? -1),
+            "bufferRanges=\(engine.bufferState.bufferedRanges.count)",
+            "playheadPrefetches=\(engine.bufferState.playheadPrefetchCount)",
             String(format: "handoffMs=%.1f", handoffMilliseconds ?? -1),
             "nextUp=\(showsNextUp ? 1 : 0)",
             "ready=\(engine.duration > 0 ? 1 : 0)",

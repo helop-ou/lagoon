@@ -14,8 +14,6 @@ struct PlayerTransportOverlay: View {
     /// Swaps the remaining time for the clock time the item will finish at.
     let showsEndTime: Bool
     let showsPanelHint: Bool
-    let bufferedFraction: Double?
-    let bufferedRanges: [PlaybackBufferedRange]
     let trickplay: TrickplayLoader?
     var onScrubPreview: (Double) -> Void = { _ in }
     var onCommitScrub: (Double, Bool) -> Void = { _, _ in }
@@ -41,8 +39,6 @@ struct PlayerTransportOverlay: View {
                     chapters: info.chapters,
                     trickplaySource: info.trickplay,
                     scrubTarget: scrubTarget,
-                    bufferedFraction: bufferedFraction,
-                    bufferedRanges: bufferedRanges,
                     trickplay: trickplay,
                     onScrubPreview: onScrubPreview,
                     onCommitScrub: onCommitScrub,
@@ -135,8 +131,6 @@ struct PlayerScrubber: View {
     let chapters: [PlayerChapter]
     let trickplaySource: TrickplaySource?
     let scrubTarget: Double?
-    let bufferedFraction: Double?
-    let bufferedRanges: [PlaybackBufferedRange]
     let trickplay: TrickplayLoader?
     var onScrubPreview: (Double) -> Void = { _ in }
     var onCommitScrub: (Double, Bool) -> Void = { _, _ in }
@@ -148,6 +142,15 @@ struct PlayerScrubber: View {
     @State private var lastShownSeconds: Double = 0
 
     private var isScrubbing: Bool { scrubTarget != nil }
+
+    /// Read here, not passed down: the buffer grows all through playback,
+    /// and passed in it redrew the whole player with it, several times a
+    /// second. Hidden, the engine is not read at all.
+    private var buffer: PlaybackBufferState {
+        isVisible ? engine.bufferState : .empty
+    }
+    private var bufferedRanges: [PlaybackBufferedRange] { buffer.bufferedRanges }
+    private var bufferedFraction: Double? { buffer.bufferedFraction }
 
     /// Only the `isVisible` branch may read the engine.
     private var seconds: Double {
