@@ -6,19 +6,13 @@ enum PlayerControlFocus: Hashable {
     case surface
     case tab(PlayerPanelTab)
     case track(String)
-    /// A button in the tvOS row above the scrubber.
+    /// A SwiftUI button in the tvOS row above the scrubber. Its UIKit menu
+    /// buttons report through `PlayerRowMenus` instead.
     case control(String)
-    /// A row in the tvOS sound list above that row.
-    case sound(String)
-    /// A row in the tvOS Episodes list, by its place in the list.
-    case episode(Int)
 
-    /// The row above the scrubber or a list above it: focus has left the
-    /// surface for the transport's own controls.
+    /// Focus has left the surface for the row's own controls.
     var isTransportControl: Bool {
-        switch self {
-        case .control, .sound, .episode: true
-        default: false
-        }
+        if case .control = self { return true }
+        return false
     }
 }

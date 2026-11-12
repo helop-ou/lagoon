@@ -99,11 +99,12 @@ struct CustomPlayerView<Surface: View>: View {
     @State private var scrubHopped = false
     @State private var trickplay: TrickplayLoader?
     @FocusState private var playerFocus: PlayerControlFocus?
-    /// The Episodes list: above the tvOS row, or the iOS toolbar's popover.
+    #if os(iOS)
+    /// The toolbar's Episodes popover.
     @State private var episodeListOpen = false
+    #endif
     #if os(tvOS)
-    /// The sound list above the control row.
-    @State private var soundListOpen = false
+    @State private var rowMenus = PlayerRowMenus()
     @Namespace private var panelFocusScope
     @Environment(\.resetFocus) private var resetFocus
     #endif
@@ -127,7 +128,7 @@ struct CustomPlayerView<Surface: View>: View {
         MenuPressGate(onMenu: {
             handleMenu()
         }, canTakeSelect: {
-            // The row's buttons take their own press.
+            // The row's buttons and their menus take their own press.
             !panelOpen && !isOnTransportControl
         }, onSelect: {
             handleSelect()
@@ -371,11 +372,18 @@ struct CustomPlayerView<Surface: View>: View {
             // Each move along the row starts the dwell over.
             if focus?.isTransportControl == true { pokeControls() }
         }
+        #if os(tvOS)
+        .onChange(of: rowMenus.focusedID) { _, id in
+            if id != nil { pokeControls() }
+        }
+        #endif
         .task(id: interactionToken) {
             try? await Task.sleep(for: .seconds(4))
             // Never while a control has focus: hiding it would strand focus.
+            #if os(iOS)
+            guard !episodeListOpen else { return }
+            #endif
             guard !Task.isCancelled, !panelOpen, !engine.isPaused, !isScrubbing, !isOnTransportControl,
-                  !episodeListOpen,
                   !benchPinnedTransport else { return }
             controlsVisible = false
         }
@@ -428,7 +436,10 @@ struct CustomPlayerView<Surface: View>: View {
 
     private func handleMenu() {
         traceInput("menu")
-        if isScrubbing {
+        if isRowMenuPresented {
+            // Back belongs to the open menu, never to the player under it.
+            PlayerInputTrace.log("menu -> row menu")
+        } else if isScrubbing {
             cancelScrub()
         } else if automation.dismissSkip() {
             // A visible prompt is a layer above the player: Back answers it
@@ -441,12 +452,6 @@ struct CustomPlayerView<Surface: View>: View {
             PlayerInputTrace.log("menu -> keep quality")
         } else if !isTranscodeNoticeSuppressed, transcodeNotice?.dismiss() == true {
             PlayerInputTrace.log("menu -> dismiss transcode notice")
-        } else if soundListOpen {
-            PlayerInputTrace.log("menu -> close sound")
-            closeSoundList()
-        } else if episodeListOpen {
-            PlayerInputTrace.log("menu -> close episodes")
-            closeEpisodeList()
         } else if isOnTransportControl {
             PlayerInputTrace.log("menu -> surface")
             returnFocusToSurface()
@@ -554,6 +559,9 @@ struct CustomPlayerView<Surface: View>: View {
                     }
                     return
                 }
+                // A move the row left unhandled reaches the surface. It must
+                // neither scrub nor open the panel under the row.
+                if isOnTransportControl { return }
                 switch direction {
                 // Left/right scrub, playing or paused. A lone press
                 // self-commits as a 10 s skip.
@@ -659,8 +667,6 @@ struct CustomPlayerView<Surface: View>: View {
         trickplay = info.trickplay.map(TrickplayLoader.init(source:))
         reportDisplayedCaption(nil)
         #if os(tvOS)
-        soundListOpen = false
-        episodeListOpen = false
         playerFocus = .surface
         #endif
     }
@@ -921,8 +927,9 @@ struct CustomPlayerView<Surface: View>: View {
     private func playEpisode(_ row: PlayerEpisodeList.Row) {
         #if os(tvOS)
         returnFocusToSurface()
-        #endif
+        #else
         episodeListOpen = false
+        #endif
         onPlayEpisode?(row)
     }
 
@@ -948,28 +955,23 @@ struct CustomPlayerView<Surface: View>: View {
     @ViewBuilder
     private var transportControls: some View {
         #if os(tvOS)
-        VStack(alignment: .trailing, spacing: Metrics.Space.l) {
-            if episodeListOpen, let episodeList {
-                PlayerEpisodeListTV(list: episodeList, focus: $playerFocus, onSelect: playEpisode)
-            }
-            if soundListOpen {
-                PlayerSoundList(options: soundOptions, focus: $playerFocus)
-            }
-            PlayerTVControlRow(
-                episodes: episodeButtons,
-                hasEpisodeList: episodeList != nil,
-                pictureInPicture: pictureInPictureButton,
-                focus: $playerFocus,
-                onPrevious: previousEpisode,
-                onToggleEpisodes: toggleEpisodeList,
-                onToggleSound: toggleSoundList,
-                onTogglePictureInPicture: togglePictureInPicture,
-                onNext: nextEpisode
-            )
-            .onMoveCommand { direction in
-                if direction == .down, case .control? = playerFocus {
-                    returnFocusToSurface()
-                }
+        PlayerTVControlRow(
+            episodes: episodeButtons,
+            episodeList: episodeList,
+            soundOptions: soundOptions,
+            pictureInPicture: pictureInPictureButton,
+            focus: $playerFocus,
+            menus: rowMenus,
+            onPrevious: previousEpisode,
+            onPlayEpisode: playEpisode,
+            onTogglePictureInPicture: togglePictureInPicture,
+            onNext: nextEpisode,
+            onMoveDown: returnFocusToSurface
+        )
+        .equatable()
+        .onMoveCommand { direction in
+            if direction == .down, case .control? = playerFocus {
+                returnFocusToSurface()
             }
         }
         // Hidden controls must not take focus.
@@ -979,81 +981,38 @@ struct CustomPlayerView<Surface: View>: View {
         #endif
     }
 
+    #if os(tvOS)
+    /// A SwiftUI row button has focus, or a UIKit menu button or its open
+    /// menu does.
     private var isOnTransportControl: Bool {
-        playerFocus?.isTransportControl == true
+        playerFocus?.isTransportControl == true || rowMenus.isActive
     }
 
-    #if os(tvOS)
+    private var isRowMenuPresented: Bool { rowMenus.isPresented }
+
     /// Up from the surface. A transport just revealed is not focusable in the
     /// same update, so focus follows a beat later.
     private func focusControlRow() {
         let wasVisible = transportVisible
         pokeControls()
         guard !wasVisible else {
-            playerFocus = .control(PlayerTVControlRow.soundID)
+            rowMenus.focus(PlayerTVControlRow.soundID)
             return
         }
         Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(50))
             guard transportVisible, !panelOpen else { return }
-            playerFocus = .control(PlayerTVControlRow.soundID)
+            rowMenus.focus(PlayerTVControlRow.soundID)
         }
-    }
-
-    private func toggleEpisodeList() {
-        if episodeListOpen {
-            closeEpisodeList()
-            return
-        }
-        soundListOpen = false
-        episodeListOpen = true
-        pokeControls()
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(50))
-            guard episodeListOpen, let current = episodeList?.current else { return }
-            playerFocus = .episode(current.index)
-        }
-    }
-
-    private func closeEpisodeList() {
-        episodeListOpen = false
-        playerFocus = .control(PlayerTVControlRow.episodesID)
-        pokeControls()
-    }
-
-    private func toggleSoundList() {
-        if soundListOpen {
-            closeSoundList()
-            return
-        }
-        episodeListOpen = false
-        soundListOpen = true
-        pokeControls()
-        Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(50))
-            guard soundListOpen else { return }
-            playerFocus = .sound(PlayerSoundList.nightModeID)
-        }
-    }
-
-    private func closeSoundList() {
-        soundListOpen = false
-        playerFocus = .control(PlayerTVControlRow.soundID)
-        pokeControls()
     }
 
     private func returnFocusToSurface() {
-        soundListOpen = false
-        episodeListOpen = false
         playerFocus = .surface
         pokeControls()
     }
     #else
-    private var soundListOpen: Bool { false }
-    private func closeSoundList() {}
-    private func closeEpisodeList() {
-        episodeListOpen = false
-    }
+    private var isOnTransportControl: Bool { false }
+    private var isRowMenuPresented: Bool { false }
     private func returnFocusToSurface() {}
     #endif
 
