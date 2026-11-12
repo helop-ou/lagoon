@@ -34,7 +34,7 @@ notes](https://github.com/helop-ou/lagoon-engine/blob/main/docs/reference/codecs
 | `hevc` | Video profile one of `main`, `main 10`, `rext`<br>Video bit depth at most `10`<br>Video range type one of `SDR`, `HDR10`, `HLG`, `DOVI`, `DOVIWithHDR10`, `DOVIWithHDR10Plus`, `DOVIWithHLG`, `DOVIWithSDR`, `DOVIWithEL`, `DOVIWithELHDR10Plus`, `DOVIInvalid`, `HDR10Plus`<br>Video level at most `183`<br>Is interlaced is not `true` |
 | `h264` | Video profile one of `high`, `main`, `baseline`, `constrained baseline`, `high 10`, `high 4:2:2`, `high 4:4:4 predictive`<br>Video bit depth at most `10`<br>Video range type one of `SDR`<br>Video level at most `52` |
 | `av1` | Video profile one of `main`<br>Video range type one of `SDR`, `HDR10`, `HLG`, `HDR10Plus`<br>Video bit depth at most `10`<br>Is interlaced is not `true` |
-| `vp9` | Video profile one of `profile 0`, `profile 2`<br>Video range type one of `SDR`, `HDR10`, `HLG`, `HDR10Plus`<br>Video bit depth at most `10`<br>Width at most `1920`<br>Height at most `1080`<br>Is interlaced is not `true` |
+| `vp9` | Video profile one of `profile 0`, `profile 2`<br>Video range type one of `SDR`, `HDR10`, `HLG`, `HDR10Plus`<br>Video bit depth at most `10`<br>Width at most `3840`<br>Height at most `2160`<br>Is interlaced is not `true` |
 | `vc1` | Video range type one of `SDR`<br>Video bit depth at most `8`<br>Width at most `1920`<br>Height at most `1080`<br>Is interlaced is not `true` |
 | `wmv3` | Video range type one of `SDR`<br>Video bit depth at most `8`<br>Width at most `1920`<br>Height at most `1080`<br>Is interlaced is not `true` |
 | `mpeg4` | Video range type one of `SDR`<br>Video bit depth at most `8`<br>Width at most `1920`<br>Height at most `1080`<br>Is interlaced is not `true` |

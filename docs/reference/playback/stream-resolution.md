@@ -37,16 +37,21 @@ is that envelope minus what the running hardware cannot decode, and is what
 gets sent. The subtraction is a short transform over the literal, not a second
 literal, so the envelope stays the single statement of support.
 
-Only two hardware checks, for specific reasons:
+Only three hardware checks, for specific reasons:
 
 - **HEVC.** `VideoToolboxDecoder` requires a hardware decoder
   (`kVTVideoDecoderSpecification_RequireHardwareAcceleratedVideoDecoder`), so
   without one HEVC fails outright with -12906.
 - **AV1.** Takes the same compressed path with hardware, and a bounded
   libdav1d software path without.
+- **VP9.** The envelope offers it up to 4K, which the Apple TV 4K (3rd gen)
+  decodes in hardware (`PlaybackCapabilities.hardwareVP9`, once the engine
+  has registered the supplemental decoder). Without the hardware it is
+  libavcodec and stays at 1080p: software VP9 above that has only been
+  measured on a device that has the hardware.
 
 Everything else survives without hardware: H.264 is decoded ahead by a
-VideoToolbox session that may decode in software, while VP9 and
+VideoToolbox session that may decode in software, while
 legacy codecs use libavcodec.
 
 **Do not gate anything else on `VTIsHardwareDecodeSupported`.** It reports
