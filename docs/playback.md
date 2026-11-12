@@ -304,7 +304,10 @@ Observation subscribes to the reads that actually run, so:
 
 - The player root never reads `timePosition`, current subtitle values or other
   tick-rate state in its body, modifier IDs or animation values. Those reads
-  belong in small overlay leaves.
+  belong in small overlay leaves. The engine's `bufferState` counts: it grows
+  all through playback, and read by `VideoPlayerView` to pass down to the
+  scrubber it redrew the whole player about three times a second. The
+  scrubber and the regression probe read it themselves.
 - Return before reading the playhead when there is no applicable segment or
   successor, and avoid position reads in the hidden timeline.
 - The panel host's `Equatable` boundary separately shields its interior.
