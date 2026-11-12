@@ -380,6 +380,18 @@ once with a short re-demux and is kept for the next title. While any of them
 is on, audio decodes on the device, so Atmos plays without its height
 channels, which both places say.
 
+**Episodes:** the season of the playing episode, or every entry of a
+collection or playlist, with the playing one marked (`PlayerEpisodeList`). A
+season is fetched once after the title starts and kept for the player's life,
+so moving through it needs no new request. Choosing a row plays it through
+the same hand-off as previous and next, and in a list moves the queue there,
+so next follows on from it. A movie outside a list has no button, and neither
+does a Watch Together group, where the group changes the item.
+
+**Picture in Picture** is a button in the player, not the panel: in the iOS
+toolbar and the tvOS row, shown only while it can start or stop
+(`PlayerPictureInPictureButton`).
+
 **iPhone and iPad controls:**
 
 - A surface tap toggles the transport. Centre play/pause and ±10 s buttons use
@@ -391,8 +403,10 @@ channels, which both places say.
 - Double-tapping either half seeks 10 s without revealing controls. Repeats
   within the 700 ms feedback window add up, and changing direction resets.
 - Dragging the timeline previews trickplay and commits on release. Skip and Up
-  Next take direct taps. Close, Sound and Info are in the native toolbar. The
-  options sheet suppresses surface interaction.
+  Next take direct taps. Close, Episodes, Sound, Picture in Picture and Info
+  are in the native toolbar. Episodes opens a native list in a popover (a
+  sheet on a phone), Sound a native menu. The options sheet suppresses surface
+  interaction.
 - Previous and next sit outside the ±10 s buttons, in the same clear glass,
   when the queue has a title on either side (`PlayerEpisodeButtons`). A
   missing side keeps its slot, so play/pause stays centred. Next takes Up
@@ -459,9 +473,11 @@ integration](reference/playback/system-integration.md).
 - The video surface owns focus. Select prioritizes scrub, Skip, Up Next, the
   lower-quality offer, Play Original, then play/pause.
 - Up, the one free direction, moves focus to the row of glass buttons above
-  the scrubber, beside the title: previous, Sound and next. Down or Back
+  the scrubber, beside the title: previous, Episodes, Sound, Picture in
+  Picture and next, each only where it has something to do. Down or Back
   returns it to the surface, and the transport stays up while a button has
-  focus. Sound opens a list above the row, which Back closes. A row button
+  focus. Episodes and Sound each open a list above the row, which Back
+  closes. Episodes starts on the playing title. A row button
   takes its own Select, so the gate does not arm while one has focus. See
   [putting controls in the
   transport](reference/playback/controls-and-reporting.md#putting-controls-in-the-transport-tvos). `MenuPressGate` takes Select from the responder chain, never
@@ -470,8 +486,8 @@ integration](reference/playback/system-integration.md).
 - **A light Siri Remote touch is a separate input that reveals controls. It
   never becomes Select.**
 - Menu cancels scrubbing, then dismisses a skip, Up Next, lower-quality or
-  transcode prompt in any mode, then closes the sound list, then leaves the
-  button row, then closes the panel, then exits.
+  transcode prompt in any mode, then closes the sound or Episodes list, then
+  leaves the button row, then closes the panel, then exits.
 - In Automatic mode a first Back on Up Next means "not yet": the card returns
   for the last five seconds and the episode still rolls on. Only a Back
   during that final countdown, or in card mode, stops autoplay.
