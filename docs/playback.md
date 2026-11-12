@@ -82,7 +82,7 @@ Codecs:
 - iOS metered-path limits apply to static and streaming bitrate offers and can
   be overridden in Playback settings.
 - Maximum Quality (Auto by default) caps a remote server below its measured
-  link, and repeated stalls offer the viewer a lower quality. Neither moves
+  link unless the link reads fast, and repeated stalls offer the viewer a lower quality. Neither moves
   the delivery ladder. See [what a remote link is
   offered](reference/playback/stream-resolution.md#what-a-remote-link-is-offered).
 

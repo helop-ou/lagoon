@@ -1,8 +1,8 @@
 import Foundation
 
 /// Settings → Playback → Maximum Quality. Auto measures a remote server's
-/// link before the first playback and caps below it. A server on this
-/// network keeps the full envelope.
+/// link before the first playback and caps below it unless it reads fast. A
+/// server on this network keeps the full envelope.
 nonisolated enum MaximumQuality: String, CaseIterable, Identifiable, Sendable {
     case auto
     case unlimited
@@ -81,13 +81,19 @@ nonisolated enum PlaybackQualityLimit {
     static let headroom = 0.7
     /// Below this a transcode is not worth watching. The cap stops here.
     static let minimumBitrate = 1_000_000
+    /// A link that reads this fast gets no cap. The probe's 8 MB download
+    /// cannot read much past it, so 70% of the reading held every 4K remux
+    /// to a transcode on Wi-Fi that played it fine. Stalls still bring the
+    /// offer of a lower quality.
+    static let unboundedLinkBitsPerSecond = 40_000_000
 
     static func maxBitrate(setting: MaximumQuality, connection: ConnectionMeasurement?) -> Int? {
         switch setting {
         case .unlimited:
             return nil
         case .auto:
-            guard case .remote(let bitsPerSecond) = connection else { return nil }
+            guard case .remote(let bitsPerSecond) = connection,
+                  bitsPerSecond < unboundedLinkBitsPerSecond else { return nil }
             return max(Int(Double(bitsPerSecond) * headroom), minimumBitrate)
         default:
             return setting.fixedBitrate

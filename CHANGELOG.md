@@ -26,6 +26,10 @@ report. One marketing version spans many builds.
 - A new install opens with a short welcome, and after the first sign-in offers to connect Seerr, which you can skip.
 - Setup lists the Jellyfin servers on your local network, so you can pick yours instead of typing its address.
 
+### Improvements
+
+- On a fast connection to a server elsewhere, Auto quality plays the original file, however high its bitrate, instead of asking the server for a smaller version.
+
 ### Bug fixes
 
 - Subtitles in the system's caption style show in the system font again, not Times New Roman.

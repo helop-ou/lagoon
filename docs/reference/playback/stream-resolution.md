@@ -119,8 +119,12 @@ Maximum Quality, and `cappedToBitrate` applies it before the metered cap:
 
 - **Auto** measures a remote server (see [Measuring the
   connection](../../jellyfin-api.md#measuring-the-connection)) and offers 70%
-  of what it read, never below 1 Mbit/s. A server on this network, or one
-  that did not answer, keeps the full envelope. On a metered path the probe
+  of what it read, never below 1 Mbit/s. A link that reads 40 Mbit/s or more
+  gets no cap (`unboundedLinkBitsPerSecond`): the 8 MB probe cannot read much
+  past that, and on fast Wi-Fi to a remote server 70% of its reading sent a
+  73.5 Mbit/s Dolby Vision remux to a transcode. Stalls still bring the offer
+  of a lower quality. A server on this network, or one that did not answer,
+  keeps the full envelope. On a metered path the probe
   is skipped: the metered cap is lower anyway.
 - **A fixed maximum** applies everywhere, local servers included. **No
   Limit** turns the cap off.
