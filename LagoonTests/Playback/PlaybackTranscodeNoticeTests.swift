@@ -112,6 +112,65 @@ struct PlaybackTranscodeNoticeTests {
         #expect(!prompt.isVisible)
     }
 
+    /// Said once the attempt's picture is up, not when it is negotiated, and
+    /// only once.
+    @Test func aStagedNoticeWaitsForTheFirstFrame() {
+        let prompt = PlaybackTranscodeNoticePrompt()
+        prompt.stage(.converting(.audio))
+        #expect(!prompt.isVisible)
+        prompt.playbackStarted()
+        #expect(prompt.notice == .converting(.audio))
+        prompt.withdraw()
+        prompt.playbackStarted()
+        #expect(!prompt.isVisible)
+        // An attempt with nothing to say clears what an earlier one staged.
+        prompt.stage(.converting(.video))
+        prompt.stage(nil)
+        prompt.playbackStarted()
+        #expect(!prompt.isVisible)
+    }
+
+    /// Playing the original holds for the item, until a new one or a lower
+    /// quality chosen after it.
+    @Test func theOriginalHoldsForTheItemOnly() {
+        let prompt = PlaybackTranscodeNoticePrompt()
+        prompt.present(.capped(.auto, probedBitsPerSecond: nil, maxBitrate: 10_000_000))
+        prompt.playOriginal()
+        #expect(prompt.playsOriginal)
+        prompt.viewerChoseLowerQuality()
+        #expect(!prompt.playsOriginal)
+
+        prompt.present(.capped(.auto, probedBitsPerSecond: nil, maxBitrate: 10_000_000))
+        prompt.playOriginal()
+        prompt.stage(.converting(.video))
+        prompt.itemChanged()
+        #expect(!prompt.playsOriginal)
+        prompt.playbackStarted()
+        #expect(!prompt.isVisible)
+    }
+
+    @Test func anAttemptsNoticeReadsTheSourcesReasons() throws {
+        let json = #"{"Id":"s","TranscodingUrl":"/videos/x/master.m3u8?TranscodeReasons=AudioCodecNotSupported"}"#
+        let source = try JellyfinClient.decoder.decode(MediaSource.self, from: Data(json.utf8))
+        let notice = PlaybackTranscodeNotice.notice(
+            for: source, method: .transcode, delivery: .negotiated, offer: Self.auto,
+            isDownload: false, isInGroup: false
+        )
+        #expect(notice == .converting(.audio))
+    }
+
+    /// The controller answers Play Original. With nothing playing there is
+    /// nothing to restart, and the choice still holds for the item.
+    @Test func theControllerAnswersPlayOriginal() async throws {
+        let controller = PlaybackController()
+        #expect(controller.transcodeNotice.onPlayOriginal != nil)
+        controller.transcodeNotice.present(.capped(.auto, probedBitsPerSecond: nil, maxBitrate: 10_000_000))
+        controller.transcodeNotice.playOriginal()
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(controller.transcodeNotice.playsOriginal)
+        #expect(!controller.transcodeNotice.isVisible)
+    }
+
     /// Under the metered cap too, so a metered Mac reads the same.
     @Test func playingTheOriginalLiftsEveryCap() async throws {
         let host = "original.test"
