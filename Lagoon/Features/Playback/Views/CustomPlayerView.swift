@@ -59,6 +59,8 @@ struct CustomPlayerView<Surface: View>: View {
     var subtitleSearch: SubtitleSearchCoordinator? = nil
     /// A lower quality after repeated stalls, nil where nothing offers one.
     var qualityOffer: PlaybackQualityOffer? = nil
+    /// The server converting what plays, nil where nothing says so.
+    var transcodeNotice: PlaybackTranscodeNoticePrompt? = nil
     @ViewBuilder let surface: () -> Surface
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.accessibilityVoiceOverEnabled) private var voiceOverEnabled
@@ -230,6 +232,14 @@ struct CustomPlayerView<Surface: View>: View {
                     )
                 }
 
+                if let transcodeNotice {
+                    PlayerTranscodeNoticeOverlay(
+                        prompt: transcodeNotice,
+                        isSuppressed: isTranscodeNoticeSuppressed,
+                        reduceMotion: reduceMotion
+                    )
+                }
+
                 PlayerTransportOverlay(
                     engine: engine,
                     info: info,
@@ -389,6 +399,8 @@ struct CustomPlayerView<Surface: View>: View {
             PlayerInputTrace.log("menu -> dismiss up next")
         } else if !isQualityOfferSuppressed, qualityOffer?.dismiss() == true {
             PlayerInputTrace.log("menu -> keep quality")
+        } else if !isTranscodeNoticeSuppressed, transcodeNotice?.dismiss() == true {
+            PlayerInputTrace.log("menu -> dismiss transcode notice")
         } else if panelOpen,
                   selectedTab == .subtitles,
                   let subtitleSearch,
@@ -539,8 +551,9 @@ struct CustomPlayerView<Surface: View>: View {
     }
 
     #if os(tvOS)
-    /// Select: commit scrub, Skip, Up Next, then play/pause. MenuPressGate
-    /// delivers it, never the surface's `onTapGesture` (see its comment).
+    /// Select: commit scrub, Skip, Up Next, the lower quality, the original,
+    /// then play/pause. MenuPressGate delivers it, never the surface's
+    /// `onTapGesture` (see its comment).
     private func handleSelect() {
         traceInput("select via=pressesEnded")
         guard !panelOpen else { return }
@@ -558,6 +571,9 @@ struct CustomPlayerView<Surface: View>: View {
         } else if let qualityOffer, qualityOffer.isVisible, !isQualityOfferSuppressed {
             PlayerInputTrace.log("select -> lower quality")
             qualityOffer.accept()
+        } else if let transcodeNotice, transcodeNotice.notice?.offersOriginal == true, !isTranscodeNoticeSuppressed {
+            PlayerInputTrace.log("select -> play original")
+            transcodeNotice.playOriginal()
         } else {
             PlayerInputTrace.log("select -> toggle pause")
             requestTogglePause()
@@ -721,6 +737,12 @@ struct CustomPlayerView<Surface: View>: View {
     private var isQualityOfferSuppressed: Bool {
         panelOpen || isScrubbing || automation.showsNextUp
             || (automation.activeSegment != nil && automation.skipMode != .instant)
+    }
+
+    /// After the lower-quality offer too: answering stalls matters more
+    /// than how the stream got here.
+    private var isTranscodeNoticeSuppressed: Bool {
+        isQualityOfferSuppressed || qualityOffer?.isVisible == true
     }
 
     private var hint: LocalizedStringKey {

@@ -85,15 +85,18 @@ extension JellyfinClient {
     }
 
     /// `playbackInfo`, with what this device offered the server and why.
+    /// `playsOriginal` lifts every cap, for a viewer who chose the original
+    /// over what a cap would have played.
     func negotiate(
         itemId: String,
         delivery: PlaybackDelivery = .negotiated,
-        maxBitrate: Int? = nil
+        maxBitrate: Int? = nil,
+        playsOriginal: Bool = false
     ) async throws -> (info: PlaybackInfoResponse, offer: PlaybackOffer) {
         let userId = try requireUserId()
-        let setting = MaximumQuality.current
+        let setting: MaximumQuality = playsOriginal ? .unlimited : .current
         let ceiling: ConnectionCeiling
-        if let maxBitrate {
+        if let maxBitrate, !playsOriginal {
             ceiling = ConnectionCeiling(bitrate: maxBitrate, probedBitsPerSecond: nil)
         } else {
             ceiling = await connectionCeiling(setting: setting)
@@ -101,9 +104,9 @@ extension JellyfinClient {
         #if DEBUG && targetEnvironment(simulator)
         let profile = UserDefaults.standard.bool(forKey: "debug.simulatorTranscode")
             ? DeviceProfile.simulatorRegression
-            : DeviceProfile.lagoon(for: delivery, maxBitrate: ceiling.bitrate)
+            : DeviceProfile.lagoon(for: delivery, maxBitrate: ceiling.bitrate, allowsFullQuality: playsOriginal)
         #else
-        let profile = DeviceProfile.lagoon(for: delivery, maxBitrate: ceiling.bitrate)
+        let profile = DeviceProfile.lagoon(for: delivery, maxBitrate: ceiling.bitrate, allowsFullQuality: playsOriginal)
         #endif
         let info: PlaybackInfoResponse = try await post(
             "Items/\(itemId)/PlaybackInfo",
@@ -118,10 +121,10 @@ extension JellyfinClient {
         let offer = PlaybackOffer(
             maxStreamingBitrate: profile.maxStreamingBitrate,
             cap: PlaybackOffer.cap(
-                lowered: maxBitrate != nil,
+                lowered: maxBitrate != nil && !playsOriginal,
                 setting: setting,
                 ceiling: ceiling.bitrate,
-                metered: DeviceProfile.meteredCapApplies
+                metered: DeviceProfile.meteredCapApplies && !playsOriginal
             ),
             probedBitsPerSecond: ceiling.probedBitsPerSecond
         )
