@@ -200,6 +200,18 @@ AVPlayerViewController does automatically.
 - **Do not require the key window** in the lookup. During a fullScreenCover
   the key flag is not guaranteed, and nil silently disables matching. Any
   window of the scene reaches the screen's manager.
+- A start waits for the switch. The panel is black while it runs: on the
+  Apple TV 4K (3rd gen) a switch began 3 to 35 ms after the criteria were
+  set and ended 2.9 to 3.0 s later, and a title started 0.4 to 0.55 s in, so
+  about 2.4 s of it played unseen. `PlaybackController` gives the engine a
+  start gate that applies the request and waits in
+  `DisplayModeMatcher.waitUntilSettled()`. The engine shows the first
+  picture and holds the clock until it returns.
+- `DisplaySwitchWait` decides how long. With no switch begun 0.3 s after the
+  criteria changed, none is coming: the display was already in that mode.
+  A switch that began is waited for until `AVDisplayManagerModeSwitchEnd`,
+  or for 4 s, since the end is not always announced. With Match Content off
+  there is nothing to wait for.
 - The HUD's `Display:` line names each layer: the requested rate, `no window`
   / `no manager` (lookup failed), `system on/off` (the user setting), and
   `switched ×N`, counting `AVDisplayManagerModeSwitchStart` notifications, the

@@ -50,6 +50,7 @@ report. One marketing version spans many builds.
 - On AirPlay, the sound comes back after a seek.
 - Image subtitles that declare no size appear in the right place.
 - A damaged Dolby Vision title no longer closes Lagoon.
+- On Apple TV, a title waits for the TV to finish switching its picture mode before it starts, so its first seconds are no longer lost to a black screen.
 
 ## 0.8.1 (120)
 
