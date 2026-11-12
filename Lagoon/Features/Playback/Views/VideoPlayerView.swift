@@ -374,7 +374,8 @@ struct VideoPlayerView: View {
                 isWaitingForGroup: syncPlay.isWaitingForGroup,
                 subtitleStyle: subtitlePreferences.renderStyle,
                 subtitleSearch: controller.subtitleSearch,
-                qualityOffer: controller.qualityOffer
+                qualityOffer: controller.qualityOffer,
+                transcodeNotice: controller.transcodeNotice
             ) { [weak engine] in
                 // Weak, like `PlayerEngineRef`: SwiftUI keeps copies of this
                 // closure past an episode handoff, and a strong capture

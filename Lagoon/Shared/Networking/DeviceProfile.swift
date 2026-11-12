@@ -290,8 +290,9 @@ nonisolated enum DeviceProfile {
 
     /// The profile for one ladder rung. Only the transcode rung differs.
     /// The connection and metered caps apply last so they also bound the
-    /// transcode rung.
-    static func lagoon(for delivery: PlaybackDelivery, maxBitrate: Int? = nil) -> Profile {
+    /// transcode rung. `allowsFullQuality` lifts the metered cap for one
+    /// negotiation, when the viewer asked for the original.
+    static func lagoon(for delivery: PlaybackDelivery, maxBitrate: Int? = nil, allowsFullQuality: Bool = false) -> Profile {
         let forRung = delivery == .transcode ? boundedForRealtimeTranscode(lagoon) : lagoon
         var capped = cappedToBitrate(forRung, maxBitrate)
         // An Apple TV never reports an expensive path.
@@ -299,7 +300,7 @@ nonisolated enum DeviceProfile {
         capped = cappedForMeteredPath(
             capped,
             cost: NetworkPathObserver.shared.current,
-            allowFullQuality: UserDefaults.standard.bool(forKey: meteredOverrideKey)
+            allowFullQuality: allowsFullQuality || UserDefaults.standard.bool(forKey: meteredOverrideKey)
         )
         #endif
         return delivery == .transcode ? transcodeCeilingOnCodecProfiles(capped) : capped

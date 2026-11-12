@@ -666,13 +666,8 @@ final class PlaybackIncidentMonitor {
     /// The `TranscodeReasons` query item, keeping only Jellyfin's known
     /// names so one new reason does not cost the rest.
     static func transcodeReasons(_ transcodingURL: String?) -> String? {
-        guard let transcodingURL,
-              let value = URLComponents(string: transcodingURL)?.queryItems?
-                .first(where: { $0.name == "TranscodeReasons" })?.value else { return nil }
-        var seen = Set<String>()
-        let known = value.split(separator: ",").map(String.init).filter {
-            DiagnosticSchema.transcodeReasonChoices.contains($0) && seen.insert($0).inserted
-        }
+        let known = PlaybackTranscodeNotice.reasons(in: transcodingURL)
+            .filter(DiagnosticSchema.transcodeReasonChoices.contains)
         return known.isEmpty ? nil : known.joined(separator: ",")
     }
 
