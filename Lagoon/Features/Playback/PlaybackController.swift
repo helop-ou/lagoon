@@ -35,6 +35,8 @@ final class PlaybackController {
     private(set) var nextUp: MediaItem? {
         didSet { automation.setNextUpAvailable(nextUp != nil) }
     }
+    /// The episode or list entry before this one, for the previous button.
+    private(set) var previousItem: MediaItem?
     let automation = PlaybackAutomation()
     /// The lower quality offered after repeated stalls.
     let qualityOffer = PlaybackQualityOffer()
@@ -136,6 +138,7 @@ final class PlaybackController {
     /// `timePosition` reads 0 rather than the requested start.
     private var engineHasStarted = false
     private var nextUpTask: Task<Void, Never>?
+    private var previousItemTask: Task<Void, Never>?
     /// Runs from install to the engine's first frame.
     @ObservationIgnored private let startWatch = PlaybackStartWatch()
     @ObservationIgnored private let successorPreparation = PlaybackSuccessorPreparation()
@@ -1052,6 +1055,24 @@ final class PlaybackController {
                 self?.nextUp = next
             }
         }
+        resolvePreviousItem(before: media, client: client)
+    }
+
+    private func resolvePreviousItem(before media: MediaItem, client: JellyfinClient) {
+        previousItemTask?.cancel()
+        previousItem = nil
+        switch queue.predecessor(before: media) {
+        case .none:
+            break
+        case .entry(let previous):
+            previousItem = previous
+        case .previousEpisode:
+            previousItemTask = Task { [weak self] in
+                let previous = try? await client.episodeBefore(media)
+                guard !Task.isCancelled else { return }
+                self?.previousItem = previous
+            }
+        }
     }
 
     /// Keeps a list's place on the server, so Home on any device can continue
@@ -1119,6 +1140,20 @@ final class PlaybackController {
         await restart(next, scope: "handoff", prepared: prepared, preservingPreparedNext: true)
     }
 
+    /// The previous button: the episode or list entry before this one, by
+    /// the same hand-off as Up Next. The warmed successor is for the title
+    /// after this one, so it goes.
+    func playPrevious() async {
+        guard !isAdvancing, groupTransport == nil, let previous = previousItem, client != nil else { return }
+        isAdvancing = true
+        defer { isAdvancing = false }
+        queue = queue.retreated()
+        beginEpisodeHandoff(to: previous)
+        guard !isClosed else { return }
+        captureTrackCarry()
+        await restart(previous, scope: "handoff", preservingPreparedNext: false)
+    }
+
     /// Replaces the engine on the same surface: stop, wait for the outgoing
     /// engine to release the display layer, then start. The one path for an
     /// episode hand-off, a group item change and a delivery fallback.
@@ -1152,6 +1187,7 @@ final class PlaybackController {
         guard !Task.isCancelled, isStillWanted() else { return }
         // Don't let the old card reappear over a successor resumed near its end.
         nextUp = nil
+        previousItem = nil
         didFinish = false
         errorMessage = nil
         if let rung { delivery = rung }
@@ -1343,7 +1379,8 @@ final class PlaybackController {
         PlayerAdjustments(
             setSubtitleOffset: { [subtitleOffset] seconds in subtitleOffset.set(seconds) },
             setNightMode: { [weak self] isOn in self?.updateAudioShaping { $0.nightMode = isOn } },
-            setDialogueBoost: { [weak self] isOn in self?.updateAudioShaping { $0.dialogueBoost = isOn } }
+            setDialogueBoost: { [weak self] isOn in self?.updateAudioShaping { $0.dialogueBoost = isOn } },
+            setChannelLimit: { [weak self] limit in self?.updateAudioShaping { $0.channelLimit = limit.engineLimit } }
         )
     }
 
@@ -1354,6 +1391,7 @@ final class PlaybackController {
         engine?.setAudioShaping(audioShaping)
         trackPreferencesStore?.values.nightMode = audioShaping.nightMode
         trackPreferencesStore?.values.dialogueBoost = audioShaping.dialogueBoost
+        trackPreferencesStore?.values.channelLimit = AudioChannelLimit(engineLimit: audioShaping.channelLimit)
     }
 
     func resumeBufferFill() {
@@ -1410,6 +1448,8 @@ final class PlaybackController {
         diagnosticSampler.stop()
         nextUpTask?.cancel()
         nextUpTask = nil
+        previousItemTask?.cancel()
+        previousItemTask = nil
         startWatch.end()
         // A sleeping countdown must not wake on a gone engine.
         automation.invalidate()

@@ -26,11 +26,35 @@ nonisolated enum PlayQueue: Equatable {
         }
     }
 
+    /// Where the title before `media` comes from, for the player's previous
+    /// button.
+    nonisolated enum Predecessor: Equatable {
+        case none
+        /// Ask the server for the episode before this one.
+        case previousEpisode
+        case entry(MediaItem)
+    }
+
+    func predecessor(before media: MediaItem) -> Predecessor {
+        switch self {
+        case .series:
+            media.type == .episode ? .previousEpisode : .none
+        case .list(let list):
+            list.previous.map { .entry($0.media) } ?? .none
+        }
+    }
+
     /// The queue once its next entry is playing. A series queue has no
     /// position to move.
     func advanced() -> PlayQueue {
         guard case .list(let list) = self, let advanced = list.advanced() else { return self }
         return .list(advanced)
+    }
+
+    /// The queue once its previous entry is playing.
+    func retreated() -> PlayQueue {
+        guard case .list(let list) = self, let retreated = list.retreated() else { return self }
+        return .list(retreated)
     }
 
     /// In a list, the Up Next countdown waits for the end of the file
@@ -76,11 +100,23 @@ nonisolated struct PlayQueueList: Equatable {
         entries.indices.contains(position + 1) ? entries[position + 1] : nil
     }
 
+    var previous: Entry? {
+        entries.indices.contains(position - 1) ? entries[position - 1] : nil
+    }
+
     /// Nil at the last entry.
     func advanced() -> PlayQueueList? {
         guard next != nil else { return nil }
         var advanced = self
         advanced.position += 1
         return advanced
+    }
+
+    /// Nil at the first entry.
+    func retreated() -> PlayQueueList? {
+        guard previous != nil else { return nil }
+        var retreated = self
+        retreated.position -= 1
+        return retreated
     }
 }

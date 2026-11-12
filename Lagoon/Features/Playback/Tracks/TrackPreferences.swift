@@ -85,6 +85,15 @@ nonisolated enum AudioChannelLimit: String, Codable, CaseIterable, Identifiable 
         case .stereo: .stereo
         }
     }
+
+    /// What the player's audio options show for the engine's limit.
+    init(engineLimit: AudioShaping.ChannelLimit?) {
+        switch engineLimit {
+        case nil: self = .off
+        case .surround: self = .surround
+        case .stereo: self = .stereo
+        }
+    }
 }
 
 nonisolated struct TrackPreferenceValues: Codable, Equatable {
