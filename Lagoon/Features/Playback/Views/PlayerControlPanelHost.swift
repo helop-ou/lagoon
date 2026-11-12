@@ -37,7 +37,6 @@ struct PlayerControlPanelHost: View, Equatable {
             subtitleTracks: engine.subtitleTracks,
             audioDelay: engine.audioDelay,
             subtitleOffset: engine.subtitleOffset,
-            audioShaping: engine.audioShaping,
             playbackRate: engine.rate,
             subtitleSearch: subtitleSearch,
             subtitleLoadState: engine.subtitleLoadState,
@@ -59,24 +58,6 @@ struct PlayerControlPanelHost: View, Equatable {
                     adjustments.setSubtitleOffset(seconds)
                 } else {
                     engine.setSubtitleOffset(seconds)
-                }
-            },
-            onSetNightMode: { isOn in
-                if let adjustments {
-                    adjustments.setNightMode(isOn)
-                } else {
-                    var shaping = engine.audioShaping
-                    shaping.nightMode = isOn
-                    engine.setAudioShaping(shaping)
-                }
-            },
-            onSetDialogueBoost: { isOn in
-                if let adjustments {
-                    adjustments.setDialogueBoost(isOn)
-                } else {
-                    var shaping = engine.audioShaping
-                    shaping.dialogueBoost = isOn
-                    engine.setAudioShaping(shaping)
                 }
             },
             onSetPlaybackRate: { engine.setRate($0) },

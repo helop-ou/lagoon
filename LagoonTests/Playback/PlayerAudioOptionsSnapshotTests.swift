@@ -8,9 +8,9 @@ import UIKit
 @Suite("Player audio options snapshots", .serialized)
 @MainActor
 struct PlayerAudioOptionsSnapshotTests {
-    @Test func syncAdjustmentsAndSoundToggles() async throws {
+    @Test func syncAdjustments() async throws {
         try await Snapshot.verify(
-            AudioTab(subtitleOffset: 1.5, audioShaping: AudioShaping(nightMode: true)),
+            AudioTab(subtitleOffset: 1.5),
             named: "audio-options",
             size: Self.size
         )
@@ -28,7 +28,6 @@ struct PlayerAudioOptionsSnapshotTests {
         @FocusState private var focus: PlayerControlFocus?
         @State private var tab = PlayerPanelTab.audio
         let subtitleOffset: Double
-        let audioShaping: AudioShaping
 
         var body: some View {
             PlayerControlPanel(
@@ -52,14 +51,11 @@ struct PlayerAudioOptionsSnapshotTests {
                 ],
                 audioDelay: 0,
                 subtitleOffset: subtitleOffset,
-                audioShaping: audioShaping,
                 playbackRate: 1,
                 onSelectAudioTrack: { _ in },
                 onSelectSubtitleTrack: { _ in },
                 onSetAudioDelay: { _ in },
                 onSetSubtitleOffset: { _ in },
-                onSetNightMode: { _ in },
-                onSetDialogueBoost: { _ in },
                 onSetPlaybackRate: { _ in }
             )
         }
