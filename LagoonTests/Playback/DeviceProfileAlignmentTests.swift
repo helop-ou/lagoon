@@ -84,6 +84,33 @@ struct DeviceProfileAlignmentTests {
         #expect(containers.contains("vob"))
     }
 
+    /// An Apple TV 4K decodes VP9 in hardware, and the server transcoded
+    /// every VP9 file above 1080p for it.
+    @Test func vp9ReachesFourKOnlyWhereTheDeviceDecodesItInHardware() {
+        func bound(_ capabilities: PlaybackCapabilities) -> [String: String] {
+            let vp9 = DeviceProfile.profile(for: capabilities).codecProfiles.first { $0.codec == "vp9" }
+            let sizes = vp9?.conditions.filter { $0.property == "Width" || $0.property == "Height" } ?? []
+            #expect(sizes.allSatisfy { $0.condition == "LessThanEqual" && $0.isRequired })
+            return Dictionary(uniqueKeysWithValues: sizes.map { ($0.property, $0.value) })
+        }
+        let hardware = PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: false, hardwareVP9: true)
+        #expect(bound(hardware) == ["Width": "3840", "Height": "2160"])
+        let software = PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: true, hardwareVP9: false)
+        #expect(bound(software) == ["Width": "1920", "Height": "1080"])
+
+        // The rest of the VP9 envelope does not depend on the decoder.
+        func others(_ capabilities: PlaybackCapabilities) -> [String] {
+            DeviceProfile.profile(for: capabilities).codecProfiles.first { $0.codec == "vp9" }?.conditions
+                .filter { $0.property != "Width" && $0.property != "Height" }
+                .map { "\($0.property) \($0.condition) \($0.value) \($0.isRequired)" } ?? []
+        }
+        #expect(others(hardware) == others(software))
+        #expect(others(hardware).contains("VideoProfile EqualsAny profile 0|profile 2 false"))
+        // Hardware VP9 changes nothing for another codec.
+        let av1 = DeviceProfile.profile(for: hardware).codecProfiles.first { $0.codec == "av1" }
+        #expect(av1?.conditions.contains { $0.property == "Width" && $0.value == "3840" } == true)
+    }
+
     @Test func av1AndVP9AreBoundedToTheTenBitSoftwareEnvelope() {
         let directVideo = DeviceProfile.everything.directPlayProfiles.first { $0.type == "Video" }
         let codecs = directVideo?.videoCodec?.split(separator: ",") ?? []
@@ -99,16 +126,15 @@ struct DeviceProfileAlignmentTests {
             for: PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: false)
         )
         for codec in ["av1", "vp9"] {
-            let profile = (codec == "av1" ? softwareProfile : DeviceProfile.everything)
-                .codecProfiles.first { $0.codec == codec }
+            let profile = softwareProfile.codecProfiles.first { $0.codec == codec }
             #expect(profile?.conditions.contains {
                 $0.property == "VideoBitDepth" && $0.condition == "LessThanEqual" && $0.value == "10"
             } == true)
             #expect(profile?.conditions.contains {
                 $0.property == "IsInterlaced" && $0.condition == "NotEquals" && $0.value == "true"
             } == true)
-            // Software AV1 (multi-core dav1d) reaches 4K. VP9 stays at HD,
-            // since nothing has measured it above that.
+            // Software AV1 (multi-core dav1d) reaches 4K. Software VP9
+            // stays at HD on a device without the hardware.
             let bound = codec == "av1" ? ("3840", "2160") : ("1920", "1080")
             #expect(profile?.conditions.contains {
                 $0.property == "Width" && $0.condition == "LessThanEqual" && $0.value == bound.0
@@ -327,14 +353,14 @@ struct DeviceProfileAlignmentTests {
         #expect(full?.conditions.contains { $0.property == "Width" } == false)
     }
 
-    @Test func hardwareWithHEVCIsOfferedTheWholeEnvelope() throws {
+    @Test func hardwareWithEveryDecoderIsOfferedTheWholeEnvelope() throws {
         // With the hardware present the profile is the declared envelope
         // exactly. Compared as objects: the encoder's key strategy loses
         // stable key order, so equal values can differ as bytes.
         let full = try JSONSerialization.jsonObject(
             with: JellyfinClient.encoder.encode(
                 DeviceProfile.profile(
-                    for: PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: true)
+                    for: PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: true, hardwareVP9: true)
                 )
             )
         ) as? NSDictionary
