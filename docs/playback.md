@@ -363,7 +363,8 @@ video costs the compositor, so bench any change to it.
 
 **Background (iOS).** Locking the phone or leaving the app keeps playing under
 the `audio` background mode. The picture is dropped until the scene returns,
-unless PiP or AirPlay shows it. Lock screen controls drive the engine. Skip
+unless PiP shows it. AirPlay does not keep it: the sample-buffer layer sends
+an AirPlay receiver audio only, and only mirroring carries the picture. Lock screen controls drive the engine. Skip
 and Up Next are decided by `PlaybackAutomation` off the engine's clock, never
 in a view body, so intros are skipped and the next episode starts with the
 screen off. tvOS pauses on background. See [system

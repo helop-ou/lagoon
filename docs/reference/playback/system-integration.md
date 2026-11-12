@@ -47,8 +47,7 @@ state are removed on teardown. The plist declares
   and `willEnterForegroundNotification` itself. The player is presented from
   UIKit, where SwiftUI's `scenePhase` never changes.
 - Entering the background stops proactive cache fill. Unless PiP is active or
-  transitioning (`isPictureInPictureShowing`) or AirPlay owns the route, the
-  engine goes audio-only: `setVideoOutputSuspended(true)` flushes the video
+  transitioning (`isPictureInPictureShowing`), the engine goes audio-only: `setVideoOutputSuspended(true)` flushes the video
   renderer, intake and queue on the pump queue. The demuxer discards the video
   stream (`FFmpegDemuxer.setVideoDiscarded`). The software decode stage
   resets. No decode or GPU work runs.
@@ -61,7 +60,12 @@ state are removed on teardown. The plist declares
   background needs.
 - A successor engine started by autoplay in the background inherits the
   suspension.
-- PiP stopping, or the AirPlay route dropping, while the app is still in the
+- AirPlay does not keep the picture. A sample-buffer layer sends an AirPlay
+  receiver audio only (checked on an iPhone to an Apple TV, November 2026), and
+  mirroring goes dark when the phone locks. Before that, an AirPlay route kept
+  video decoding in the background, the locked phone lost its decode session,
+  and the rebuild seek left AirPlay silent until unlock.
+- PiP stopping while the app is still in the
   background suspends video the same way (`pictureRouteDidChange`). Before
   HEL-261 the check ran only on entering the background, so video kept
   decoding with nothing showing it.
