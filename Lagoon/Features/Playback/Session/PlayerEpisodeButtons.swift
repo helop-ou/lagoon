@@ -12,4 +12,16 @@ nonisolated struct PlayerEpisodeButtons: Equatable {
         guard !inGroup, hasPrevious || hasNext else { return nil }
         return PlayerEpisodeButtons(hasPrevious: hasPrevious, hasNext: hasNext)
     }
+
+    /// Past this, previous starts the current title over, as most players do.
+    static let restartAfterSeconds: Double = 5
+
+    enum PreviousAction: Equatable {
+        case restart
+        case previousTitle
+    }
+
+    static func previousAction(position: Double) -> PreviousAction {
+        position > restartAfterSeconds ? .restart : .previousTitle
+    }
 }
