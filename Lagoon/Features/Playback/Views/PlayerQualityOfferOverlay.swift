@@ -48,8 +48,10 @@ struct PlayerQualityOfferCard: View {
                 .foregroundStyle(.secondary)
             #else
             HStack(spacing: Metrics.Space.s) {
+                // The player keeps the white accent, so the prominent fill is white.
                 Button("Lower Quality", action: onAccept)
                     .buttonStyle(.borderedProminent)
+                    .foregroundStyle(.black)
                     .accessibilityIdentifier("player.qualityOffer.accept")
                 Button("Keep", action: onDismiss)
                     .buttonStyle(.bordered)
