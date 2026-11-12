@@ -103,8 +103,8 @@ struct CustomPlayerView<Surface: View>: View {
     /// The toolbar's Episodes popover.
     @State private var episodeListOpen = false
     #endif
-    #if os(tvOS)
     @State private var rowMenus = PlayerRowMenus()
+    #if os(tvOS)
     @Namespace private var panelFocusScope
     @Environment(\.resetFocus) private var resetFocus
     #endif
@@ -159,7 +159,18 @@ struct CustomPlayerView<Surface: View>: View {
                                         .frame(idealWidth: EpisodePopoverMetrics.width, idealHeight: EpisodePopoverMetrics.height)
                                 }
                         }
-                        PlayerSoundMenu(options: soundOptions)
+                        // A system menu that says when it opens, so the
+                        // controls stay up while it does.
+                        PlayerRowMenuButton(
+                            id: PlayerSoundOptions.menuID,
+                            title: String(localized: "Sound"),
+                            systemImage: PlayerSoundOptions.systemImage,
+                            accessibilityIdentifier: "player.sound",
+                            menuKey: PlayerRowMenuContent.soundMenuKey(soundOptions),
+                            menus: rowMenus,
+                            makeMenu: { PlayerRowMenuContent.soundMenu(soundOptions) },
+                            onMoveDown: {}
+                        )
                         if let pictureInPictureButton {
                             Button(
                                 pictureInPictureButton.title,
@@ -384,7 +395,7 @@ struct CustomPlayerView<Surface: View>: View {
             guard !episodeListOpen else { return }
             #endif
             guard !Task.isCancelled, !panelOpen, !engine.isPaused, !isScrubbing, !isOnTransportControl,
-                  !benchPinnedTransport else { return }
+                  !rowMenus.isPresented, !benchPinnedTransport else { return }
             controlsVisible = false
         }
         // Only show the spinner when buffering persists.

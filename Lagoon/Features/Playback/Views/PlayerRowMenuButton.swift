@@ -1,9 +1,8 @@
+import LagoonEngine
 import SwiftUI
-
-#if os(tvOS)
 import UIKit
 
-/// What the tvOS row's UIKit menu buttons tell the player: which one has
+/// What the player's UIKit menu buttons tell it: which one has
 /// focus and whether its menu is up. Their focus lives outside SwiftUI's
 /// `FocusState`, and an open system menu takes focus out of the view tree,
 /// so without this the player read both as the row being left.
@@ -72,9 +71,14 @@ struct PlayerRowMenuButton: UIViewRepresentable {
     let onMoveDown: () -> Void
 
     func makeUIView(context: Context) -> RowMenuUIButton {
+        #if os(tvOS)
         var configuration = UIButton.Configuration.glass()
-        configuration.image = UIImage(systemName: systemImage)
         configuration.cornerStyle = .capsule
+        #else
+        // The toolbar draws the glass around its items.
+        var configuration = UIButton.Configuration.plain()
+        #endif
+        configuration.image = UIImage(systemName: systemImage)
         let button = RowMenuUIButton(configuration: configuration)
         button.showsMenuAsPrimaryAction = true
         button.accessibilityLabel = title
@@ -151,4 +155,48 @@ final class RowMenuUIButton: UIButton {
         super.pressesBegan(presses, with: event)
     }
 }
-#endif
+
+/// What the player's menu buttons hold, as system menus.
+enum PlayerRowMenuContent {
+    /// Night Mode and Dialogue Boost as toggles, then the channel limit as
+    /// an inline choice.
+    static func soundMenu(_ options: PlayerSoundOptions) -> UIMenu {
+        let shaping = options.shaping
+        let limits = AudioChannelLimit.allCases.map { limit in
+            UIAction(title: limit.title, state: options.channelLimit == limit ? .on : .off) { _ in
+                options.setChannelLimit(limit)
+            }
+        }
+        return UIMenu(children: [
+            UIAction(title: String(localized: "Night Mode"), state: shaping.nightMode ? .on : .off) { _ in
+                options.setNightMode(!shaping.nightMode)
+            },
+            UIAction(title: String(localized: "Dialogue Boost"), state: shaping.dialogueBoost ? .on : .off) { _ in
+                options.setDialogueBoost(!shaping.dialogueBoost)
+            },
+            UIMenu(title: String(localized: "Channel Limit"), options: .displayInline, children: limits),
+        ])
+    }
+
+    /// The season or list under its heading, the playing title checked.
+    static func episodeMenu(_ list: PlayerEpisodeList, onPlay: @escaping (PlayerEpisodeList.Row) -> Void) -> UIMenu {
+        let rows = list.rows.map { row in
+            UIAction(title: row.title, subtitle: row.detail, state: row.isCurrent ? .on : .off) { _ in
+                guard !row.isCurrent else { return }
+                onPlay(row)
+            }
+        }
+        return UIMenu(title: list.heading ?? "", options: .displayInline, children: rows)
+    }
+
+    /// What the sound menu shows. A presented menu replaced with the same
+    /// content still redraws, so it is replaced only when this changes.
+    static func soundMenuKey(_ options: PlayerSoundOptions) -> String {
+        "\(options.shaping.nightMode)|\(options.shaping.dialogueBoost)|\(options.channelLimit.rawValue)"
+    }
+
+    static func episodeMenuKey(_ list: PlayerEpisodeList) -> String {
+        ([list.heading ?? ""] + list.rows.map { "\($0.index):\($0.title):\($0.isCurrent)" })
+            .joined(separator: "|")
+    }
+}

@@ -3,10 +3,9 @@ import LagoonEngine
 import Testing
 @testable import Lagoon
 
-#if os(tvOS)
 import UIKit
 
-/// The system menus behind the tvOS row's Episodes and Sound buttons.
+/// The system menus behind the player's Episodes and Sound buttons.
 @Suite("Player row menus")
 @MainActor
 struct PlayerRowMenuTests {
@@ -39,7 +38,7 @@ struct PlayerRowMenuTests {
     }
 
     @Test func theSoundMenuShowsTheTogglesAndTheLimitAsAnInlineChoice() throws {
-        let menu = PlayerTVControlRow.soundMenu(options(nightMode: true, limit: .stereo))
+        let menu = PlayerRowMenuContent.soundMenu(options(nightMode: true, limit: .stereo))
         let actions = menu.children.compactMap { $0 as? UIAction }
         #expect(actions.map(\.title) == ["Night Mode", "Dialogue Boost"])
         #expect(actions.map(\.state) == [.on, .off])
@@ -52,7 +51,7 @@ struct PlayerRowMenuTests {
     }
 
     @Test func theEpisodeMenuChecksThePlayingEpisodeUnderItsHeading() throws {
-        let menu = PlayerTVControlRow.episodeMenu(try season(current: 1)) { _ in }
+        let menu = PlayerRowMenuContent.episodeMenu(try season(current: 1)) { _ in }
         #expect(menu.title == "The Rookie · Season 4")
         #expect(menu.options.contains(.displayInline))
         let rows = menu.children.compactMap { $0 as? UIAction }
@@ -63,15 +62,14 @@ struct PlayerRowMenuTests {
     /// A presented menu that is replaced redraws, so the key must hold while
     /// nothing it shows changes, and move when anything does.
     @Test func aMenuIsReplacedOnlyWhenWhatItShowsChanges() throws {
-        let sound = PlayerTVControlRow.soundMenuKey(options())
-        #expect(PlayerTVControlRow.soundMenuKey(options()) == sound)
-        #expect(PlayerTVControlRow.soundMenuKey(options(nightMode: true)) != sound)
-        #expect(PlayerTVControlRow.soundMenuKey(options(dialogueBoost: true)) != sound)
-        #expect(PlayerTVControlRow.soundMenuKey(options(limit: .surround)) != sound)
+        let sound = PlayerRowMenuContent.soundMenuKey(options())
+        #expect(PlayerRowMenuContent.soundMenuKey(options()) == sound)
+        #expect(PlayerRowMenuContent.soundMenuKey(options(nightMode: true)) != sound)
+        #expect(PlayerRowMenuContent.soundMenuKey(options(dialogueBoost: true)) != sound)
+        #expect(PlayerRowMenuContent.soundMenuKey(options(limit: .surround)) != sound)
 
-        let episodes = PlayerTVControlRow.episodeMenuKey(try season(current: 0))
-        #expect(PlayerTVControlRow.episodeMenuKey(try season(current: 0)) == episodes)
-        #expect(PlayerTVControlRow.episodeMenuKey(try season(current: 1)) != episodes)
+        let episodes = PlayerRowMenuContent.episodeMenuKey(try season(current: 0))
+        #expect(PlayerRowMenuContent.episodeMenuKey(try season(current: 0)) == episodes)
+        #expect(PlayerRowMenuContent.episodeMenuKey(try season(current: 1)) != episodes)
     }
 }
-#endif

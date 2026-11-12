@@ -15,35 +15,9 @@ struct PlayerSoundOptions {
     /// A waveform, not a speaker: the button shapes the sound, while a
     /// speaker reads as volume or the output route.
     static let systemImage = "waveform"
+    static let menuID = "sound"
 }
 
-#if os(iOS)
-/// The toolbar's sound button: a native menu.
-struct PlayerSoundMenu: View {
-    let options: PlayerSoundOptions
-
-    var body: some View {
-        Menu {
-            Section {
-                Toggle("Night Mode", isOn: Binding(get: { options.shaping.nightMode }, set: options.setNightMode))
-                    .accessibilityIdentifier("player.sound.nightMode")
-                Toggle("Dialogue Boost", isOn: Binding(get: { options.shaping.dialogueBoost }, set: options.setDialogueBoost))
-                    .accessibilityIdentifier("player.sound.dialogueBoost")
-                Picker("Channel Limit", selection: Binding(get: { options.channelLimit }, set: options.setChannelLimit)) {
-                    ForEach(AudioChannelLimit.allCases) { limit in
-                        Text(limit.title).tag(limit)
-                    }
-                }
-                .pickerStyle(.menu)
-                .accessibilityIdentifier("player.sound.channelLimit")
-            }
-        } label: {
-            Label("Sound", systemImage: PlayerSoundOptions.systemImage)
-        }
-        .accessibilityIdentifier("player.sound")
-    }
-}
-#endif
 
 #if os(tvOS)
 /// The tvOS buttons above the scrubber: previous, Episodes, Sound, Picture in
@@ -94,9 +68,9 @@ struct PlayerTVControlRow: View, Equatable {
                     title: String(localized: "Episodes"),
                     systemImage: "list.and.film",
                     accessibilityIdentifier: "player.episodes",
-                    menuKey: Self.episodeMenuKey(episodeList),
+                    menuKey: PlayerRowMenuContent.episodeMenuKey(episodeList),
                     menus: menus,
-                    makeMenu: { Self.episodeMenu(episodeList, onPlay: onPlayEpisode) },
+                    makeMenu: { PlayerRowMenuContent.episodeMenu(episodeList, onPlay: onPlayEpisode) },
                     onMoveDown: onMoveDown
                 )
                 .frame(width: RowMetrics.menuButton, height: RowMetrics.menuButton)
@@ -106,9 +80,9 @@ struct PlayerTVControlRow: View, Equatable {
                 title: String(localized: "Sound"),
                 systemImage: PlayerSoundOptions.systemImage,
                 accessibilityIdentifier: "player.sound",
-                menuKey: Self.soundMenuKey(soundOptions),
+                menuKey: PlayerRowMenuContent.soundMenuKey(soundOptions),
                 menus: menus,
-                makeMenu: { Self.soundMenu(soundOptions) },
+                makeMenu: { PlayerRowMenuContent.soundMenu(soundOptions) },
                 onMoveDown: onMoveDown
             )
             .frame(width: RowMetrics.menuButton, height: RowMetrics.menuButton)
@@ -127,50 +101,6 @@ struct PlayerTVControlRow: View, Equatable {
         .buttonStyle(.glass)
         .buttonBorderShape(.circle)
         .focusSection()
-    }
-
-    // MARK: - Menus
-
-    /// Night Mode and Dialogue Boost as toggles, then the channel limit as
-    /// an inline choice.
-    static func soundMenu(_ options: PlayerSoundOptions) -> UIMenu {
-        let shaping = options.shaping
-        let limits = AudioChannelLimit.allCases.map { limit in
-            UIAction(title: limit.title, state: options.channelLimit == limit ? .on : .off) { _ in
-                options.setChannelLimit(limit)
-            }
-        }
-        return UIMenu(children: [
-            UIAction(title: String(localized: "Night Mode"), state: shaping.nightMode ? .on : .off) { _ in
-                options.setNightMode(!shaping.nightMode)
-            },
-            UIAction(title: String(localized: "Dialogue Boost"), state: shaping.dialogueBoost ? .on : .off) { _ in
-                options.setDialogueBoost(!shaping.dialogueBoost)
-            },
-            UIMenu(title: String(localized: "Channel Limit"), options: .displayInline, children: limits),
-        ])
-    }
-
-    /// The season or list under its heading, the playing title checked.
-    static func episodeMenu(_ list: PlayerEpisodeList, onPlay: @escaping (PlayerEpisodeList.Row) -> Void) -> UIMenu {
-        let rows = list.rows.map { row in
-            UIAction(title: row.title, subtitle: row.detail, state: row.isCurrent ? .on : .off) { _ in
-                guard !row.isCurrent else { return }
-                onPlay(row)
-            }
-        }
-        return UIMenu(title: list.heading ?? "", options: .displayInline, children: rows)
-    }
-
-    /// What the sound menu shows. A presented menu replaced with the same
-    /// content still redraws, so it is replaced only when this changes.
-    static func soundMenuKey(_ options: PlayerSoundOptions) -> String {
-        "\(options.shaping.nightMode)|\(options.shaping.dialogueBoost)|\(options.channelLimit.rawValue)"
-    }
-
-    static func episodeMenuKey(_ list: PlayerEpisodeList) -> String {
-        ([list.heading ?? ""] + list.rows.map { "\($0.index):\($0.title):\($0.isCurrent)" })
-            .joined(separator: "|")
     }
 
     private enum RowMetrics {
