@@ -59,6 +59,16 @@ struct PictureInPictureSubtitleTests {
         ).edge == .dropShadow)
     }
 
+    /// The default caption style names the system font ".SFUI-Medium", and an
+    /// iPhone drew picture in picture subtitles in Times.
+    @Test func aSystemFontNameLeavesTheFontToTheEngine() {
+        let style = SubtitlePreferencesStore.burnedInStyle(
+            text: CGColor(gray: 1, alpha: 1), background: CGColor(gray: 0, alpha: 1),
+            backgroundOpacity: 0, edge: .shadow, scale: 1, fontName: ".SFUI-Medium"
+        )
+        #expect(style.fontName == nil)
+    }
+
     // MARK: - Helpers
 
     private static let style = BurnedInSubtitleStyle(relativeSize: 0.07)
