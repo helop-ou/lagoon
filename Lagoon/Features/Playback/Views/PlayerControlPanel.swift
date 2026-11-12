@@ -347,11 +347,14 @@ struct PlayerControlPanel: View {
                 Divider()
             }
 
+            // Focus section, as on the Video tab: nothing focusable sits
+            // straight under the Audio tab, so Down from it went nowhere.
             audioOptions
                 .frame(
                     width: PlayerPanelMetrics.audioOptionsColumnWidth,
                     alignment: .topLeading
                 )
+                .focusSection()
 
             Spacer(minLength: 0)
         }
