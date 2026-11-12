@@ -95,6 +95,7 @@ struct PlayerRegressionValue: ViewModifier {
         case .track(let id): "track-\(id)"
         case .control(let id): "control-\(id)"
         case .sound(let id): "sound-\(id)"
+        case .episode(let index): "episode-\(index)"
         case nil: "none"
         }
         let memory = MemorySnapshot.current()

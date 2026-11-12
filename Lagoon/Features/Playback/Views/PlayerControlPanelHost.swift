@@ -11,9 +11,6 @@ struct PlayerControlPanelHost: View, Equatable {
     let info: PlayerItemInfo
     var subtitleSearch: SubtitleSearchCoordinator? = nil
     var adjustments: PlayerAdjustments? = nil
-    var isPictureInPicturePossible = false
-    var isPictureInPictureActive = false
-    var onTogglePictureInPicture: (() -> Void)? = nil
     var together: PlayerTogetherState? = nil
     var onLeaveGroup: (() -> Void)? = nil
     var onSetIgnoreWait: ((Bool) -> Void)? = nil
@@ -23,8 +20,6 @@ struct PlayerControlPanelHost: View, Equatable {
         lhs.engine === rhs.engine
             && lhs.info == rhs.info
             && lhs.subtitleSearch === rhs.subtitleSearch
-            && lhs.isPictureInPicturePossible == rhs.isPictureInPicturePossible
-            && lhs.isPictureInPictureActive == rhs.isPictureInPictureActive
             && lhs.together == rhs.together
     }
 
@@ -41,9 +36,6 @@ struct PlayerControlPanelHost: View, Equatable {
             subtitleSearch: subtitleSearch,
             subtitleLoadState: engine.subtitleLoadState,
             onRetrySubtitleLoad: { engine.retrySubtitleLoad() },
-            isPictureInPicturePossible: isPictureInPicturePossible,
-            isPictureInPictureActive: isPictureInPictureActive,
-            onTogglePictureInPicture: onTogglePictureInPicture,
             together: together,
             onLeaveGroup: onLeaveGroup,
             onSetIgnoreWait: onSetIgnoreWait,
