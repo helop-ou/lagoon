@@ -19,6 +19,7 @@ enum DisplayModeMatcher {
     /// Callers re-apply often, and any assignment to the display manager
     /// risks an HDMI round trip (a black screen), so compare first.
     private static var appliedRequest: DisplayMatchRequest??
+    private static var switchState = DisplaySwitchWait.State()
 
     static func apply(_ request: DisplayMatchRequest?) {
         installObserverIfNeeded()
@@ -29,6 +30,30 @@ enum DisplayModeMatcher {
             AVDisplayCriteria(refreshRate: $0.frameRate, formatDescription: $0.formatDescription)
         }
         appliedRequest = request
+        // A switch can only follow where the system honours the criteria.
+        switchState = DisplaySwitchWait.State(
+            appliedAt: manager.isDisplayCriteriaMatchingEnabled ? ProcessInfo.processInfo.systemUptime : nil
+        )
+    }
+
+    /// Returns once the display has settled after the last `apply`. The
+    /// panel is black during a switch, so a title that starts meanwhile
+    /// loses its first seconds.
+    static func waitUntilSettled() async {
+        await DisplaySwitchWait.settle(
+            state: { switchState },
+            now: { ProcessInfo.processInfo.systemUptime },
+            sleep: { try? await Task.sleep(for: .seconds($0)) }
+        )
+    }
+
+    /// Holds a title's start until the display has settled. The view
+    /// applies the same request. This one cannot come late.
+    static func startGate(for engine: SampleBufferPlayerEngine) -> @MainActor () async -> Void {
+        { [weak engine] in
+            apply(engine?.displayMatchRequest)
+            await waitUntilSettled()
+        }
     }
 
     /// HUD phrase: which lookup failed, or the user setting and switches.
@@ -75,6 +100,17 @@ enum DisplayModeMatcher {
         ) { _ in
             MainActor.assumeIsolated {
                 modeSwitchCount += 1
+                switchState.switchStartedAt = ProcessInfo.processInfo.systemUptime
+                switchState.switchInProgress = true
+            }
+        }
+        NotificationCenter.default.addObserver(
+            forName: .AVDisplayManagerModeSwitchEnd,
+            object: nil,
+            queue: .main
+        ) { _ in
+            MainActor.assumeIsolated {
+                switchState.switchInProgress = false
             }
         }
     }
