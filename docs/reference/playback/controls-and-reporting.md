@@ -88,13 +88,22 @@ so compare the two before trusting a simulator result for remote input.
 
 ## Putting controls in the transport (tvOS)
 
-**Nothing in the transport is focusable, deliberately.** The overlay sets
-`allowsHitTesting(false)` on tvOS and the surface always owns focus:
-`onMoveCommand` lives on the surface, so the arrows stop scrubbing the moment
-focus leaves it. The skip prompt and Up Next card are visible but unfocusable
-and driven by Select. The remote is fully allocated except Up: Left/Right seek
-or walk the scrub playhead, Down opens the panel, Menu cancels/closes/exits,
-Play/Pause toggles. (A speed control was built there once and reverted.)
+**Only the row above the scrubber is focusable, and only on Up.** The surface
+owns focus otherwise: `onMoveCommand` lives on it, so the arrows stop
+scrubbing the moment focus leaves it. The skip prompt and Up Next card are
+visible but unfocusable and driven by Select. Left/Right seek or walk the
+scrub playhead, Down opens the panel, Menu cancels/closes/exits, Play/Pause
+toggles. Up was the one free direction, and it now moves focus to the row of
+previous, Sound and next (`PlayerTVControlRow`, `.glass` circles, a
+`focusSection`). (A speed control was built there once and reverted.)
+
+The row follows every rule below: the overlay hit-tests only while the
+transport is up, the row is disabled while it is hidden, the auto-hide skips
+while a `.control` or `.sound` focus holds, and Down from the row or Back
+returns `playerFocus = .surface`. The overlay sets its white foreground on the
+title, rail and labels, never on the row's ancestors. The Sound list is a
+sibling above the row, built from ordinary buttons, since a `Menu` never
+presents in the cover.
 
 A focusable control there needs all of these:
 
