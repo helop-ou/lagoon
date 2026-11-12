@@ -203,8 +203,9 @@ nonisolated enum DeviceProfile {
                     ),
                 ]
             ),
-            // No public VP9 VideoToolbox path on tvOS, so software, capped at
-            // 1080p. Profiles 0 and 2 are 8- and 10-bit 4:2:0.
+            // Profiles 0 and 2 are 8- and 10-bit 4:2:0, which is what the
+            // hardware decoder takes. 4K is what it was measured at on an
+            // Apple TV 4K. Without it, `profile(for:)` keeps VP9 at 1080p.
             CodecProfile(
                 type: "Video",
                 codec: "vp9",
@@ -230,13 +231,13 @@ nonisolated enum DeviceProfile {
                     ProfileCondition(
                         condition: "LessThanEqual",
                         property: "Width",
-                        value: "1920",
+                        value: "3840",
                         isRequired: true
                     ),
                     ProfileCondition(
                         condition: "LessThanEqual",
                         property: "Height",
-                        value: "1080",
+                        value: "2160",
                         isRequired: true
                     ),
                     ProfileCondition(
@@ -460,6 +461,11 @@ nonisolated enum DeviceProfile {
         }
         if !capabilities.hardwareAV1 {
             codecProfiles = codecProfiles.map { boundedTo4K($0, codec: "av1") }
+        }
+        if !capabilities.hardwareVP9 {
+            // Software VP9 above 1080p has only been measured on a device
+            // that has the hardware.
+            codecProfiles = codecProfiles.map { boundedToHD($0, codec: "vp9") }
         }
 
         var result = envelope
