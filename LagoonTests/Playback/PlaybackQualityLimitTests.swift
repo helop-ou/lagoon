@@ -77,6 +77,16 @@ struct PlaybackQualityLimitTests {
         #expect(width(.negotiated) == uncapped)
     }
 
+    /// A 73.5 Mbit/s Dolby Vision remux transcoded on fast Wi-Fi to a
+    /// remote server: the probe read what it could and 70% of that was not
+    /// enough.
+    @Test func autoLeavesAFastLinkUncapped() {
+        let fast = PlaybackQualityLimit.unboundedLinkBitsPerSecond
+        #expect(PlaybackQualityLimit.maxBitrate(setting: .auto, connection: .remote(bitsPerSecond: fast)) == nil)
+        #expect(PlaybackQualityLimit.maxBitrate(setting: .auto, connection: .remote(bitsPerSecond: 90_000_000)) == nil)
+        #expect(PlaybackQualityLimit.maxBitrate(setting: .auto, connection: .remote(bitsPerSecond: fast - 1)) != nil)
+    }
+
     @Test func autoLeavesAServerOnThisNetworkAtFullQuality() {
         #expect(PlaybackQualityLimit.maxBitrate(setting: .auto, connection: .inNetwork) == nil)
         // An unanswered probe keeps today's ceiling rather than guessing.
