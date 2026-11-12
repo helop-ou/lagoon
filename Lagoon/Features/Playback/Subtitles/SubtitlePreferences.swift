@@ -264,7 +264,9 @@ final class SubtitlePreferencesStore {
             edge: burnedInEdge,
             backgroundColor: subtitleColor(background, opacity: backgroundOpacity),
             relativeSize: burnedInRelativeSize * scale,
-            fontName: fontName
+            // A system font's name (".SFUI-Medium") does not open by name:
+            // CoreText substituted Times. Nil gets the engine's system font.
+            fontName: fontName?.hasPrefix(".") == true ? nil : fontName
         )
     }
 
