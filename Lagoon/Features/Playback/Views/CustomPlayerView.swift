@@ -36,11 +36,6 @@ struct CustomPlayerView<Surface: View>: View {
     /// Jellyfin reports `Transcode` for both remux and re-encode. The probe
     /// needs this to tell them apart.
     var deliveryRung: PlaybackDelivery = .negotiated
-    var isPlaybackCacheActive = false
-    /// Probe only. The scrubber draws `bufferedRanges`.
-    var bufferedFraction: Double? = nil
-    var bufferedRanges: [PlaybackBufferedRange] = []
-    var playheadPrefetchCount = 0
     let info: PlayerItemInfo
     /// Skip and Up Next, decided off the engine's clock by the controller.
     let automation: PlaybackAutomation
@@ -242,8 +237,6 @@ struct CustomPlayerView<Surface: View>: View {
                     scrubTarget: scrubTarget,
                     showsEndTime: showsEndTime,
                     showsPanelHint: showsPanelHint,
-                    bufferedFraction: bufferedFraction,
-                    bufferedRanges: bufferedRanges,
                     trickplay: trickplay,
                     onScrubPreview: { seconds in
                         scrubTarget = seconds
@@ -467,10 +460,6 @@ struct CustomPlayerView<Surface: View>: View {
                     playerSurfaceIdentity: playerSurfaceIdentity,
                     playbackMethod: playbackMethod,
                     deliveryRung: deliveryRung,
-                    isPlaybackCacheActive: isPlaybackCacheActive,
-                    bufferedFraction: bufferedFraction,
-                    bufferedRanges: bufferedRanges,
-                    playheadPrefetchCount: playheadPrefetchCount,
                     handoffMilliseconds: handoffMilliseconds,
                     nextUpCardStart: automation.nextUpCardStart,
                     isNextUpSuppressed: panelOpen || isScrubbing || automation.nextUpAnswer == .stay,

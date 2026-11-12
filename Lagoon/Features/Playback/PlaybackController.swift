@@ -80,9 +80,6 @@ final class PlaybackController {
     private(set) var hudLines: [String] = []
     /// Read through to the engine, which owns the cache. Nothing here
     /// mirrors it. HLS has no byte-range model.
-    var bufferedFraction: Double? { engine?.bufferState.bufferedFraction }
-    var bufferedRanges: [PlaybackBufferedRange] { engine?.bufferState.bufferedRanges ?? [] }
-    var playheadPrefetchCount: Int { engine?.bufferState.playheadPrefetchCount ?? 0 }
 
     private var client: JellyfinClient?
     /// Set by the viewer's start and moved on by each hand-off. A retry or a
@@ -121,9 +118,6 @@ final class PlaybackController {
     /// regression probe needs the rung to tell them apart.
     var activeDeliveryRung: PlaybackDelivery { delivery }
 
-    var isPlaybackCacheActive: Bool {
-        engine?.bufferState.isActive ?? false
-    }
     @ObservationIgnored private var reporting: PlaybackReportingSession?
     @ObservationIgnored private let diagnosticSampler = PlaybackDiagnosticsSampler()
     private var isClosed = false

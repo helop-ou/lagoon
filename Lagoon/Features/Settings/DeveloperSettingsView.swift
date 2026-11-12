@@ -331,11 +331,6 @@ private struct PlayerTransportComponentPreviewScreen: View {
         CustomPlayerView(
             engine: engine,
             playbackIdentity: "player-transport-preview",
-            bufferedFraction: 0.18,
-            bufferedRanges: [
-                PlaybackBufferedRange(lowerFraction: 0, upperFraction: 0.18),
-                PlaybackBufferedRange(lowerFraction: 0.29, upperFraction: 0.62),
-            ],
             info: previewInfo,
             automation: automation,
             onDismiss: { dismiss() }
@@ -573,6 +568,14 @@ private struct PlayerPanelComponentPreview: View {
 /// focus tests without a media server.
 @Observable
 private final class PlayerPanelPreviewEngine: PlayerEngine {
+    var bufferState = PlaybackBufferState(
+        isActive: true,
+        bufferedFraction: 0.18,
+        bufferedRanges: [
+            PlaybackBufferedRange(lowerFraction: 0, upperFraction: 0.18),
+            PlaybackBufferedRange(lowerFraction: 0.29, upperFraction: 0.62),
+        ]
+    )
     var timePosition = 0.0
     var duration = 1_320.0
     var isPaused = false
