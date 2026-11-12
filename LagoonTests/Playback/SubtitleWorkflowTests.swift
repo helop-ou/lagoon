@@ -1,5 +1,7 @@
+import CoreText
 import Foundation
 import Testing
+import UIKit
 @testable import LagoonEngine
 @testable import Lagoon
 
@@ -16,6 +18,16 @@ struct SubtitleWorkflowTests {
     }
 
     /// The only key a casing strategy could mangle: consecutive capitals.
+    /// The default caption style names the system font ".SFUI-…", which does
+    /// not open by name: full-screen subtitles were drawn in Times.
+    @Test func theSystemCaptionFontStaysTheSystemFont() throws {
+        let system = try #require(CTFontCreateUIFontForLanguage(.system, 30, nil))
+        let font = SubtitlePreferencesStore.uiFont(system)
+        #expect(!font.familyName.contains("Times"))
+        #expect(font.fontName == CTFontCopyPostScriptName(system) as String)
+        #expect(font.pointSize == 30)
+    }
+
     @Test func remoteSubtitleLanguageKeyWithAnAcronymDecodes() throws {
         let json = Data(#"{"Id":"eng-provider-42","ThreeLetterISOLanguageName":"eng"}"#.utf8)
         let result = try JellyfinClient.decoder.decode(RemoteSubtitleInfo.self, from: json)
