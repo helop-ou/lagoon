@@ -1164,15 +1164,16 @@ final class PlaybackController {
         automation.playNext()
     }
 
-    /// The app is away and neither picture in picture nor AirPlay shows the
-    /// picture, so decoding it is wasted and its session may be taken.
-    nonisolated static func videoIsUnseen(inBackground: Bool, pictureInPicture: Bool, airPlay: Bool) -> Bool {
-        inBackground && !pictureInPicture && !airPlay
+    /// The app is away and picture in picture does not show the picture, so
+    /// decoding it is wasted and its session may be taken. AirPlay counts as
+    /// away too: a sample-buffer layer sends it audio only.
+    nonisolated static func videoIsUnseen(inBackground: Bool, pictureInPicture: Bool) -> Bool {
+        inBackground && !pictureInPicture
     }
 
     #if os(iOS)
     /// Locked or backgrounded: audio carries on, cache fill stops, and the
-    /// picture is dropped unless PiP or AirPlay still shows it.
+    /// picture is dropped unless PiP still shows it.
     private func applicationDidEnterBackground() {
         guard !isClosed, engine != nil else { return }
         isInBackground = true
@@ -1206,8 +1207,7 @@ final class PlaybackController {
         guard !videoOutputSuspended,
               Self.videoIsUnseen(
                   inBackground: isInBackground,
-                  pictureInPicture: isPictureInPictureShowing(),
-                  airPlay: isExternalPlaybackRouteActive
+                  pictureInPicture: isPictureInPictureShowing()
               ) else { return }
         videoOutputSuspended = true
         engine?.setVideoOutputSuspended(true)
