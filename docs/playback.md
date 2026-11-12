@@ -370,15 +370,15 @@ step.
 
 **Sound:** Night Mode, Dialogue Boost and the channel limit (Off, 5.1,
 Stereo) live behind the player's own Sound button, not in the panel: a native
-menu in the iOS toolbar beside Info, and a short list above the tvOS row
-(`PlayerSoundOptions`). The channel limit is in Settings, Audio too, since it
+menu in the iOS toolbar beside Info, and a system menu on the tvOS row's
+Sound button (`PlayerSoundOptions`). The channel limit is in Settings, Audio too, since it
 suits the room. A limit changed in the player is kept as the preference. All
 three are per-account preferences
 (`TrackPreferenceValues`), become the engine's `AudioShaping`, and are set
 before `prepare` so a title opens shaped. A toggle in the player applies at
 once with a short re-demux and is kept for the next title. While any of them
 is on, audio decodes on the device, so Atmos plays without its height
-channels, which both places say.
+channels, which Settings, Audio says.
 
 **Episodes:** the season of the playing episode, or every entry of a
 collection or playlist, with the playing one marked (`PlayerEpisodeList`). A
@@ -476,9 +476,9 @@ integration](reference/playback/system-integration.md).
   the scrubber, beside the title: previous, Episodes, Sound, Picture in
   Picture and next, each only where it has something to do. Down or Back
   returns it to the surface, and the transport stays up while a button has
-  focus. Episodes and Sound each open a list above the row, which Back
-  closes. Episodes starts on the playing title. A row button
-  takes its own Select, so the gate does not arm while one has focus. See
+  focus. Episodes and Sound are UIKit buttons whose system menus open above
+  them. Back closes a menu. A row button and an open menu take their own
+  Select, so the gate does not arm while one has focus. See
   [putting controls in the
   transport](reference/playback/controls-and-reporting.md#putting-controls-in-the-transport-tvos). `MenuPressGate` takes Select from the responder chain, never
   from the surface's `onTapGesture`: on a Siri Remote the click's touch lets
@@ -486,8 +486,8 @@ integration](reference/playback/system-integration.md).
 - **A light Siri Remote touch is a separate input that reveals controls. It
   never becomes Select.**
 - Menu cancels scrubbing, then dismisses a skip, Up Next, lower-quality or
-  transcode prompt in any mode, then closes the sound or Episodes list, then
-  leaves the button row, then closes the panel, then exits.
+  transcode prompt in any mode, then leaves the button row, then closes the
+  panel, then exits. While a row menu is open Back is the menu's alone.
 - In Automatic mode a first Back on Up Next means "not yet": the card returns
   for the last five seconds and the episode still rolls on. Only a Back
   during that final countdown, or in card mode, stops autoplay.
