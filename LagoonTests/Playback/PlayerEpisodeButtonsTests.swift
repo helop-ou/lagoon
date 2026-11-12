@@ -72,6 +72,14 @@ struct PlayerEpisodeButtonsTests {
         #expect(PlayerEpisodeButtons.offered(hasPrevious: true, hasNext: true, inGroup: true) == nil)
     }
 
+    @Test func previousRestartsTheTitleOnceItIsUnderWay() {
+        let limit = PlayerEpisodeButtons.restartAfterSeconds
+        #expect(PlayerEpisodeButtons.previousAction(position: limit + 0.1) == .restart)
+        #expect(PlayerEpisodeButtons.previousAction(position: 1_800) == .restart)
+        #expect(PlayerEpisodeButtons.previousAction(position: limit) == .previousTitle)
+        #expect(PlayerEpisodeButtons.previousAction(position: 0) == .previousTitle)
+    }
+
     @Test func theSoundButtonShowsTheEnginesChannelLimit() {
         for limit in AudioChannelLimit.allCases {
             #expect(AudioChannelLimit(engineLimit: limit.engineLimit) == limit)
