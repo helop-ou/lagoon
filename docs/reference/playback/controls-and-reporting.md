@@ -99,11 +99,28 @@ previous, Episodes, Sound, Picture in Picture and next (`PlayerTVControlRow`, `.
 
 The row follows every rule below: the overlay hit-tests only while the
 transport is up, the row is disabled while it is hidden, the auto-hide skips
-while a `.control`, `.sound` or `.episode` focus holds, and Down from the row or Back
+while a `.control` focus or a row menu holds, and Down from the row or Back
 returns `playerFocus = .surface`. The overlay sets its white foreground on the
-title, rail and labels, never on the row's ancestors. The Sound and Episodes
-lists are siblings above the row, built from ordinary buttons, since a `Menu` never
-presents in the cover.
+title, rail and labels, never on the row's ancestors.
+
+**Episodes and Sound are UIKit buttons with system menus** (`PlayerRowMenuButton`:
+`UIButton.Configuration.glass()`, `showsMenuAsPrimaryAction`, a `UIMenu`
+replaced only when its content key changes), the way a custom player such as
+Infuse gets the system menu. Apple's own route, `transportBarCustomMenuItems`,
+belongs to `AVPlayerViewController`. Their focus lives outside SwiftUI's
+`FocusState`, and an open menu takes focus out of the view tree, so the
+buttons report both to `PlayerRowMenus`:
+
+- `isOnTransportControl` includes them, so the transport stays up and
+  `MenuPressGate` leaves Select to them. `handleMenu` does nothing while a
+  menu is open, and a move they leave unhandled never reaches the surface's
+  scrub or panel.
+- Up focuses Sound through the hosting controller's
+  `preferredFocusEnvironments` and a focus update.
+  `UIFocusSystem.requestFocusUpdate(to:)` alone was ignored while the surface
+  held focus.
+- Down from them returns to the surface from `pressesBegan`, since
+  `onMoveCommand` does not see a UIKit button's moves.
 
 A focusable control there needs all of these:
 
@@ -117,9 +134,14 @@ A focusable control there needs all of these:
 
 Platform limits, verified on device:
 
-- **SwiftUI `Menu` never presents inside the player's `fullScreenCover`.** The
-  button takes focus and Select does nothing. The HIG lists pop-up buttons as
-  unsupported on tvOS. Build menus from ordinary buttons.
+- **SwiftUI `Menu` presents in the cover, but its highlight flickered on an
+  Apple TV all through playback**, never while paused and never in the
+  simulator. Focus stayed on the menu cell and our views did not redraw, and
+  dimming the video only weakened it. A UIKit `UIMenu` on a `UIButton` does
+  not flicker. Lists drawn from SwiftUI buttons were rejected on the device
+  too: bordered rows read as busy, plain `List` rows keep tvOS's tall row
+  height and clip the focus lift, and `.borderless` buttons show no focus
+  highlight at all.
 - **Focusable buttons inside another `Button`'s overlay never take focus.**
   Anchor a popup from outside: publish the corner with `anchorPreference` and
   place the popup as a sibling.
