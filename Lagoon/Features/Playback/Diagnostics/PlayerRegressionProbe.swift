@@ -64,6 +64,17 @@ struct PlayerRegressionValue: ViewModifier {
         return engine.timePosition >= nextUpCardStart
     }
 
+    /// The cache as the regression journeys read it, from the engine itself:
+    /// passed down, its growth redrew the whole player.
+    static func cacheFields(_ buffer: PlaybackBufferState) -> [String] {
+        [
+            "cache=\(buffer.isActive ? 1 : 0)",
+            String(format: "buffered=%.3f", buffer.bufferedFraction ?? -1),
+            "bufferRanges=\(buffer.bufferedRanges.count)",
+            "playheadPrefetches=\(buffer.playheadPrefetchCount)",
+        ]
+    }
+
     private var value: String {
         let selectedAudio = engine.audioTracks.first(where: \.isSelected)?.engineID ?? 0
         let selectedSubtitle = engine.subtitleTracks.first(where: \.isSelected)?.engineID ?? 0
@@ -91,10 +102,7 @@ struct PlayerRegressionValue: ViewModifier {
             "surface=\(playerSurfaceIdentity)",
             "method=\(playbackMethod.rawValue)",
             "rung=\(deliveryRung.rawValue)",
-            "cache=\(engine.bufferState.isActive ? 1 : 0)",
-            String(format: "buffered=%.3f", engine.bufferState.bufferedFraction ?? -1),
-            "bufferRanges=\(engine.bufferState.bufferedRanges.count)",
-            "playheadPrefetches=\(engine.bufferState.playheadPrefetchCount)",
+        ] + Self.cacheFields(engine.bufferState) + [
             String(format: "handoffMs=%.1f", handoffMilliseconds ?? -1),
             "nextUp=\(showsNextUp ? 1 : 0)",
             "ready=\(engine.duration > 0 ? 1 : 0)",
