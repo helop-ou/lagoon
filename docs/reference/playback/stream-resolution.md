@@ -141,6 +141,35 @@ Maximum Quality, and `cappedToBitrate` applies it before the metered cap:
   step down the ladder: stalls say nothing about the samples. Not offered for
   a download or in a Watch Together group.
 
+### Telling the viewer about a transcode
+
+Before this, a fresh install on Auto played a 73.5 Mbit/s Dolby Vision remux
+as a transcode on fast Wi-Fi with nothing on screen to say so.
+`PlaybackTranscodeNotice.notice` decides from the play method, the rung, the
+offer and the `TranscodeReasons` on the `TranscodingUrl`, and the controller
+presents it once the attempt plays its first frame:
+
+| attempt | notice |
+| --- | --- |
+| direct play, direct stream, a download | none |
+| `TranscodeReasons` empty or only `ContainerNotSupported` | none: a remux copies the picture and sound |
+| the `transcode` rung | information: the original would not play here |
+| only bitrate reasons, cap `auto`, `setting` or `metered` | **Play Original / Keep** |
+| the same in a Watch Together group | information: a restart is the group's to make |
+| only bitrate reasons, cap `lowered` | none: the viewer chose it after stalls |
+| only bitrate reasons, no cap | information: above the device's envelope |
+| any format reason | information naming video, audio or subtitles, video first |
+
+- **Play Original** re-negotiates the item with `playsOriginal`, which sends
+  No Limit, drops the lowered ceiling and lifts the metered cap for that
+  negotiation (`DeviceProfile.lagoon(for:maxBitrate:allowsFullQuality:)`),
+  never the viewer's metered setting. It resumes at the playhead on the same
+  rung. It holds for the item: the next one negotiates under its caps again
+  and may prompt again. Accepting a lower quality after stalls clears it.
+- The offer stays up as long as the lower-quality one and yields the corner
+  to the skip pill, Up Next and that offer. Information goes after eight
+  seconds. On tvOS Select plays the original and Back dismisses either.
+
 ### When playback fails: the delivery ladder
 
 Negotiation happens once, before the first frame. When the engine cannot
