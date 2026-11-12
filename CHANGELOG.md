@@ -26,6 +26,10 @@ report. One marketing version spans many builds.
 - A new install opens with a short welcome, and after the first sign-in offers to connect Seerr, which you can skip.
 - Setup lists the Jellyfin servers on your local network, so you can pick yours instead of typing its address.
 
+### Bug fixes
+
+- On iPhone and iPad, the Lower Quality button in the prompt that appears when playback keeps pausing is now readable.
+
 ## 0.8.1 (120)
 
 November 2026
