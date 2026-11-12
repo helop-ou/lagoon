@@ -370,7 +370,9 @@ step.
 
 **Sound:** Night Mode and Dialogue Boost sit in the same tab and the channel
 limit (Off, 5.1, Stereo) in Settings, Audio: the toggles suit a moment, the
-limit suits the room. All three are per-account preferences
+limit suits the room. The player's own Sound button has all three: a native
+menu in the iOS toolbar beside Info, and a short list above the tvOS row
+(`PlayerSoundOptions`). A limit changed there is kept as the preference. All three are per-account preferences
 (`TrackPreferenceValues`), become the engine's `AudioShaping`, and are set
 before `prepare` so a title opens shaped. A toggle in the player applies at
 once with a short re-demux and is kept for the next title. While any of them
@@ -388,8 +390,13 @@ channels, which both places say.
 - Double-tapping either half seeks 10 s without revealing controls. Repeats
   within the 700 ms feedback window add up, and changing direction resets.
 - Dragging the timeline previews trickplay and commits on release. Skip and Up
-  Next take direct taps. Close and Info are in the native toolbar. The options
-  sheet suppresses surface interaction.
+  Next take direct taps. Close, Sound and Info are in the native toolbar. The
+  options sheet suppresses surface interaction.
+- Previous and next sit outside the ±10 s buttons, in the same clear glass,
+  when the queue has a title on either side (`PlayerEpisodeButtons`). A
+  missing side keeps its slot, so play/pause stays centred. Next takes Up
+  Next's path, previous the same hand-off backwards, and neither shows in a
+  Watch Together group.
 - Swipe up over free video opens the options panel. Swipe down drags the whole
   player and, past the threshold, minimizes it into Picture in Picture (or
   closes it where PiP is unavailable). The timeline drag and every button win
@@ -449,13 +456,21 @@ integration](reference/playback/system-integration.md).
 **tvOS:**
 
 - The video surface owns focus. Select prioritizes scrub, Skip, Up Next, the
-  lower-quality offer, Play Original, then play/pause. `MenuPressGate` takes Select from the responder chain, never
+  lower-quality offer, Play Original, then play/pause.
+- Up, the one free direction, moves focus to the row of glass buttons above
+  the scrubber, beside the title: previous, Sound and next. Down or Back
+  returns it to the surface, and the transport stays up while a button has
+  focus. Sound opens a list above the row, which Back closes. A row button
+  takes its own Select, so the gate does not arm while one has focus. See
+  [putting controls in the
+  transport](reference/playback/controls-and-reporting.md#putting-controls-in-the-transport-tvos). `MenuPressGate` takes Select from the responder chain, never
   from the surface's `onTapGesture`: on a Siri Remote the click's touch lets
   `onMoveCommand`'s swipe gesture swallow the tap.
 - **A light Siri Remote touch is a separate input that reveals controls. It
   never becomes Select.**
 - Menu cancels scrubbing, then dismisses a skip, Up Next, lower-quality or
-  transcode prompt in any mode, then closes the panel, then exits.
+  transcode prompt in any mode, then closes the sound list, then leaves the
+  button row, then closes the panel, then exits.
 - In Automatic mode a first Back on Up Next means "not yet": the card returns
   for the last five seconds and the episode still rolls on. Only a Back
   during that final countdown, or in card mode, stops autoplay.
