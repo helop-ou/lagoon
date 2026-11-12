@@ -1140,11 +1140,17 @@ final class PlaybackController {
         await restart(next, scope: "handoff", prepared: prepared, preservingPreparedNext: true)
     }
 
-    /// The previous button: the episode or list entry before this one, by
-    /// the same hand-off as Up Next. The warmed successor is for the title
+    /// The previous button: the start of this title, or within its first
+    /// seconds the episode or list entry before it, by the same hand-off as
+    /// Up Next. The warmed successor is for the title
     /// after this one, so it goes.
     func playPrevious() async {
-        guard !isAdvancing, groupTransport == nil, let previous = previousItem, client != nil else { return }
+        guard !isAdvancing, groupTransport == nil else { return }
+        if PlayerEpisodeButtons.previousAction(position: currentPosition) == .restart {
+            engine?.seek(to: 0)
+            return
+        }
+        guard let previous = previousItem, client != nil else { return }
         isAdvancing = true
         defer { isAdvancing = false }
         queue = queue.retreated()
