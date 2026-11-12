@@ -263,6 +263,12 @@ final class SubtitlePreferencesStore {
         )
     }
 
+    /// The caption font itself. By name, the system font (".SFUI-Medium")
+    /// does not open, and CoreText drew the subtitles in Times.
+    nonisolated static func uiFont(_ font: CTFont) -> UIFont {
+        font as UIFont
+    }
+
     private var systemRenderStyle: SubtitleRenderStyle {
         var behavior = MACaptionAppearanceBehavior.useValue
         let foreground = MACaptionAppearanceCopyForegroundColor(.user, &behavior).takeRetainedValue()
@@ -278,8 +284,7 @@ final class SubtitlePreferencesStore {
             max(Self.baseFontSize * max(scale, 0.5), 1),
             nil
         )
-        let uiFont = UIFont(name: CTFontCopyPostScriptName(ctFont) as String, size: CTFontGetSize(ctFont))
-            ?? UIFont.systemFont(ofSize: Self.baseFontSize)
+        let uiFont = Self.uiFont(ctFont)
         let edge: SubtitleEdgeStyle = switch MACaptionAppearanceGetTextEdgeStyle(.user, &behavior) {
         case .none: .none
         case .uniform: .outline

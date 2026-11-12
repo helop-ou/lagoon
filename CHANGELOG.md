@@ -28,6 +28,7 @@ report. One marketing version spans many builds.
 
 ### Bug fixes
 
+- Subtitles in the system's caption style show in the system font again, not Times New Roman.
 - On iPhone and iPad, the Lower Quality button in the prompt that appears when playback keeps pausing is now readable.
 
 ## 0.8.1 (120)
