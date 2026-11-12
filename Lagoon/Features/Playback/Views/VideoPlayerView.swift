@@ -384,6 +384,9 @@ struct VideoPlayerView: View {
                     inGroup: togetherState != nil
                 ),
                 onPreviousEpisode: { Task { await controller.playPrevious() } },
+                // The group changes the item, so no list in Watch Together.
+                episodeList: togetherState == nil ? controller.episodeList : nil,
+                onPlayEpisode: { row in Task { await controller.playEpisode(row) } },
                 transcodeNotice: controller.transcodeNotice
             ) { [weak engine] in
                 // Weak, like `PlayerEngineRef`: SwiftUI keeps copies of this

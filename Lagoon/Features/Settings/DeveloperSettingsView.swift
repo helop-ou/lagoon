@@ -425,7 +425,6 @@ private struct PlayerPanelComponentPreview: View {
     let onDismiss: () -> Void
     @State private var selectedTab = PlayerPanelTab.info
     @State private var engine = PlayerPanelPreviewEngine()
-    @State private var isPictureInPictureActive = false
     @State private var ignoresWait = false
     // Opens on the subtitle results browser. Done reveals the track list.
     @State private var subtitleSearch = SubtitleSearchCoordinator
@@ -439,11 +438,6 @@ private struct PlayerPanelComponentPreview: View {
             focus: $panelFocus,
             info: previewInfo,
             subtitleSearch: subtitleSearch,
-            isPictureInPicturePossible: true,
-            isPictureInPictureActive: isPictureInPictureActive,
-            onTogglePictureInPicture: {
-                isPictureInPictureActive.toggle()
-            },
             // A group, so the Watch Together tab shows without joining one.
             together: previewTogether,
             onLeaveGroup: {},

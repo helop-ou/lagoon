@@ -64,6 +64,9 @@ struct CustomPlayerView<Surface: View>: View {
     /// path, so a group or a countdown sees it.
     var episodeButtons: PlayerEpisodeButtons? = nil
     var onPreviousEpisode: (() -> Void)? = nil
+    /// The Episodes button's list. Nil hides the button.
+    var episodeList: PlayerEpisodeList? = nil
+    var onPlayEpisode: ((PlayerEpisodeList.Row) -> Void)? = nil
     /// The server converting what plays, nil where nothing says so.
     var transcodeNotice: PlaybackTranscodeNoticePrompt? = nil
     @ViewBuilder let surface: () -> Surface
@@ -96,6 +99,8 @@ struct CustomPlayerView<Surface: View>: View {
     @State private var scrubHopped = false
     @State private var trickplay: TrickplayLoader?
     @FocusState private var playerFocus: PlayerControlFocus?
+    /// The Episodes list: above the tvOS row, or the iOS toolbar's popover.
+    @State private var episodeListOpen = false
     #if os(tvOS)
     /// The sound list above the control row.
     @State private var soundListOpen = false
@@ -144,7 +149,24 @@ struct CustomPlayerView<Surface: View>: View {
                             .accessibilityIdentifier("player.close")
                     }
                     ToolbarItemGroup(placement: .topBarTrailing) {
+                        if let episodeList {
+                            Button("Episodes", systemImage: "list.and.film") { episodeListOpen = true }
+                                .accessibilityIdentifier("player.episodes")
+                                .popover(isPresented: $episodeListOpen) {
+                                    PlayerEpisodeListSheet(list: episodeList, onSelect: playEpisode)
+                                        .presentationDetents([.medium, .large])
+                                        .frame(idealWidth: EpisodePopoverMetrics.width, idealHeight: EpisodePopoverMetrics.height)
+                                }
+                        }
                         PlayerSoundMenu(options: soundOptions)
+                        if let pictureInPictureButton {
+                            Button(
+                                pictureInPictureButton.title,
+                                systemImage: pictureInPictureButton.systemImage,
+                                action: togglePictureInPicture
+                            )
+                            .accessibilityIdentifier("player.pictureInPicture")
+                        }
                         Button("Info", systemImage: "info.circle", action: openPanel)
                             .accessibilityIdentifier("player.info")
                     }
@@ -353,6 +375,7 @@ struct CustomPlayerView<Surface: View>: View {
             try? await Task.sleep(for: .seconds(4))
             // Never while a control has focus: hiding it would strand focus.
             guard !Task.isCancelled, !panelOpen, !engine.isPaused, !isScrubbing, !isOnTransportControl,
+                  !episodeListOpen,
                   !benchPinnedTransport else { return }
             controlsVisible = false
         }
@@ -421,6 +444,9 @@ struct CustomPlayerView<Surface: View>: View {
         } else if soundListOpen {
             PlayerInputTrace.log("menu -> close sound")
             closeSoundList()
+        } else if episodeListOpen {
+            PlayerInputTrace.log("menu -> close episodes")
+            closeEpisodeList()
         } else if isOnTransportControl {
             PlayerInputTrace.log("menu -> surface")
             returnFocusToSurface()
@@ -634,6 +660,7 @@ struct CustomPlayerView<Surface: View>: View {
         reportDisplayedCaption(nil)
         #if os(tvOS)
         soundListOpen = false
+        episodeListOpen = false
         playerFocus = .surface
         #endif
     }
@@ -891,6 +918,29 @@ struct CustomPlayerView<Surface: View>: View {
         onPreviousEpisode?()
     }
 
+    private func playEpisode(_ row: PlayerEpisodeList.Row) {
+        #if os(tvOS)
+        returnFocusToSurface()
+        #endif
+        episodeListOpen = false
+        onPlayEpisode?(row)
+    }
+
+    private var pictureInPictureButton: PlayerPictureInPictureButton? {
+        PlayerPictureInPictureButton.state(
+            isPossible: isPictureInPicturePossible,
+            isActive: isPictureInPictureActive,
+            isAvailable: onTogglePictureInPicture != nil
+        )
+    }
+
+    private func togglePictureInPicture() {
+        #if os(tvOS)
+        returnFocusToSurface()
+        #endif
+        onTogglePictureInPicture?()
+    }
+
     private func nextEpisode() {
         automation.playNext()
     }
@@ -899,14 +949,21 @@ struct CustomPlayerView<Surface: View>: View {
     private var transportControls: some View {
         #if os(tvOS)
         VStack(alignment: .trailing, spacing: Metrics.Space.l) {
+            if episodeListOpen, let episodeList {
+                PlayerEpisodeListTV(list: episodeList, focus: $playerFocus, onSelect: playEpisode)
+            }
             if soundListOpen {
                 PlayerSoundList(options: soundOptions, focus: $playerFocus)
             }
             PlayerTVControlRow(
                 episodes: episodeButtons,
+                hasEpisodeList: episodeList != nil,
+                pictureInPicture: pictureInPictureButton,
                 focus: $playerFocus,
                 onPrevious: previousEpisode,
+                onToggleEpisodes: toggleEpisodeList,
                 onToggleSound: toggleSoundList,
+                onTogglePictureInPicture: togglePictureInPicture,
                 onNext: nextEpisode
             )
             .onMoveCommand { direction in
@@ -943,11 +1000,33 @@ struct CustomPlayerView<Surface: View>: View {
         }
     }
 
+    private func toggleEpisodeList() {
+        if episodeListOpen {
+            closeEpisodeList()
+            return
+        }
+        soundListOpen = false
+        episodeListOpen = true
+        pokeControls()
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(50))
+            guard episodeListOpen, let current = episodeList?.current else { return }
+            playerFocus = .episode(current.index)
+        }
+    }
+
+    private func closeEpisodeList() {
+        episodeListOpen = false
+        playerFocus = .control(PlayerTVControlRow.episodesID)
+        pokeControls()
+    }
+
     private func toggleSoundList() {
         if soundListOpen {
             closeSoundList()
             return
         }
+        episodeListOpen = false
         soundListOpen = true
         pokeControls()
         Task { @MainActor in
@@ -965,12 +1044,16 @@ struct CustomPlayerView<Surface: View>: View {
 
     private func returnFocusToSurface() {
         soundListOpen = false
+        episodeListOpen = false
         playerFocus = .surface
         pokeControls()
     }
     #else
     private var soundListOpen: Bool { false }
     private func closeSoundList() {}
+    private func closeEpisodeList() {
+        episodeListOpen = false
+    }
     private func returnFocusToSurface() {}
     #endif
 
@@ -984,9 +1067,6 @@ struct CustomPlayerView<Surface: View>: View {
             info: info,
             subtitleSearch: subtitleSearch,
             adjustments: adjustments,
-            isPictureInPicturePossible: isPictureInPicturePossible,
-            isPictureInPictureActive: isPictureInPictureActive,
-            onTogglePictureInPicture: onTogglePictureInPicture,
             together: together,
             onLeaveGroup: onLeaveGroup,
             onSetIgnoreWait: onSetIgnoreWait,
@@ -995,3 +1075,11 @@ struct CustomPlayerView<Surface: View>: View {
         .equatable()
     }
 }
+
+#if os(iOS)
+/// The Episodes popover on iPad. A phone shows it as a sheet.
+private enum EpisodePopoverMetrics {
+    static let width: CGFloat = 380
+    static let height: CGFloat = 520
+}
+#endif

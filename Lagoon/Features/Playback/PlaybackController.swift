@@ -37,6 +37,9 @@ final class PlaybackController {
     }
     /// The episode or list entry before this one, for the previous button.
     private(set) var previousItem: MediaItem?
+    /// What the Episodes button lists. Kept across a hand-off, so the list
+    /// stays up while the next title starts.
+    private(set) var episodeList: PlayerEpisodeList?
     let automation = PlaybackAutomation()
     /// The lower quality offered after repeated stalls.
     let qualityOffer = PlaybackQualityOffer()
@@ -139,6 +142,9 @@ final class PlaybackController {
     private var engineHasStarted = false
     private var nextUpTask: Task<Void, Never>?
     private var previousItemTask: Task<Void, Never>?
+    private var episodeListTask: Task<Void, Never>?
+    /// Seasons already fetched for the Episodes list, for the player's life.
+    @ObservationIgnored private var seasonEpisodes: [String: [MediaItem]] = [:]
     /// Runs from install to the engine's first frame.
     @ObservationIgnored private let startWatch = PlaybackStartWatch()
     @ObservationIgnored private let successorPreparation = PlaybackSuccessorPreparation()
@@ -1056,6 +1062,29 @@ final class PlaybackController {
             }
         }
         resolvePreviousItem(before: media, client: client)
+        resolveEpisodeList(for: media, client: client)
+    }
+
+    private func resolveEpisodeList(for media: MediaItem, client: JellyfinClient) {
+        episodeListTask?.cancel()
+        switch PlayerEpisodeList.source(for: media, queue: queue) {
+        case .none:
+            episodeList = nil
+        case .queue(let list):
+            episodeList = .queue(list)
+        case .season(let seriesId, let seasonId):
+            if let episodes = seasonEpisodes[seasonId] {
+                episodeList = .season(episodes, current: media)
+                return
+            }
+            episodeList = nil
+            episodeListTask = Task { [weak self] in
+                guard let episodes = try? await client.episodes(seriesId: seriesId, seasonId: seasonId),
+                      !Task.isCancelled, let self else { return }
+                self.seasonEpisodes[seasonId] = episodes
+                self.episodeList = .season(episodes, current: media)
+            }
+        }
     }
 
     private func resolvePreviousItem(before media: MediaItem, client: JellyfinClient) {
@@ -1144,6 +1173,22 @@ final class PlaybackController {
     /// seconds the episode or list entry before it, by the same hand-off as
     /// Up Next. The warmed successor is for the title
     /// after this one, so it goes.
+    /// A row of the Episodes list, by the same hand-off as previous and
+    /// next. In a list the queue moves to it, so next follows on from there.
+    func playEpisode(_ row: PlayerEpisodeList.Row) async {
+        guard !row.isCurrent, !isAdvancing, groupTransport == nil, client != nil else { return }
+        if case .list(let list) = queue {
+            guard let moved = list.moved(to: row.index) else { return }
+            queue = .list(moved)
+        }
+        isAdvancing = true
+        defer { isAdvancing = false }
+        beginEpisodeHandoff(to: row.media)
+        guard !isClosed else { return }
+        captureTrackCarry()
+        await restart(row.media, scope: "handoff", preservingPreparedNext: false)
+    }
+
     func playPrevious() async {
         guard !isAdvancing, groupTransport == nil else { return }
         if PlayerEpisodeButtons.previousAction(position: currentPosition) == .restart {
@@ -1456,6 +1501,8 @@ final class PlaybackController {
         nextUpTask = nil
         previousItemTask?.cancel()
         previousItemTask = nil
+        episodeListTask?.cancel()
+        episodeListTask = nil
         startWatch.end()
         // A sleeping countdown must not wake on a gone engine.
         automation.invalidate()

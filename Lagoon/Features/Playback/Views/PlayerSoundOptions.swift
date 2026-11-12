@@ -13,6 +13,9 @@ struct PlayerSoundOptions {
     var channelLimit: AudioChannelLimit { AudioChannelLimit(engineLimit: shaping.channelLimit) }
 
     static let atmosNote: LocalizedStringKey = "While any of these is on, Dolby Atmos plays as surround."
+    /// A waveform, not a speaker: the button shapes the sound, while a
+    /// speaker reads as volume or the output route.
+    static let systemImage = "waveform"
 }
 
 #if os(iOS)
@@ -38,7 +41,7 @@ struct PlayerSoundMenu: View {
                 Text(PlayerSoundOptions.atmosNote)
             }
         } label: {
-            Label("Sound", systemImage: "speaker.wave.2")
+            Label("Sound", systemImage: PlayerSoundOptions.systemImage)
         }
         .accessibilityIdentifier("player.sound")
     }
@@ -119,18 +122,25 @@ struct PlayerSoundList: View {
     }
 }
 
-/// The tvOS buttons above the scrubber: previous, sound and next. Focus comes
+/// The tvOS buttons above the scrubber: previous, Episodes, Sound, Picture in
+/// Picture and next, each only where it has something to do. Focus comes
 /// here with Up from the surface while the transport is up, and Down sends
 /// it back, so the surface keeps the arrows for scrubbing.
 struct PlayerTVControlRow: View {
     let episodes: PlayerEpisodeButtons?
+    let hasEpisodeList: Bool
+    let pictureInPicture: PlayerPictureInPictureButton?
     let focus: FocusState<PlayerControlFocus?>.Binding
     let onPrevious: () -> Void
+    let onToggleEpisodes: () -> Void
     let onToggleSound: () -> Void
+    let onTogglePictureInPicture: () -> Void
     let onNext: () -> Void
 
     static let previousID = "previous"
+    static let episodesID = "episodes"
     static let soundID = "sound"
+    static let pictureInPictureID = "picture-in-picture"
     static let nextID = "next"
 
     var body: some View {
@@ -140,9 +150,19 @@ struct PlayerTVControlRow: View {
                     .focused(focus, equals: .control(Self.previousID))
                     .accessibilityIdentifier("player.previous")
             }
-            Button("Sound", systemImage: "speaker.wave.2", action: onToggleSound)
+            if hasEpisodeList {
+                Button("Episodes", systemImage: "list.and.film", action: onToggleEpisodes)
+                    .focused(focus, equals: .control(Self.episodesID))
+                    .accessibilityIdentifier("player.episodes")
+            }
+            Button("Sound", systemImage: PlayerSoundOptions.systemImage, action: onToggleSound)
                 .focused(focus, equals: .control(Self.soundID))
                 .accessibilityIdentifier("player.sound")
+            if let pictureInPicture {
+                Button(pictureInPicture.title, systemImage: pictureInPicture.systemImage, action: onTogglePictureInPicture)
+                    .focused(focus, equals: .control(Self.pictureInPictureID))
+                    .accessibilityIdentifier("player.pictureInPicture")
+            }
             if episodes?.hasNext == true {
                 Button("Next", systemImage: "forward.end.fill", action: onNext)
                     .focused(focus, equals: .control(Self.nextID))

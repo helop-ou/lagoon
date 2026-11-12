@@ -112,6 +112,14 @@ nonisolated struct PlayQueueList: Equatable {
         return advanced
     }
 
+    /// Nil when `index` is outside the entries.
+    func moved(to index: Int) -> PlayQueueList? {
+        guard entries.indices.contains(index) else { return nil }
+        var moved = self
+        moved.position = index
+        return moved
+    }
+
     /// Nil at the first entry.
     func retreated() -> PlayQueueList? {
         guard previous != nil else { return nil }

@@ -16,9 +16,6 @@ struct PlayerControlPanel: View {
     var subtitleSearch: SubtitleSearchCoordinator? = nil
     var subtitleLoadState: SubtitleLoadState = .idle
     var onRetrySubtitleLoad: (() -> Void)? = nil
-    var isPictureInPicturePossible = false
-    var isPictureInPictureActive = false
-    var onTogglePictureInPicture: (() -> Void)? = nil
     var together: PlayerTogetherState? = nil
     var onLeaveGroup: (() -> Void)? = nil
     var onSetIgnoreWait: ((Bool) -> Void)? = nil
@@ -284,19 +281,6 @@ struct PlayerControlPanel: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             AdaptiveActionStack {
-                if let onTogglePictureInPicture {
-                    Button(action: onTogglePictureInPicture) {
-                        Label(
-                            isPictureInPictureActive ? "Stop Picture in Picture" : "Picture in Picture",
-                            systemImage: isPictureInPictureActive ? "pip.exit" : "pip.enter"
-                        )
-                    }
-                    .buttonStyle(.glass)
-                    .labelStyle(.titleAndIcon)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .disabled(!isPictureInPicturePossible && !isPictureInPictureActive)
-                    .accessibilityIdentifier("player.pictureInPicture")
-                }
                 AirPlayRoutePicker()
                     .frame(width: Metrics.touchTarget, height: Metrics.touchTarget)
                     .accessibilityLabel("AirPlay")

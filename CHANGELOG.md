@@ -30,7 +30,7 @@ report. One marketing version spans many builds.
 - Subtitles keep showing in Picture in Picture, in your chosen subtitle style.
 - Subtitles that run early or late can be moved from the player's Audio tab, and the title keeps the fix while Lagoon runs.
 - Night Mode and Dialogue Boost in the player's Audio tab make quiet speech easier to follow, and Settings, Audio can limit sound to 5.1 or stereo for TV speakers and headphones.
-- The player has previous and next buttons for the episode or list entry either side, and a Sound button with Night Mode, Dialogue Boost and the channel limit. On Apple TV, press up to reach them.
+- The player has its own buttons: previous and next, an Episodes list to jump to another episode or list entry, Sound with Night Mode, Dialogue Boost and the channel limit, and Picture in Picture. On Apple TV, press up to reach them.
 
 ### Improvements
 
