@@ -626,6 +626,9 @@ final class PlaybackController {
             engine.pause()
         }
         startsPaused = false
+        #if os(tvOS)
+        engine.startGate = DisplayModeMatcher.startGate(for: engine)
+        #endif
         engine.prepare(
             url: resolved.streamURL,
             itemID: media.id,
