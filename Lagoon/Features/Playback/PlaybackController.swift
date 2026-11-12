@@ -47,13 +47,9 @@ final class PlaybackController {
     /// The playing source's bitrate, which the lower quality steps under.
     @ObservationIgnored private var playingSourceBitrate: Int?
     @ObservationIgnored private var isChangingQuality = false
-    /// The server converting what plays, said once the picture is up.
+    /// The server converting what plays, said once the picture is up, and
+    /// whether the viewer asked for the original.
     let transcodeNotice = PlaybackTranscodeNoticePrompt()
-    /// This attempt's notice, presented when it starts playing.
-    @ObservationIgnored private var pendingTranscodeNotice: PlaybackTranscodeNotice?
-    /// The viewer chose the original over what a cap played. For this item
-    /// only: the next one may prompt again.
-    @ObservationIgnored private var playsOriginal = false
     /// Set before the autoplay hand-off runs, so the view's end-of-file
     /// handling does not close the player underneath it.
     private(set) var isAutoplayPending = false
@@ -420,7 +416,7 @@ final class PlaybackController {
             deliveryFallbacks = []
             skipsLocalPlayback = false
             qualityOfferPolicy = PlaybackQualityOfferPolicy()
-            playsOriginal = false
+            transcodeNotice.itemChanged()
         }
         itemId = media.id
     }
@@ -487,7 +483,7 @@ final class PlaybackController {
             itemId: media.id,
             delivery: delivery,
             maxBitrate: qualityCap,
-            playsOriginal: playsOriginal
+            playsOriginal: transcodeNotice.playsOriginal
         )
         guard info.errorCode == nil, let source = info.mediaSources.first else {
             throw JellyfinError.unplayable
@@ -499,14 +495,10 @@ final class PlaybackController {
         mediaSourceId = resolved.source.id
         playMethod = resolved.method
         playingSourceBitrate = resolved.source.bitrate
-        pendingTranscodeNotice = PlaybackTranscodeNotice.notice(
-            method: resolved.method,
-            delivery: delivery,
-            offer: resolved.offer,
-            transcodeReasons: PlaybackTranscodeNotice.reasons(in: resolved.source.transcodingUrl),
-            isDownload: resolved.isDownload,
-            isInGroup: groupTransport != nil
-        )
+        transcodeNotice.stage(PlaybackTranscodeNotice.notice(
+            for: resolved.source, method: resolved.method, delivery: delivery, offer: resolved.offer,
+            isDownload: resolved.isDownload, isInGroup: groupTransport != nil
+        ))
     }
 
     /// Resolves where this attempt starts, spends the one-start override,
@@ -684,10 +676,7 @@ final class PlaybackController {
             self.startWatch.end()
             self.finishEpisodeHandoff(outcome: "ready")
             self.incidents.playbackReady(engine: engine)
-            if let notice = self.pendingTranscodeNotice {
-                self.pendingTranscodeNotice = nil
-                self.transcodeNotice.present(notice)
-            }
+            self.transcodeNotice.playbackStarted()
             #if DEBUG
             self.schedulePlaybackStarvationDiagnostics(for: engine)
             self.scheduleRendererRecoveryRegressionHooks(for: engine)
@@ -1663,8 +1652,7 @@ final class PlaybackController {
             currentCap: currentCap
         )
         qualityCap = cap
-        // The later choice wins over playing the original.
-        playsOriginal = false
+        transcodeNotice.viewerChoseLowerQuality()
         deliveryFallbacks.append(PlaybackDeliveryFallbackRecord(
             transition: "\(delivery.rawValue) · max " + String(format: "%.1f Mbps", Double(cap) / 1_000_000),
             message: "Lower quality chosen after repeated stalls."
@@ -1685,7 +1673,6 @@ final class PlaybackController {
               let media = currentMedia else { return }
         isChangingQuality = true
         defer { isChangingQuality = false }
-        playsOriginal = true
         deliveryFallbacks.append(PlaybackDeliveryFallbackRecord(
             transition: "\(delivery.rawValue) · original",
             message: "Original quality chosen over the cap."

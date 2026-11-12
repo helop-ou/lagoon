@@ -79,6 +79,26 @@ nonisolated enum PlaybackTranscodeNotice: Equatable, Sendable {
     }
 
     /// The `TranscodeReasons` query item, in order, without repeats.
+    /// The notice for an attempt on `source`, reading its reasons from the
+    /// transcoding URL.
+    static func notice(
+        for source: MediaSource,
+        method: PlayMethod,
+        delivery: PlaybackDelivery,
+        offer: PlaybackOffer?,
+        isDownload: Bool,
+        isInGroup: Bool
+    ) -> PlaybackTranscodeNotice? {
+        notice(
+            method: method,
+            delivery: delivery,
+            offer: offer,
+            transcodeReasons: reasons(in: source.transcodingUrl),
+            isDownload: isDownload,
+            isInGroup: isInGroup
+        )
+    }
+
     static func reasons(in transcodingURL: String?) -> [String] {
         guard let transcodingURL,
               let value = URLComponents(string: transcodingURL)?.queryItems?
@@ -103,6 +123,11 @@ final class PlaybackTranscodeNoticePrompt {
     static let informationVisibleSeconds: Double = 8
 
     private(set) var notice: PlaybackTranscodeNotice?
+    /// The viewer chose the original over what a cap played. For the item
+    /// only: the next one may be told again.
+    @ObservationIgnored private(set) var playsOriginal = false
+    /// The attempt's notice, said once its picture is up.
+    @ObservationIgnored private var staged: PlaybackTranscodeNotice?
 
     var isVisible: Bool { notice != nil }
 
@@ -120,10 +145,34 @@ final class PlaybackTranscodeNoticePrompt {
         }
     }
 
+    /// An attempt resolved: its notice waits for the first frame.
+    func stage(_ notice: PlaybackTranscodeNotice?) {
+        staged = notice
+    }
+
+    /// The attempt is playing: say what it staged, once.
+    func playbackStarted() {
+        guard let staged else { return }
+        self.staged = nil
+        present(staged)
+    }
+
+    /// A new item starts with every cap back on.
+    func itemChanged() {
+        playsOriginal = false
+        staged = nil
+    }
+
+    /// A lower quality chosen later wins over the original.
+    func viewerChoseLowerQuality() {
+        playsOriginal = false
+    }
+
     /// Select, or a tap on Play Original. Only an offer has one.
     func playOriginal() {
         guard notice?.offersOriginal == true else { return }
         withdraw()
+        playsOriginal = true
         onPlayOriginal?()
     }
 
