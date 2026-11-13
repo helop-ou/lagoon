@@ -946,6 +946,9 @@ final class PlaybackController {
             self?.engine?.pause()
             self?.nowPlaying.updateTimeline()
         }
+        incidents.isPlaybackInterrupted = { [weak self] in
+            self?.audioSession.isHoldingForInterruption ?? false
+        }
         audioSession.onResumeRequested = { [weak self] in
             self?.engine?.play()
             self?.nowPlaying.updateTimeline()

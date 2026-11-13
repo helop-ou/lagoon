@@ -20,6 +20,10 @@ final class PlaybackAudioSession {
     private var wasPlayingBeforeInterruption = false
     private(set) var isActive = false
 
+    /// An interruption paused playback and the system has not said it is
+    /// over.
+    var isHoldingForInterruption: Bool { wasPlayingBeforeInterruption }
+
     var isExternalPlaybackRouteActive: Bool {
         session.currentRoute.outputs.contains { $0.portType == .airPlay }
     }
