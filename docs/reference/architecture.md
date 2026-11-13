@@ -186,9 +186,10 @@ keyboard when the field is empty.
 **Settings › About › Legal.** The Acknowledgements sheet follows the
 What's New sheet's tvOS pattern: no `NavigationStack`, its own header and
 footer at `Metrics.modalPanelSize`, and licence text split into focusable
-paragraphs. Privacy Policy and Support rows appear only once
-`LegalDestinations` has a URL. iOS opens it, tvOS shows the address to type
-elsewhere. The sign-in screen's "About Lagoon" reaches the same section.
+paragraphs. Privacy Policy, Support and Source Code rows appear only once
+`LegalDestinations` has a URL. iOS opens it, tvOS shows a code to scan and
+the address to type elsewhere. The sign-in screen's "About Lagoon" reaches
+the same section.
 
 ## Top Shelf is a full-screen carousel
 
