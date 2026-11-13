@@ -363,9 +363,10 @@ video costs the compositor, so bench any change to it.
 title has subtitles, Subtitle Offset side by side, both 0.1 s steps.
 Positive shows subtitles later, and text, bitmap and styled tracks all move.
 An offset fixes a subtitle file rather than one viewing, so
-`PlaybackController` keeps it per item while the app runs
-(`SubtitleOffsetMemory`) and gives it to every engine for that item: a
-fallback rung, a replay or a reopened player starts in step.
+`PlayerSubtitleOffset` keeps it per item while the app runs
+(`SubtitleOffsetMemory`) and gives it to every engine the controller makes
+for that item: a fallback rung, a replay or a reopened player starts in
+step.
 
 **iPhone and iPad controls:**
 
