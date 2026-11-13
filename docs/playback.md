@@ -383,9 +383,11 @@ is on, audio decodes on the device, so Atmos plays without its height
 channels, which Settings, Audio says.
 
 **Episodes:** the season of the playing episode, or every entry of a
-collection or playlist, with the playing one marked (`PlayerEpisodeList`). A
-season is fetched once after the title starts and kept for the player's life,
-so moving through it needs no new request. Choosing a row plays it through
+collection or playlist, with the playing one marked (`PlayerEpisodeList`).
+`PlayerNeighbours` resolves it, and the title the previous button goes to,
+for each title the controller starts. A season is fetched once after the
+title starts and kept for the player's life, so moving through it needs no
+new request. Choosing a row plays it through
 the same hand-off as previous and next, and in a list moves the queue there,
 so next follows on from it. A movie outside a list has no button, and neither
 does a Watch Together group, where the group changes the item.
