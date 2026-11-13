@@ -45,8 +45,8 @@ Only two hardware checks, for specific reasons:
 - **AV1.** Takes the same compressed path with hardware, and a bounded
   libdav1d software path without.
 
-Everything else survives without hardware: H.264 goes to
-`AVSampleBufferVideoRenderer` compressed and may decode in software, while VP9 and
+Everything else survives without hardware: H.264 is decoded ahead by a
+VideoToolbox session that may decode in software, while VP9 and
 legacy codecs use libavcodec.
 
 **Do not gate anything else on `VTIsHardwareDecodeSupported`.** It reports

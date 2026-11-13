@@ -74,9 +74,10 @@ notes](https://github.com/helop-ou/lagoon-engine/blob/main/docs/reference/stream
 
 Codecs:
 
-- Progressive H.264: compressed sample-buffer path.
-- Interlaced H.264: software decode and deinterlace, on the stream's probed
-  field order, never the server's flag.
+- Progressive H.264: decoded ahead through VideoToolbox, and the compressed
+  sample-buffer path only when no session can be made.
+- Interlaced H.264: software decode, deinterlaced on the GPU at field rate,
+  on the stream's probed field order, never the server's flag.
 - HEVC: decoded ahead through VideoToolbox.
 - AV1: hardware where available, the repo-built dav1d otherwise.
 - Other supported legacy codecs: bounded software decode.
