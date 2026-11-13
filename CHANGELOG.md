@@ -20,6 +20,12 @@ report. One marketing version spans many builds.
 
 ## Unreleased
 
+## 0.9.0 (121)
+
+November 2026
+
+**The player gets its own buttons, Night Mode and Dialogue Boost, and smoother playback on Apple TV.**
+
 ### New features
 
 - What's New shows what changed in the version you just installed, once after each feature update, and any time from Settings, About.
