@@ -26,7 +26,7 @@ enum QRCode {
         return max(Metrics.qrCodeMinimumQuietZone, side / CGFloat(modulesAcross) * 4)
     }
 
-    /// Cached per address (only two exist). Keeps the view synchronous, so
+    /// Cached per address (only a few exist). Keeps the view synchronous, so
     /// `ImageRenderer` can draw it in a test.
     private static var generated: [String: CGImage] = [:]
 
