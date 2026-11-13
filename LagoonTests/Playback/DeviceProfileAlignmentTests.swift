@@ -365,6 +365,28 @@ struct DeviceProfileAlignmentTests {
         #expect(unguarded.map(\.codec) == ["h264", "mpeg2video"])
     }
 
+    /// High 4:2:2 and 4:4:4 played on an Apple TV 4K at 0% frame loss in
+    /// software, and HEVC range extensions in VideoToolbox. HEVC Main 12 is
+    /// also Rext, and VideoToolbox refused it.
+    @Test func chromaRichFormatsAreOfferedAndTwelveBitIsNot() {
+        func condition(_ codec: String, _ property: String) -> DeviceProfile.ProfileCondition? {
+            DeviceProfile.everything.codecProfiles.first { $0.codec == codec }?
+                .conditions.first { $0.property == property }
+        }
+        let h264 = condition("h264", "VideoProfile")?.value.split(separator: "|") ?? []
+        #expect(h264.contains("high 4:2:2"))
+        #expect(h264.contains("high 4:4:4 predictive"))
+        #expect(condition("hevc", "VideoProfile")?.value.split(separator: "|").contains("rext") == true)
+        for codec in ["h264", "hevc"] {
+            #expect(condition(codec, "VideoBitDepth")?.condition == "LessThanEqual", "\(codec)")
+            #expect(condition(codec, "VideoBitDepth")?.value == "10", "\(codec)")
+        }
+        let capabilities = PlaybackCapabilities(hardwareHEVC: true, hardwareAV1: true)
+        #expect(!FFmpegDemuxer.usesCompressedVideoPath(
+            codecID: AV_CODEC_ID_H264, capabilities: capabilities, outsideHardwareProfile: true
+        ))
+    }
+
     @Test func hi10PIsOfferedBecauseTheEngineDecodesItInSoftware() {
         let h264 = DeviceProfile.everything.codecProfiles.first { $0.codec == "h264" }
         let profiles = h264?.conditions.first { $0.property == "VideoProfile" }?.value
