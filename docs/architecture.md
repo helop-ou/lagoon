@@ -185,6 +185,12 @@ wrapper. [Design system](design-system.md) owns the visual rules.
   the player closes. There the shared `restoresFocusAfterPlayer` reset left
   focus on the tab bar with the remote dead. Film and series pages do not
   need it.
+- A focused button that changes what it is stays one button. Disabling it,
+  or swapping it for another view, gives the focus away to the tab bar, and
+  Back then leaves the app. The Seerr title page's primary action is one
+  button for Request, the request in flight and the status it becomes
+  (`SeerrPrimaryAction`), and a second press while the request runs is
+  ignored instead of the button being disabled.
 - Keep `.scrollClipDisabled()` and rail focus padding. Episode rails stay
   mounted while seasons switch, so focus and layout survive loading.
 - The hero's focused control sits outside its `.id()`-keyed, transitioning

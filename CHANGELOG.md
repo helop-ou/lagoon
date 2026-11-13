@@ -35,6 +35,7 @@ report. One marketing version spans many builds.
 
 - Subtitles in the system's caption style show in the system font again, not Times New Roman.
 - On iPhone and iPad, the Lower Quality button in the prompt that appears when playback keeps pausing is now readable.
+- On Apple TV, requesting a movie or show keeps the focus on the button you pressed, so Back returns to the previous page instead of leaving the app.
 
 ## 0.8.1 (120)
 
