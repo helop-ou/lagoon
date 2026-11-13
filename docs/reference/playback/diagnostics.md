@@ -79,12 +79,15 @@ rate, Jellyfin's transcode reason names, output paths, position and rate, queue 
 lead, stall and starvation counters, dropped and corrupted frame counts,
 memory footprint and headroom, thermal state, app state, error domain and
 code, HTTP status and method, route template, stage, cause, recovery reason,
-outcome, and relative timings.
+outcome, relative timings, and for an audio route change its reason and the
+kind of output it left and reached (`hdmi`, `airPlay`, `bluetooth`,
+`headphones`, `speaker`, `other`, `none`).
 
 **Never sent:** account or user identifiers, install identifiers, media titles
 or item identifiers, server addresses, credentials, request or response bodies
 and headers, search terms, subtitle text, `localizedDescription` or `userInfo`
-of any error, screenshots, or a `user` object. Reports count occurrences, not
+of any error, the name of an audio device (it is often its owner's name),
+screenshots, or a `user` object. Reports count occurrences, not
 affected testers. Sentry still sees the submitting IP at the edge, so the
 project setting *Prevent Storing of IP Addresses* must stay on.
 
@@ -110,7 +113,7 @@ asserts none reach the envelope bytes.
 | `playback.failed` | error | same as fallback | the ladder is spent |
 | `playback.rendererRecovery` | warning | reason, domain, code | audio renderer replaced, video renderer flushed, restart-point retry |
 | `playback.stall` | warning | `reprime`/`sustained`/`frequent`, cause | a stall reprimed, lasted ≥ 8 s, or three stalls inside 60 s |
-| `playback.frozen` | error | `playhead` / `picture` | playhead unchanged ≥ 8 s, or frames not presented ≥ 8 s while the clock runs |
+| `playback.frozen` | error, warning for `interrupted` | `playhead` / `picture` / `interrupted` | playhead unchanged ≥ 8 s, frames not presented ≥ 8 s while the clock runs, or a title an audio interruption paused still paused 15 s later |
 | `playback.degraded` | warning | sorted reasons | session ended over thresholds |
 | `playback.subtitleLoadFailed` | warning | stage, domain, code | an external subtitle did not load |
 | `playback.handoffFailed` | error | none | next-episode handoff outcome `failed` |
@@ -131,6 +134,15 @@ vary per occurrence (positions, durations) never enter a fingerprint.
   - position advances but the renderer's frame count does not for 8 s → one
     `playback.frozen` (`picture`)
   Matching progress resets it.
+  A third case needs no progress to be expected. An audio interruption
+  pauses the title until the system says to resume, and the system may never
+  say so, or may end the interruption without it. Paused that way for 15 s
+  with the app in front → one `playback.frozen` (`interrupted`), a warning,
+  until the title plays again. A pause the viewer made, a pause for earphones
+  taken out, and time away from the app never count. The freeze reports found
+  no cause for a start that sat on its first picture after the HDMI link
+  dropped during a display mode switch, which this and the output kinds on
+  `audio.route` are there to explain.
 - **Stall**: the engine records begin/end. A reprime (clock held at 0 for
   `StallRecoveryPolicy.reprimeAfter`, 5 s) or a resume after ≥ 8 s reports
   `playback.stall`. Three stalls within 60 s report once per attempt as
