@@ -29,6 +29,11 @@ a verdict. Start at [the engine
 guide](https://github.com/helop-ou/lagoon-engine/blob/main/docs/engine.md).
 This repository decides what to hand it and what to do with what comes back.
 
+What the player shows about a title is declared here too, and the engine
+never sees it. `PlayerItemInfo`, `PlayerChapter` and `NextUpEpisode` are in
+`Session/`. `MediaSegment` and `TrickplaySource` are in
+`Lagoon/Shared/Models/`, because the Jellyfin client builds them.
+
 ## Network transport
 
 The engine owns the transport: every HTTP open goes through URLSession, and
