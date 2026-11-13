@@ -51,6 +51,11 @@ nonisolated enum DiagnosticSchema {
     static let thermalChoices: Set<String> = ["nominal", "fair", "serious", "critical"]
     static let appStateChoices: Set<String> = ["active", "inactive", "background"]
     static let interruptionChoices: Set<String> = ["began", "ended", "endedResume"]
+    /// The kind of output, never its name: a port is named after the device,
+    /// which is often named after its owner.
+    static let audioOutputChoices: Set<String> = [
+        "hdmi", "airPlay", "bluetooth", "headphones", "speaker", "other", "none",
+    ]
     static let stallCauseChoices: Set<String> = ["video", "audio", "none"]
     static let httpMethodChoices: Set<String> = ["GET", "POST", "DELETE", "PUT"]
     static let clientChoices: Set<String> = ["jellyfin", "seerr", "media", "image", "subtitle"]
@@ -165,6 +170,8 @@ nonisolated enum DiagnosticSchema {
         "stallCause": .choice(stallCauseChoices),
         "interruption": .choice(interruptionChoices),
         "routeReason": .token,
+        "routeFrom": .choiceList(audioOutputChoices),
+        "routeTo": .choiceList(audioOutputChoices),
         "samplesSinceFlush": .int,
         "startPointDrops": .int,
         /// The refused sample, in media ms: separates a restart-point failure
