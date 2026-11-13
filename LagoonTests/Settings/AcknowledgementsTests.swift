@@ -129,4 +129,11 @@ struct AcknowledgementsTests {
         let url = URL(string: "https://lagoon.helop.dev/privacy/")!
         #expect(LegalDestinations.displayAddress(url) == "lagoon.helop.dev/privacy")
     }
+
+    /// The Apple TV shows this address to type, so it has to be the short one.
+    @Test func sourceCodeLinkIsThePublicRepository() throws {
+        let url = try #require(LegalDestinations.sourceCode)
+        #expect(url.scheme == "https")
+        #expect(LegalDestinations.displayAddress(url) == "github.com/helop-ou/lagoon")
+    }
 }
