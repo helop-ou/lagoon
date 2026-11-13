@@ -128,6 +128,12 @@ Sentry groups on the fingerprint verbatim: `[code] + variant`. The build is a
 tag and part of the release, but the fingerprint excludes it. Values that
 vary per occurrence (positions, durations) never enter a fingerprint.
 
+A stage is a string in the fingerprint, so renaming one splits its issue in
+two. The engine names the stages it fails at: `open`, `seek`, `read`,
+`decode`, `videoRenderer`, `audioRenderer` and `subtitle`. The app adds its
+own in `PlaybackFailureDetail+AppStages.swift`: `negotiate`, `start` and
+`unknown`, for an engine failure that names no stage.
+
 ## Detectors and thresholds
 
 - **Freeze** (`PlaybackFreezeDetector`), sampled every 2 s. Progress is
