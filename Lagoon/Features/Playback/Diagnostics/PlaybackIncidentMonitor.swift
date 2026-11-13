@@ -9,8 +9,9 @@ import UIKit
 /// The engine handles a dry queue itself (`isBuffering`). This catches two
 /// cases while the engine thinks it is playing: the playhead has not moved
 /// for `threshold` seconds, or it moves but no frame has been presented,
-/// which is a frozen picture over running audio. Pure so the thresholds can
-/// be pinned.
+/// which is a frozen picture over running audio. And one while it is paused:
+/// an audio interruption paused the title and nothing started it again. Pure
+/// so the thresholds can be pinned.
 nonisolated struct PlaybackFreezeDetector: Equatable, Sendable {
     struct Sample: Equatable, Sendable {
         var position: Double
@@ -23,11 +24,15 @@ nonisolated struct PlaybackFreezeDetector: Equatable, Sendable {
         var secondsSinceSeek: Double?
         /// The renderer's frame count (displayed plus dropped), nil until read.
         var framesPresented: Int? = nil
+        /// An audio interruption that paused the title has begun and not
+        /// ended.
+        var isInterrupted = false
     }
 
     enum Kind: String, Equatable, Sendable {
         case playhead
         case picture
+        case interrupted
     }
 
     enum Verdict: Equatable, Sendable {
@@ -43,6 +48,9 @@ nonisolated struct PlaybackFreezeDetector: Equatable, Sendable {
     static let endGuard: Double = 2
     /// A seek repositions optimistically and then refills. Give it time.
     static let seekSettle: Double = 3
+    /// Longer than the playhead's: an alarm or a spoken notification is over
+    /// by then.
+    static let interruptionThreshold: Double = 15
 
     private(set) var lastPosition: Double?
     private(set) var stalledSince: TimeInterval?
@@ -50,6 +58,12 @@ nonisolated struct PlaybackFreezeDetector: Equatable, Sendable {
     private(set) var lastFrames: Int?
     private(set) var pictureStalledSince: TimeInterval?
     private(set) var pictureReported = false
+    /// An interruption paused the title, and it has not played since. Kept
+    /// after the interruption ends: the system may end one without saying to
+    /// resume, and the title is as stopped as before.
+    private(set) var pausedByInterruption = false
+    private(set) var heldSince: TimeInterval?
+    private(set) var heldReported = false
 
     static func expectsProgress(_ sample: Sample) -> Bool {
         guard !sample.isPaused, !sample.isBuffering, sample.rate > 0,
@@ -67,8 +81,12 @@ nonisolated struct PlaybackFreezeDetector: Equatable, Sendable {
             lastFrames = nil
             pictureStalledSince = nil
             pictureReported = false
-            return .idle
+            return observeInterruption(sample, at: now)
         }
+        // Playing again, whoever started it.
+        pausedByInterruption = false
+        heldSince = nil
+        heldReported = false
         if let lastPosition, abs(sample.position - lastPosition) <= Self.positionTolerance {
             let since = stalledSince ?? now
             stalledSince = since
@@ -97,6 +115,35 @@ nonisolated struct PlaybackFreezeDetector: Equatable, Sendable {
         pictureStalledSince = now
         pictureReported = false
         return .idle
+    }
+
+    /// An interruption pauses the title until the system says to resume, and
+    /// the system may never say so. With the app in front, that is a stopped
+    /// title nobody asked for. Reported once, until it plays again.
+    private mutating func observeInterruption(_ sample: Sample, at now: TimeInterval) -> Verdict {
+        if !sample.isPaused {
+            pausedByInterruption = false
+        } else if sample.isInterrupted {
+            pausedByInterruption = true
+        }
+        guard pausedByInterruption else {
+            heldSince = nil
+            heldReported = false
+            return .idle
+        }
+        // Time away from the app does not count.
+        guard sample.isAppActive else {
+            heldSince = nil
+            return .idle
+        }
+        let since = heldSince ?? now
+        heldSince = since
+        let elapsed = now - since
+        if elapsed >= Self.interruptionThreshold, !heldReported {
+            heldReported = true
+            return .frozen(seconds: elapsed, kind: .interrupted)
+        }
+        return .watching(seconds: elapsed)
     }
 }
 
@@ -184,9 +231,14 @@ final class PlaybackIncidentMonitor {
     /// A fallback whose report waits for the next rung's verdict: `recovered`,
     /// failed, or abandoned.
     private var pendingFallback: PendingFallback?
+    /// Whether an audio interruption that paused the title is still open.
+    /// The audio session knows, and the controller owns both.
+    var isPlaybackInterrupted: @MainActor () -> Bool = { false }
     private let hub: DiagnosticsHub
     private let notificationCenter: NotificationCenter
     private let sleep: @MainActor (Duration) async throws -> Void
+    /// The sampler's clock, so a test can run a freeze window in no time.
+    private let uptime: @MainActor () -> TimeInterval
 
     private struct PendingFallback {
         var variant: [String]
@@ -197,11 +249,13 @@ final class PlaybackIncidentMonitor {
     init(
         hub: DiagnosticsHub = Diagnostics.shared,
         notificationCenter: NotificationCenter = .default,
-        sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) }
+        sleep: @escaping @MainActor (Duration) async throws -> Void = { try await Task.sleep(for: $0) },
+        uptime: @escaping @MainActor () -> TimeInterval = { ProcessInfo.processInfo.systemUptime }
     ) {
         self.hub = hub
         self.notificationCenter = notificationCenter
         self.sleep = sleep
+        self.uptime = uptime
         // Keep listening while opted out, so this attempt can resume sampling
         // without polling or retaining its engine.
         preferenceObserver = notificationCenter.addObserver(
@@ -418,7 +472,7 @@ final class PlaybackIncidentMonitor {
             resolvePendingFallback(outcome: "cancelled")
         }
         if hub.isReportingEnabled, let engine {
-            accumulate(engine: engine, at: ProcessInfo.processInfo.systemUptime)
+            accumulate(engine: engine, at: uptime())
         }
         endSampling()
         samplingEngine = nil
@@ -457,7 +511,7 @@ final class PlaybackIncidentMonitor {
         freeze = PlaybackFreezeDetector()
         tick = 0
         stallUptimes = []
-        lastSampleAt = ProcessInfo.processInfo.systemUptime
+        lastSampleAt = uptime()
         lastStallCount = engine.stallCount
         sampleTask = Task { [weak self, weak engine, sleep] in
             while !Task.isCancelled {
@@ -485,7 +539,7 @@ final class PlaybackIncidentMonitor {
     }
 
     private func sample(engine: DiagnosableEngine) {
-        let now = ProcessInfo.processInfo.systemUptime
+        let now = uptime()
         tick += 1
         accumulate(engine: engine, at: now)
         engine.refreshVideoPerformanceMetrics()
@@ -500,14 +554,18 @@ final class PlaybackIncidentMonitor {
             isFinished: engine.duration > 0 && engine.timePosition >= engine.duration - 0.5,
             isAppActive: Self.isAppActive,
             secondsSinceSeek: hub.millisecondsSince(.playbackSeek).map { $0 / 1_000 },
-            framesPresented: engine.videoPerformance?.totalFrames
+            framesPresented: engine.videoPerformance?.totalFrames,
+            isInterrupted: isPlaybackInterrupted()
         ), at: now)
         if case .frozen(let seconds, let kind) = verdict {
             counters.frozen += 1
             var fields = incidentFields(extra: Self.pipelineFields(engine))
             fields["frozenSeconds"] = .double(seconds.rounded(toPlaces: 1))
             fields["frozenCount"] = .int(counters.frozen)
-            hub.report(.playbackFrozen, level: .error, variant: [kind.rawValue], fields: fields)
+            // A held interruption can be the system's own choice, so it is
+            // counted as a warning.
+            let level: DiagnosticLevel = kind == .interrupted ? .warning : .error
+            hub.report(.playbackFrozen, level: level, variant: [kind.rawValue], fields: fields)
         }
 
         // Stalls the engine recovered from, so a run of them becomes one report.
