@@ -69,5 +69,8 @@ struct PlayerEpisodeListTests {
         #expect(PlayerPictureInPictureButton.state(isPossible: true, isActive: false, isAvailable: false) == nil)
         #expect(PlayerPictureInPictureButton.start.systemImage == "pip.enter")
         #expect(PlayerPictureInPictureButton.stop.systemImage == "pip.exit")
+        // What VoiceOver reads, so it has to say what a press does.
+        #expect(PlayerPictureInPictureButton.start.title == "Picture in Picture")
+        #expect(PlayerPictureInPictureButton.stop.title == "Stop Picture in Picture")
     }
 }
