@@ -100,10 +100,19 @@ nonisolated enum DeviceProfile {
                 type: "Video",
                 codec: "hevc",
                 conditions: [
+                    // Rext covers 4:2:2 and 4:4:4, which VideoToolbox decoded
+                    // on an Apple TV 4K. It covers Main 12 too, which it
+                    // refused, hence the bit depth.
                     ProfileCondition(
                         condition: "EqualsAny",
                         property: "VideoProfile",
-                        value: "main|main 10",
+                        value: "main|main 10|rext",
+                        isRequired: false
+                    ),
+                    ProfileCondition(
+                        condition: "LessThanEqual",
+                        property: "VideoBitDepth",
+                        value: "10",
                         isRequired: false
                     ),
                     ProfileCondition(
@@ -133,9 +142,15 @@ nonisolated enum DeviceProfile {
                     ProfileCondition(
                         condition: "EqualsAny",
                         property: "VideoProfile",
-                        // High 10 (Hi10P) has no hardware decoder. The engine
-                        // decodes it in software.
-                        value: "high|main|baseline|constrained baseline|high 10",
+                        // High 10 (Hi10P), 4:2:2 and 4:4:4 have no hardware
+                        // decoder. The engine decodes them in software.
+                        value: "high|main|baseline|constrained baseline|high 10|high 4:2:2|high 4:4:4 predictive",
+                        isRequired: false
+                    ),
+                    ProfileCondition(
+                        condition: "LessThanEqual",
+                        property: "VideoBitDepth",
+                        value: "10",
                         isRequired: false
                     ),
                     ProfileCondition(

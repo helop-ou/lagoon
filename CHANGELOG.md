@@ -38,6 +38,7 @@ report. One marketing version spans many builds.
 - Choosing image subtitles shows the current line at once, without the picture pausing.
 - Coming back to a playing title brings the picture back without interrupting the sound.
 - When the server refuses your sign-in, can't find the file or can't be reached, or the device is offline, the player says so straight away instead of retrying the title in other formats first.
+- More video plays straight from the server instead of being converted: H.264 and HEVC with richer 4:2:2 or 4:4:4 colour.
 
 ### Bug fixes
 
