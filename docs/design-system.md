@@ -432,3 +432,8 @@ request. `HomeCardSnapshotTests` is the pattern.
   tvOS control needs a key window with focus moved into it.
   `ProfileButtonSnapshotTests` does that and hands the picture to
   `Snapshot.verify(_:named:)`.
+- Snapshot tvOS glass over black. Over anything lighter the glass adapts
+  across its first frames, a UIKit button sooner than a SwiftUI one under a
+  full run's load, so the picture differs from one run to the next.
+- Keep the canvas close to the component. The tolerance is a share of the
+  whole picture, so one wrong symbol on a full screen passes.
