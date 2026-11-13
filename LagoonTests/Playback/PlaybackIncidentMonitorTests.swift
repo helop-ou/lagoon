@@ -229,6 +229,35 @@ struct PlaybackIncidentMonitorTests {
         }
     }
 
+    /// A start that gave up on its own is filed under the start, wherever
+    /// the attempt had got to when it threw.
+    @Test func aStartThatGaveUpIsFiledUnderTheStart() throws {
+        let sink = CapturingSink()
+        let monitor = PlaybackIncidentMonitor(hub: DiagnosticsHub(sink: sink, reportingEnabled: { true }))
+
+        monitor.startFailed(PlaybackStartError.stalled, delivery: .negotiated, stage: .negotiate)
+
+        let incident = try #require(sink.incidents.first)
+        #expect(incident.fingerprint == ["playback.startFailed", "start", "PlaybackStartError"])
+    }
+
+    /// The engine may fail without saying where. The report still names a
+    /// stage, so those failures stay one issue.
+    @Test func anEngineFailureThatNamesNoStageIsFiledUnderUnknown() throws {
+        let sink = CapturingSink()
+        let monitor = PlaybackIncidentMonitor(hub: DiagnosticsHub(sink: sink, reportingEnabled: { true }))
+
+        monitor.engineFailed(
+            PlaybackEngineFailure(cause: .delivery, message: "The connection was lost."),
+            delivery: .negotiated, next: nil, engine: nil
+        )
+
+        let incident = try #require(sink.incidents.first)
+        #expect(incident.code == .playbackFailed)
+        #expect(incident.fields["stage"] == .string("unknown"))
+        #expect(incident.fingerprint == ["playback.failed", "delivery", "unknown"])
+    }
+
     @Test func anAbandonedStartSaysWhereItWasHeadedAndWhatArrived() throws {
         let sink = CapturingSink()
         let hub = DiagnosticsHub(sink: sink, reportingEnabled: { true })
