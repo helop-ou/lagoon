@@ -137,7 +137,11 @@ final class PlaybackAudioSession {
         let reason = AVAudioSession.RouteChangeReason(rawValue: rawReason) ?? .unknown
         let previousRoute = notification.userInfo?[AVAudioSessionRouteChangePreviousRouteKey]
             as? AVAudioSessionRouteDescription
-        Diagnostics.record(.audioRoute, ["routeReason": .string(Self.routeChangeReasonName(reason))])
+        Diagnostics.record(.audioRoute, [
+            "routeReason": .string(Self.routeChangeReasonName(reason)),
+            "routeFrom": .string(Self.outputKinds(previousRoute?.outputs.map(\.portType) ?? [])),
+            "routeTo": .string(Self.outputKinds(session.currentRoute.outputs.map(\.portType))),
+        ])
         if ProcessCPUTrace.enabled {
             // Report-only: route churn on the DecodeTrace console, gated the same.
             // Never changes behaviour.
@@ -175,6 +179,25 @@ final class PlaybackAudioSession {
         case .noSuitableRouteForCategory: "noSuitableRouteForCategory"
         case .routeConfigurationChange: "routeConfigurationChange"
         @unknown default: "unknown"
+        }
+    }
+
+    /// What kind of output a route plays through, for a report: which kind
+    /// went away says whether a pause was the viewer's doing. Only the kind
+    /// is read. A port's name is the name someone gave their device.
+    nonisolated static func outputKinds(_ ports: [AVAudioSession.Port]) -> String {
+        let kinds = Set(ports.map(outputKind))
+        return kinds.isEmpty ? "none" : kinds.sorted().joined(separator: ",")
+    }
+
+    nonisolated private static func outputKind(_ port: AVAudioSession.Port) -> String {
+        switch port {
+        case .HDMI: "hdmi"
+        case .airPlay: "airPlay"
+        case .bluetoothA2DP, .bluetoothLE, .bluetoothHFP: "bluetooth"
+        case .headphones: "headphones"
+        case .builtInSpeaker, .builtInReceiver: "speaker"
+        default: "other"
         }
     }
 
