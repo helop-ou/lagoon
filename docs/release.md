@@ -462,7 +462,8 @@ and regenerate the inventory if an input changes.
 - `Lagoon/Features/Settings/LegalDestinations.swift` carries the published
   `/privacy/` and `/support/` addresses. App Store Connect must get the same
   two, because a reviewer compares them. An unpublished destination stays nil
-  and its row disappears.
+  and its row disappears. The same file carries the public repository's
+  address for the Source Code row.
 - Still owed: publisher identity and a monitored contact, current
   rights-cleared screenshots, and the App Store destination. Keep site and
   store copy consistent with the actual formats, devices, server setup and
