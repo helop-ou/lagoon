@@ -30,12 +30,24 @@ report. One marketing version spans many builds.
 ### Improvements
 
 - On a fast connection to a server elsewhere, Auto quality plays the original file, however high its bitrate, instead of asking the server for a smaller version.
+- On Apple TV 4K, H.264 video plays without the dropped frames it used to have.
+- Interlaced video, such as recorded TV, moves more smoothly.
+- Seeking lands sooner.
+- A server far away fills the buffer faster.
+- Choosing image subtitles shows the current line at once, without the picture pausing.
+- Coming back to a playing title brings the picture back without interrupting the sound.
 
 ### Bug fixes
 
 - Subtitles in the system's caption style show in the system font again, not Times New Roman.
 - On iPhone and iPad, the Lower Quality button in the prompt that appears when playback keeps pausing is now readable.
 - On Apple TV, requesting a movie or show keeps the focus on the button you pressed, so Back returns to the previous page instead of leaving the app.
+- MKV files without a seek index seek quickly instead of reading from the start.
+- H.264 files that lost their frame order no longer stutter.
+- A title no longer hangs forever when the server stops sending.
+- On AirPlay, the sound comes back after a seek.
+- Image subtitles that declare no size appear in the right place.
+- A damaged Dolby Vision title no longer closes Lagoon.
 
 ## 0.8.1 (120)
 
