@@ -26,6 +26,7 @@ report. One marketing version spans many builds.
 - A new install opens with a short welcome, and after the first sign-in offers to connect Seerr, which you can skip.
 - Setup lists the Jellyfin servers on your local network, so you can pick yours instead of typing its address.
 - The player says when the server converts what you're watching, and when a quality limit was the only reason, offers to play the original instead.
+- Settings, About links to Lagoon's source code on GitHub. On Apple TV it shows a code to scan.
 
 ### Improvements
 
