@@ -1,10 +1,10 @@
 {
   "scope": "All declared native framework slices, including non-shipped macOS slices. Import presence is not runtime-use proof.",
   "engine": {
-    "version": "1.3.2",
-    "revision": "3e2160e5ee1ed5f6a0b3d9785ba9401a451dedc9"
+    "version": "2.0.0",
+    "revision": "9906c5b8e49b2cfa1f11aaa14df544c2ab5958db"
   },
-  "package_sha256": "6cd24b4548b32c1ec87090ab33fb90ad8ce2465d72818ef9b262a490041a8b1c",
+  "package_sha256": "21c4e60376411afb78532f4bd40621bc5bef1335929ba97b01d3c9031c3314ad",
   "dependencies": [
     {
       "name": "Libavcodec",
