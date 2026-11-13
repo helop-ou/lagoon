@@ -379,13 +379,13 @@ struct VideoPlayerView: View {
                 adjustments: controller.adjustments,
                 qualityOffer: controller.qualityOffer,
                 episodeButtons: PlayerEpisodeButtons.offered(
-                    hasPrevious: controller.previousItem != nil,
+                    hasPrevious: controller.neighbours.previousItem != nil,
                     hasNext: controller.nextUp != nil,
                     inGroup: togetherState != nil
                 ),
                 onPreviousEpisode: { Task { await controller.playPrevious() } },
                 // The group changes the item, so no list in Watch Together.
-                episodeList: togetherState == nil ? controller.episodeList : nil,
+                episodeList: togetherState == nil ? controller.neighbours.episodeList : nil,
                 onPlayEpisode: { row in Task { await controller.playEpisode(row) } },
                 transcodeNotice: controller.transcodeNotice
             ) { [weak engine] in

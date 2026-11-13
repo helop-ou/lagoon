@@ -35,11 +35,9 @@ final class PlaybackController {
     private(set) var nextUp: MediaItem? {
         didSet { automation.setNextUpAvailable(nextUp != nil) }
     }
-    /// The episode or list entry before this one, for the previous button.
-    private(set) var previousItem: MediaItem?
-    /// What the Episodes button lists. Kept across a hand-off, so the list
-    /// stays up while the next title starts.
-    private(set) var episodeList: PlayerEpisodeList?
+    /// The title before this one and the Episodes list, for the player's
+    /// own buttons.
+    let neighbours = PlayerNeighbours()
     let automation = PlaybackAutomation()
     /// The lower quality offered after repeated stalls.
     let qualityOffer = PlaybackQualityOffer()
@@ -141,10 +139,6 @@ final class PlaybackController {
     /// `timePosition` reads 0 rather than the requested start.
     private var engineHasStarted = false
     private var nextUpTask: Task<Void, Never>?
-    private var previousItemTask: Task<Void, Never>?
-    private var episodeListTask: Task<Void, Never>?
-    /// Seasons already fetched for the Episodes list, for the player's life.
-    @ObservationIgnored private var seasonEpisodes: [String: [MediaItem]] = [:]
     /// Runs from install to the engine's first frame.
     @ObservationIgnored private let startWatch = PlaybackStartWatch()
     @ObservationIgnored private let successorPreparation = PlaybackSuccessorPreparation()
@@ -1061,47 +1055,7 @@ final class PlaybackController {
                 self?.nextUp = next
             }
         }
-        resolvePreviousItem(before: media, client: client)
-        resolveEpisodeList(for: media, client: client)
-    }
-
-    private func resolveEpisodeList(for media: MediaItem, client: JellyfinClient) {
-        episodeListTask?.cancel()
-        switch PlayerEpisodeList.source(for: media, queue: queue) {
-        case .none:
-            episodeList = nil
-        case .queue(let list):
-            episodeList = .queue(list)
-        case .season(let seriesId, let seasonId):
-            if let episodes = seasonEpisodes[seasonId] {
-                episodeList = .season(episodes, current: media)
-                return
-            }
-            episodeList = nil
-            episodeListTask = Task { [weak self] in
-                guard let episodes = try? await client.episodes(seriesId: seriesId, seasonId: seasonId),
-                      !Task.isCancelled, let self else { return }
-                self.seasonEpisodes[seasonId] = episodes
-                self.episodeList = .season(episodes, current: media)
-            }
-        }
-    }
-
-    private func resolvePreviousItem(before media: MediaItem, client: JellyfinClient) {
-        previousItemTask?.cancel()
-        previousItem = nil
-        switch queue.predecessor(before: media) {
-        case .none:
-            break
-        case .entry(let previous):
-            previousItem = previous
-        case .previousEpisode:
-            previousItemTask = Task { [weak self] in
-                let previous = try? await client.episodeBefore(media)
-                guard !Task.isCancelled else { return }
-                self?.previousItem = previous
-            }
-        }
+        neighbours.resolve(around: media, queue: queue, client: client)
     }
 
     /// Keeps a list's place on the server, so Home on any device can continue
@@ -1195,7 +1149,7 @@ final class PlaybackController {
             engine?.seek(to: 0)
             return
         }
-        guard let previous = previousItem, client != nil else { return }
+        guard let previous = neighbours.previousItem, client != nil else { return }
         isAdvancing = true
         defer { isAdvancing = false }
         queue = queue.retreated()
@@ -1238,7 +1192,7 @@ final class PlaybackController {
         guard !Task.isCancelled, isStillWanted() else { return }
         // Don't let the old card reappear over a successor resumed near its end.
         nextUp = nil
-        previousItem = nil
+        neighbours.forgetPreviousItem()
         didFinish = false
         errorMessage = nil
         if let rung { delivery = rung }
@@ -1499,10 +1453,7 @@ final class PlaybackController {
         diagnosticSampler.stop()
         nextUpTask?.cancel()
         nextUpTask = nil
-        previousItemTask?.cancel()
-        previousItemTask = nil
-        episodeListTask?.cancel()
-        episodeListTask = nil
+        neighbours.cancel()
         startWatch.end()
         // A sleeping countdown must not wake on a gone engine.
         automation.invalidate()
