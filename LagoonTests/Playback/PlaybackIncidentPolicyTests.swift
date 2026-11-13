@@ -79,6 +79,62 @@ struct PlaybackFreezeDetectorTests {
         #expect(detector.observe(sample, at: 130) == .idle)
         #expect(detector.observe(sample, at: 135) == .watching(seconds: 5))
     }
+
+    /// Paused by an interruption that is still open, unless said otherwise.
+    static func held(interrupted: Bool = true, active: Bool = true) -> PlaybackFreezeDetector.Sample {
+        var sample = playing(position: 12)
+        sample.isPaused = true
+        sample.isInterrupted = interrupted
+        sample.isAppActive = active
+        return sample
+    }
+
+    /// An interruption pauses the title until the system says to resume. One
+    /// the system never ends leaves it stopped with nobody having asked.
+    @Test func aTitleAnInterruptionPausedAndNeverGaveBackIsReportedOnce() {
+        var detector = PlaybackFreezeDetector()
+        _ = detector.observe(Self.playing(position: 10), at: 0)
+        #expect(detector.observe(Self.held(), at: 2) == .watching(seconds: 0))
+        #expect(detector.observe(Self.held(), at: 16) == .watching(seconds: 14))
+        #expect(detector.observe(Self.held(), at: 18) == .frozen(seconds: 16, kind: .interrupted))
+        // Reported once, however long it lasts.
+        #expect(detector.observe(Self.held(), at: 60) == .watching(seconds: 58))
+        // Playing again resets it, and the next one reports again.
+        #expect(detector.observe(Self.playing(position: 13), at: 62) == .idle)
+        #expect(detector.observe(Self.held(), at: 64) == .watching(seconds: 0))
+        #expect(detector.observe(Self.held(), at: 80) == .frozen(seconds: 16, kind: .interrupted))
+    }
+
+    /// The system may end an interruption without saying to resume. The
+    /// title is as stopped as before.
+    @Test func anInterruptionThatEndsWithoutAResumeStillCounts() {
+        var detector = PlaybackFreezeDetector()
+        #expect(detector.observe(Self.held(), at: 0) == .watching(seconds: 0))
+        #expect(detector.observe(Self.held(interrupted: false), at: 15) == .frozen(seconds: 15, kind: .interrupted))
+    }
+
+    /// The session only calls a title interrupted when the interruption is
+    /// what paused it, so a pause the viewer made never counts.
+    @Test func aPauseTheViewerMadeIsNotHeldByAnInterruption() {
+        var detector = PlaybackFreezeDetector()
+        #expect(detector.observe(Self.held(interrupted: false), at: 0) == .idle)
+        #expect(detector.observe(Self.held(interrupted: false), at: 60) == .idle)
+        // Nor one made after the viewer started it again.
+        #expect(detector.observe(Self.held(), at: 62) == .watching(seconds: 0))
+        #expect(detector.observe(Self.playing(position: 14), at: 64) == .idle)
+        #expect(detector.observe(Self.held(interrupted: false), at: 66) == .idle)
+        #expect(detector.observe(Self.held(interrupted: false), at: 120) == .idle)
+    }
+
+    /// A call takes the app out of the front. Only time in front counts.
+    @Test func timeAwayFromTheAppIsNotCountedAgainstAnInterruption() {
+        var detector = PlaybackFreezeDetector()
+        #expect(detector.observe(Self.held(), at: 0) == .watching(seconds: 0))
+        #expect(detector.observe(Self.held(active: false), at: 10) == .idle)
+        #expect(detector.observe(Self.held(active: false), at: 300) == .idle)
+        #expect(detector.observe(Self.held(), at: 302) == .watching(seconds: 0))
+        #expect(detector.observe(Self.held(), at: 317) == .frozen(seconds: 15, kind: .interrupted))
+    }
 }
 
 @Suite("Playback degradation policy")

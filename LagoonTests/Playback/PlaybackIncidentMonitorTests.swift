@@ -288,6 +288,42 @@ struct PlaybackIncidentMonitorTests {
         #expect(!PlaybackController.isStartCancellation(URLError(.timedOut), taskCancelled: true, closed: true))
     }
 
+    /// The audio session knows an interruption is open and the sampler asks
+    /// it. A title held that way may be the system's own choice, so it is
+    /// counted as a warning.
+    @Test func aTitleAnInterruptionHoldsIsReportedAsAWarning() async throws {
+        let sink = CapturingSink()
+        let hub = DiagnosticsHub(sink: sink, reportingEnabled: { true })
+        let clock = SamplingClock()
+        let uptime = OSAllocatedUnfairLock(initialState: 100.0)
+        let monitor = PlaybackIncidentMonitor(
+            hub: hub, notificationCenter: NotificationCenter(), sleep: clock.sleep,
+            uptime: { uptime.withLock { $0 } }
+        )
+        let engine = SampleBufferPlayerEngine()
+        defer {
+            monitor.endAttempt(engine: engine, outcome: "stopped")
+            engine.shutdown()
+            clock.finish()
+        }
+        engine.pause()
+        monitor.isPlaybackInterrupted = { true }
+        monitor.beginAttempt(delivery: .negotiated, method: .directPlay, source: try Self.source(), cached: true, disc: false, resumeSeconds: 0)
+        monitor.playbackReady(engine: engine)
+        // Nine samples two seconds apart. The first opens the window.
+        for tick in 1...9 {
+            try await Self.waitUntil { clock.requests == tick }
+            uptime.withLock { $0 += 2 }
+            clock.advance()
+        }
+        try await Self.waitUntil { !sink.incidents.isEmpty }
+        let incident = try #require(sink.incidents.first)
+        #expect(incident.fingerprint == ["playback.frozen", "interrupted"])
+        #expect(incident.level == .warning)
+        #expect(incident.fields["frozenSeconds"] == .double(16))
+        #expect(incident.fields["schemaRejected"] == nil)
+    }
+
     @Test func optingOutCancelsTheTimerAndOptingBackInStartsAFreshWindow() async throws {
         let enabled = OSAllocatedUnfairLock(initialState: true)
         let hub = DiagnosticsHub(reportingEnabled: { enabled.withLock { $0 } })
