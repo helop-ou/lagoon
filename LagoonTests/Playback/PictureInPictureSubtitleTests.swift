@@ -69,7 +69,51 @@ struct PictureInPictureSubtitleTests {
         #expect(style.fontName == nil)
     }
 
+    /// The viewer's own look is white on black at their size, edge and
+    /// background, in the engine's font.
+    @Test func aViewersOwnLookIsWhatTheWindowDraws() throws {
+        let store = try Self.store()
+        store.values.followsSystemAppearance = false
+        store.values.textSize = .large
+        store.values.edgeStyle = .outline
+        store.values.background = .dark
+
+        let style = store.burnedInStyle
+        #expect(style.textColor == SubtitleTextColor(red: 255, green: 255, blue: 255, alpha: 255))
+        #expect(style.edge == .outline)
+        #expect(style.backgroundColor == SubtitlePreferencesStore.subtitleColor(
+            CGColor(gray: 0, alpha: 1), opacity: SubtitleBackground.dark.opacity
+        ))
+        let size = SubtitlePreferencesStore.burnedInRelativeSize * SubtitleTextSize.large.scale
+        #expect(abs(style.relativeSize - size) < 0.0001)
+        #expect(style.fontName == nil)
+    }
+
+    /// Following the system's caption style, the viewer's own settings no
+    /// longer reach the window, and a system font is still left to the engine.
+    @Test func followingTheSystemLeavesTheViewersOwnLookOut() throws {
+        let store = try Self.store()
+        store.values.followsSystemAppearance = true
+        let system = store.burnedInStyle
+        store.values.textSize = .extraLarge
+        store.values.edgeStyle = .none
+        store.values.background = .dark
+        #expect(store.burnedInStyle == system)
+        #expect(system.fontName?.hasPrefix(".") != true)
+        #expect(system.relativeSize >= SubtitlePreferencesStore.burnedInRelativeSize * 0.5)
+
+        store.values.followsSystemAppearance = false
+        #expect(store.burnedInStyle.edge == .none)
+    }
+
     // MARK: - Helpers
+
+    private static func store() throws -> SubtitlePreferencesStore {
+        let suite = "picture-in-picture-subtitle-tests"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defaults.removePersistentDomain(forName: suite)
+        return SubtitlePreferencesStore(defaults: defaults)
+    }
 
     private static let style = BurnedInSubtitleStyle(relativeSize: 0.07)
 
