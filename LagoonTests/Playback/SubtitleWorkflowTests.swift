@@ -496,7 +496,7 @@ private nonisolated struct RecordedSubtitleRequest: Sendable {
 /// read once at request time (URLRequest's body stream can only be drained
 /// once), so it is captured into the recorded request rather than re-read
 /// later from the stub's own request log.
-private enum SubtitleDownloadFixture {
+private nonisolated enum SubtitleDownloadFixture {
     private static let lock = NSLock()
     private nonisolated(unsafe) static var recordedRequests: [RecordedSubtitleRequest] = []
     private nonisolated(unsafe) static var userPolicyPayload = #"{ "Id": "user-1", "Name": "Tester", "Policy": { "IsAdministrator": false, "EnableSubtitleManagement": true } }"#

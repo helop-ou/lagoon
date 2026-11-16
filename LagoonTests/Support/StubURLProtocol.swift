@@ -10,7 +10,7 @@ import Foundation
 /// to a host nobody registered fails with `unregisteredHostError`. Recorded
 /// requests carry their body in `httpBody`, read off the stream URLSession
 /// hands a protocol, so tests can assert what was sent.
-nonisolated final class StubURLProtocol: URLProtocol, @unchecked Sendable {
+nonisolated final class StubURLProtocol: URLProtocol {
     typealias Handler = @Sendable (URLRequest) throws -> (Int, [String: String], Data)
 
     private struct State {
@@ -110,7 +110,7 @@ nonisolated final class StubURLProtocol: URLProtocol, @unchecked Sendable {
 
     /// Builds a configured, signed-in `JellyfinClient` against `host`
     /// through this stub, the way most fixture suites construct one.
-    static func makeJellyfinClient(
+    @MainActor static func makeJellyfinClient(
         host: String,
         deviceId: String,
         token: String = "token",

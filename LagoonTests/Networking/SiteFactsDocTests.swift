@@ -150,7 +150,7 @@ enum SiteFacts {
             "hdr": collapse(
                 names(declaredVideoRanges(profile), rangeNames),
                 matching: { $0.hasPrefix(dolbyVision) },
-                into: dolbyVisionPhrase
+                into: { dolbyVisionPhrase($0) }
             ).joined(separator: separator),
             "audio": collapse(
                 names(declaredAudioCodecs(profile), audioNames),

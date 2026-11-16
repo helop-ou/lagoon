@@ -24,7 +24,7 @@ struct PlayQueueTests {
     }
 
     @Test func aListQueuePlaysItsNextEntryWhateverItsType() throws {
-        let playlist = try PlayQueueList(
+        let playlist = PlayQueueList(
             entries: [
                 .init(media: try item("m1")),
                 .init(media: try item("e1", type: "Episode")),

@@ -12,12 +12,12 @@ struct SeerrDetailSnapshotTests {
     private static let seerrURL = URL(string: "https://\(host)")!
     private static let suite = "seerr-detail-snapshot-tests"
 
-    private static let trailer = #"""
+    private nonisolated static let trailer = #"""
     {"site": "YouTube", "key": "featurette", "name": "Making Of", "type": "Featurette", "url": "https://www.youtube.com/watch?v=featurette1"},
     {"site": "YouTube", "key": "trailer", "name": "Official Trailer", "type": "Trailer", "url": "https://www.youtube.com/watch?v=trailer0001"}
     """#
 
-    private static let responses: [String: String] = [
+    private nonisolated static let responses: [String: String] = [
         "/api/v1/status": #"{"version":"test"}"#,
         "/api/v1/settings/public": #"{"initialized":true,"mediaServerType":2}"#,
         "/api/v1/auth/me": #"{"id":7,"username":"Viewer","permissions":32}"#,

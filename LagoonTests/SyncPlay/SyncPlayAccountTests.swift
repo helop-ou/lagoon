@@ -108,7 +108,7 @@ struct SyncPlayAccountTests {
 /// Fixture state for `SyncPlayAccountTests`, spanning both the "first" and
 /// "second" syncplay hosts so `lastRequest` reflects whichever host a test
 /// last exercised, matching the original single-recorder behavior.
-private enum SyncPlayAccountFixture {
+private nonisolated enum SyncPlayAccountFixture {
     private static let lock = NSLock()
     private nonisolated(unsafe) static var recorded: URLRequest?
     private nonisolated(unsafe) static var statuses: [String: Int] = [:]
