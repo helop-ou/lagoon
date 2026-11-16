@@ -60,6 +60,47 @@ struct HomeCardSnapshotTests {
         )
     }
 
+    /// A backdrop has no title in it, so the card draws one.
+    @Test func aCardNamesATitleWhoseArtworkIsABackdrop() async throws {
+        let item = try decodeItem(#"{"Id":"heist","Name":"Haunted Heist","Type":"Movie","BackdropImageTags":["b"]}"#)
+        try storeLandscapeArtwork(for: item, seed: 4)
+
+        try await Snapshot.verify(
+            LandscapeCard(item: item)
+                .environment(\.jellyfinClient, client),
+            named: "landscape-card-backdrop",
+            size: Self.landscapeCardSize
+        )
+    }
+
+    /// An episode's still shows a scene, not the show's name.
+    @Test func aCardNamesAnEpisodeOverItsStill() async throws {
+        let item = try decodeItem(#"""
+        {"Id":"blackout","Name":"The One with the Blackout","Type":"Episode","SeriesName":"Friends","SeriesId":"friends","ParentIndexNumber":1,"IndexNumber":7,"ImageTags":{"Primary":"p","Thumb":"t"}}
+        """#)
+        try storeLandscapeArtwork(for: item, seed: 6)
+
+        try await Snapshot.verify(
+            LandscapeCard(item: item)
+                .environment(\.jellyfinClient, client),
+            named: "landscape-card-episode-still",
+            size: Self.landscapeCardSize
+        )
+    }
+
+    /// A Thumb has the title printed in it, so the card adds nothing.
+    @Test func aCardLeavesAThumbClean() async throws {
+        let item = try decodeItem(#"{"Id":"arrival-wide","Name":"Arrival","Type":"Movie","ImageTags":{"Thumb":"t"},"BackdropImageTags":["b"]}"#)
+        try storeLandscapeArtwork(for: item, seed: 5)
+
+        try await Snapshot.verify(
+            LandscapeCard(item: item)
+                .environment(\.jellyfinClient, client),
+            named: "landscape-card-thumb",
+            size: Self.landscapeCardSize
+        )
+    }
+
     /// The count sits in the corner in the theme's signal colour.
     @Test func aStartedSeriesPosterCarriesItsUnwatchedCount() async throws {
         let item = try decodeItem(#"{"Id":"good-place","Name":"The Good Place","Type":"Series","ProductionYear":2016,"ImageTags":{"Primary":"p"},"UserData":{"PlayedPercentage":50,"UnplayedItemCount":25}}"#)
@@ -90,6 +131,15 @@ struct HomeCardSnapshotTests {
     }
 
     // MARK: - Fixtures
+
+    private static var landscapeCardSize: CGSize {
+        CGSize(width: Metrics.landscapeWidth + 40, height: Metrics.landscapeHeight + 40)
+    }
+
+    private func storeLandscapeArtwork(for item: MediaItem, seed: Int) throws {
+        let url = try #require(client.imageURL(for: item, kind: .thumb, maxWidth: landscapePixels))
+        ImageCache.shared.store(Artwork.landscape(seed: seed), for: url, maxPixelSize: landscapePixels)
+    }
 
     private static var railSize: CGSize {
         #if os(tvOS)
