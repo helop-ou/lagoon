@@ -1,8 +1,8 @@
 import SwiftUI
 
 /// Plays when a theme is chosen or another profile arrives in its own: a
-/// bloom of the new accent with the theme's motif drifting up, under two
-/// seconds. Ignores touches and focus.
+/// bloom of the new accent with the theme's motif drifting through it, under
+/// two seconds. Ignores touches and focus.
 ///
 /// Reduce Motion keeps only the fade.
 struct ThemeBloomOverlay: View {
@@ -49,17 +49,19 @@ struct ThemeBloomOverlay: View {
     }
 }
 
-/// What a theme sends drifting up through its bloom.
+/// What a theme sends drifting through its bloom: up, unless it `falls`.
 nonisolated enum BloomMotif: Equatable, Sendable {
     case flowers
     case jellyfish
     case ghosts
+    case snowflakes
 
     var count: Int {
         switch self {
         case .flowers: 12
         case .jellyfish: 7
         case .ghosts: 8
+        case .snowflakes: 14
         }
     }
 
@@ -69,8 +71,12 @@ nonisolated enum BloomMotif: Equatable, Sendable {
         case .flowers: 0.032
         case .jellyfish: 0.075
         case .ghosts: 0.06
+        case .snowflakes: 0.04
         }
     }
+
+    /// Snow comes down.
+    var falls: Bool { self == .snowflakes }
 }
 
 /// One frame of the bloom, drawn for a progress between 0 and 1.
@@ -130,7 +136,7 @@ private struct ThemeBloomFrame: View {
             guard local > 0 else { continue }
             let travel = Self.easeOut(local)
             let x = (startX + sway * sin(local * .pi * 2)) * size.width
-            let y = (startY - climb * travel) * size.height
+            let y = (motif.falls ? 1 - startY + climb * travel : startY - climb * travel) * size.height
             let ink = GraphicsContext.Shading.color(accent.opacity(0.55 * sin(local * .pi)))
             let height = baseHeight * scale
 
@@ -161,6 +167,13 @@ private struct ThemeBloomFrame: View {
                     ghost,
                     with: .color(Color.white.mix(with: accent, by: 0.12).opacity(0.7 * sin(local * .pi))),
                     style: GhostGeometry.fillStyle
+                )
+            case .snowflakes:
+                drifter.rotate(by: .radians(spin * local))
+                drifter.stroke(
+                    SnowflakeGeometry.path(radius: height / 2),
+                    with: .color(Color.white.mix(with: accent, by: 0.2).opacity(0.8 * sin(local * .pi))),
+                    style: SnowflakeGeometry.strokeStyle(radius: height / 2)
                 )
             }
         }

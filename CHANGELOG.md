@@ -20,6 +20,10 @@ report. One marketing version spans many builds.
 
 ## Unreleased
 
+### New features
+
+- A Winter theme in Settings, Appearance: icy blue over a winter night, with snowflakes when you pick it.
+
 ### Improvements
 
 - On a partly folded iPhone Duo, titles, buttons and poster grids stay clear of the fold.

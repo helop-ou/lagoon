@@ -8,6 +8,7 @@ nonisolated enum AppTheme: String, CaseIterable, Identifiable {
     case lagoon
     case babyPink
     case spooky
+    case winter
 
     var id: String { rawValue }
 
@@ -16,6 +17,7 @@ nonisolated enum AppTheme: String, CaseIterable, Identifiable {
         case .lagoon: String(localized: "Lagoon")
         case .babyPink: String(localized: "Baby Pink")
         case .spooky: String(localized: "Spooky")
+        case .winter: String(localized: "Winter")
         }
     }
 
@@ -27,6 +29,8 @@ nonisolated enum AppTheme: String, CaseIterable, Identifiable {
             String(localized: "Soft orchid pink over deep plum, with a spark of orange. Still Lagoon, only prettier.")
         case .spooky:
             String(localized: "Pumpkin orange over midnight, with cobwebs in the corners and a ghost or two. Still Lagoon, only haunted.")
+        case .winter:
+            String(localized: "Icy blue over a winter night, with a spark of berry red. Still Lagoon, only colder.")
         }
     }
 
@@ -35,6 +39,7 @@ nonisolated enum AppTheme: String, CaseIterable, Identifiable {
         case .lagoon: .lagoon
         case .babyPink: .babyPink
         case .spooky: .spooky
+        case .winter: .winter
         }
     }
 
@@ -44,6 +49,7 @@ nonisolated enum AppTheme: String, CaseIterable, Identifiable {
         case .lagoon: .jellyfish
         case .babyPink: .flowers
         case .spooky: .ghosts
+        case .winter: .snowflakes
         }
     }
 
@@ -149,6 +155,21 @@ extension ThemePalette {
 
     /// A ghost is white, warmed a little by the accent.
     var ghost: Color { Color.white.mix(with: accent, by: 0.12) }
+
+    /// Ice blue over a night-blue sky, with a periwinkle glow.
+    static let winter = ThemePalette(
+        accent: Color(red: 0x9A / 255, green: 0xDB / 255, blue: 0xFF / 255),
+        ground: Color(red: 0x0F / 255, green: 0x2A / 255, blue: 0x4E / 255),
+        background: Color(red: 0x06 / 255, green: 0x0C / 255, blue: 0x18 / 255),
+        surface: Color(red: 0x10 / 255, green: 0x1C / 255, blue: 0x30 / 255),
+        glowDepth: Color(red: 0x4A / 255, green: 0x5F / 255, blue: 0xD0 / 255),
+        // Berry red: the one warm thing in the cold.
+        signal: Color(red: 0xFF / 255, green: 0x64 / 255, blue: 0x64 / 255),
+        // A step deeper than the accent, or a toggle's knob is lost on it.
+        controlTint: Color(red: 0x8F / 255, green: 0xD0 / 255, blue: 0xF7 / 255),
+        artworkTint: nil,
+        chrome: Color(red: 0x0F / 255, green: 0x2A / 255, blue: 0x4E / 255).opacity(0.25)
+    )
 }
 
 /// Which theme is on. The choice belongs to the Jellyfin profile, not the
