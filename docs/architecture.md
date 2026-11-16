@@ -197,6 +197,10 @@ wrapper. [Design system](design-system.md) owns the visual rules.
 ## tvOS invariants (violating these regresses real bugs)
 
 - Every screen needs a focusable element, or Menu can exit the app.
+- A screen that must open on one control sets its focus state when it
+  appears, as the setup does for Continue. `defaultFocus` alone is honored
+  on tvOS 27 and not on tvOS 26, which opens on a row nearer the middle, so
+  check a focus journey on both.
 - The collection and playlist page claims focus back for its actions when
   the player closes. There the shared `restoresFocusAfterPlayer` reset left
   focus on the tab bar with the remote dead. Film and series pages do not
