@@ -527,15 +527,7 @@ final class HomeViewModel {
         )
         async let genreRail = spotlightRail(genre: genre, client: client, filters: watchedFilters)
         async let decadeRail = spotlightRail(decade: decade, client: client)
-        async let unstarted = rail(
-            id: HomeCuratedRows.ID.unstartedSeries,
-            title: "Series You Haven't Started",
-            client: client,
-            includeTypes: [.series],
-            sortBy: "DateCreated",
-            sortOrder: "Descending",
-            filters: ["IsUnplayed"]
-        )
+        async let unstarted = unstartedSeriesRail(client: client)
         async let binge = rail(
             id: HomeCuratedRows.ID.readyToBinge,
             title: "Ready to Binge",
@@ -739,6 +731,35 @@ final class HomeViewModel {
             includeTypes: [.movie],
             sortBy: "CommunityRating",
             years: Array(year..<(year + 10))
+        )
+    }
+
+    /// The server's unplayed filter still lets started series through. They
+    /// are dropped here, reading on a page at a time until the row is full.
+    private func unstartedSeriesRail(client: JellyfinClient) async -> LibraryRail? {
+        let identity = client.sessionIdentity
+        let rowSize = 16
+        var unstarted: [MediaItem] = []
+        var startIndex = 0
+        for _ in 0..<HomeCuratedRows.unstartedSeriesPages {
+            guard identity == client.sessionIdentity, !Task.isCancelled else { return nil }
+            guard let page = try? await client.items(
+                includeTypes: [.series],
+                sortBy: "DateCreated",
+                sortOrder: "Descending",
+                startIndex: startIndex,
+                limit: rowSize,
+                filters: ["IsUnplayed"]
+            ) else { break }
+            unstarted += page.items.filter(HomeCuratedRows.isUnstarted)
+            startIndex += page.items.count
+            if unstarted.count >= rowSize || page.items.count < rowSize { break }
+        }
+        guard unstarted.count >= HomeCuratedRows.minimumItems else { return nil }
+        return LibraryRail(
+            id: HomeCuratedRows.ID.unstartedSeries,
+            title: "Series You Haven't Started",
+            items: Array(unstarted.prefix(rowSize))
         )
     }
 
