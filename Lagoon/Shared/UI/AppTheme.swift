@@ -30,7 +30,7 @@ nonisolated enum AppTheme: String, CaseIterable, Identifiable {
         case .spooky:
             String(localized: "Pumpkin orange over midnight, with cobwebs in the corners and a ghost or two. Still Lagoon, only haunted.")
         case .winter:
-            String(localized: "Icy blue over a winter night, with snow falling softly. Still Lagoon, only colder.")
+            String(localized: "Icy blue over a winter night, with frost in the corners and snow falling softly. Still Lagoon, only colder.")
         }
     }
 
@@ -56,7 +56,7 @@ nonisolated enum AppTheme: String, CaseIterable, Identifiable {
     /// Cobwebs in the page corners and a ghost in loading and empty states.
     var isHaunted: Bool { self == .spooky }
 
-    /// Light snow falling behind every page.
+    /// Frost in the page corners and light snow falling behind every page.
     var isSnowy: Bool { self == .winter }
 }
 
@@ -167,7 +167,8 @@ nonisolated extension ThemePalette {
         signal: Color(red: 0xFF / 255, green: 0x64 / 255, blue: 0x64 / 255),
         // A step deeper than the accent, or a toggle's knob is lost on it.
         controlTint: Color(red: 0x8F / 255, green: 0xD0 / 255, blue: 0xF7 / 255),
-        artworkTint: nil,
+        // A cold blue: untinted, a warm poster's glow turned the page olive.
+        artworkTint: Color(red: 0x3F / 255, green: 0x74 / 255, blue: 0xC9 / 255),
         chrome: Color(red: 0x0F / 255, green: 0x2A / 255, blue: 0x4E / 255).opacity(0.25)
     )
 }
@@ -333,7 +334,8 @@ enum Theme {
 }
 
 /// Behind every page: the theme's background, its cobwebs, spiders and
-/// passing ghosts when it is haunted, and its snow when it is snowy.
+/// passing ghosts when it is haunted, and its frost and snow when it is
+/// snowy.
 struct ThemePageBackground: View {
     var body: some View {
         ZStack(alignment: .top) {
