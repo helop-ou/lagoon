@@ -96,7 +96,10 @@ struct TVProfileControl: UIViewRepresentable {
         button.installMoveDownAction(isAvailable: moveDownAction != nil) {
             coordinator.moveDownAction?()
         }
-        button.moveLeftAction = moveLeftAction
+        // Through a constant of the button's own type: assigned straight
+        // across, the compiler warns of a conversion that is not one.
+        let moveLeft: (@MainActor @Sendable () -> Void)? = moveLeftAction
+        button.moveLeftAction = moveLeft
         let clock = Self.clockText(
             for: time, locale: context.environment.locale, timeZone: context.environment.timeZone
         )

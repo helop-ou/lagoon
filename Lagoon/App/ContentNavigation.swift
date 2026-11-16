@@ -98,10 +98,30 @@ extension View {
     }
 }
 
+/// Something a screen asks `MainTabView` to do. Any two compare equal, so
+/// handing one down again on every update redraws no screen that reads it.
+/// That is sound while the action only reaches the tab view's own state,
+/// which every copy of the view shares.
+struct TabViewAction: Equatable {
+    private let run: @MainActor () -> Void
+
+    init(_ run: @escaping @MainActor () -> Void) {
+        self.run = run
+    }
+
+    @MainActor func callAsFunction() {
+        run()
+    }
+
+    nonisolated static func == (lhs: TabViewAction, rhs: TabViewAction) -> Bool {
+        true
+    }
+}
+
 extension EnvironmentValues {
     /// Opens "Who's watching?" over the app, keeping the current profile.
     /// `MainTabView` provides the action.
-    @Entry var openProfilePicker: (@MainActor () -> Void)?
+    @Entry var openProfilePicker: TabViewAction?
 }
 
 #if os(iOS)
@@ -109,6 +129,6 @@ extension EnvironmentValues {
     /// Shows the downloads list on the Library tab. Settings cannot push it:
     /// its stack uses destination-owned links, and mixing in value routes
     /// lost pushes. `MainTabView` provides the action.
-    @Entry var showDownloadsList: (@MainActor () -> Void)?
+    @Entry var showDownloadsList: TabViewAction?
 }
 #endif

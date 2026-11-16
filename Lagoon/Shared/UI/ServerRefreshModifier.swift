@@ -195,7 +195,10 @@ private struct TVServerRefreshControl: UIViewRepresentable {
         button.installMoveDownAction(isAvailable: moveDownAction != nil) {
             coordinator.moveDownAction?()
         }
-        button.moveRightAction = moveRightAction
+        // Through a constant of the button's own type: assigned straight
+        // across, the compiler warns of a conversion that is not one.
+        let moveRight: (@MainActor @Sendable () -> Void)? = moveRightAction
+        button.moveRightAction = moveRight
         context.coordinator.isRefreshing = isRefreshing
         button.tracksTopChrome = target != nil
         button.allowsFocus = allowsFocus

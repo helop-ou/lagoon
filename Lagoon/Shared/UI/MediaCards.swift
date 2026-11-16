@@ -569,7 +569,7 @@ extension MediaItem {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
-    var episodeLabel: String? {
+    nonisolated var episodeLabel: String? {
         guard type == .episode else { return nil }
         return EpisodeLabel.text(season: parentIndexNumber, episode: indexNumber, episodeEnd: indexNumberEnd)
     }

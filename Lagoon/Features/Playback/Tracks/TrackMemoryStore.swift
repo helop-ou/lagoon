@@ -15,7 +15,7 @@ nonisolated protocol RememberedTrackChoice: Codable, Equatable {
     var layout: String { get }
 }
 
-extension RememberedTrackChoice {
+nonisolated extension RememberedTrackChoice {
     /// The defaults key every account's choices of this kind are stored
     /// under, before the account id. `AccountLocalData` lists it, so the
     /// choices go when the account does.

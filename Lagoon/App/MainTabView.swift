@@ -75,7 +75,7 @@ struct MainTabView: View {
             guard !Task.isCancelled else { return }
             profileImage = image
         }
-        .environment(\.openProfilePicker, openProfilePicker)
+        .environment(\.openProfilePicker, TabViewAction(openProfilePicker))
         #if os(tvOS)
         .fullScreenCover(isPresented: $showsProfilePicker, onDismiss: finishProfilePicker) {
             profilePicker
@@ -400,7 +400,7 @@ struct MainTabView: View {
                         .themedChrome()
                 }
                 #if os(iOS)
-                .environment(\.showDownloadsList, showDownloadsList)
+                .environment(\.showDownloadsList, TabViewAction(showDownloadsList))
                 #endif
             } label: {
                 settingsTabLabel

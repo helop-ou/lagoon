@@ -105,7 +105,7 @@ struct VideoPlayerView: View {
         .scaleEffect(1 - min(minimizeDrag / 1600, 0.25), anchor: .center)
         .gesture(minimizeGesture)
         #endif
-        .task {
+        .task { [controller] in
             registerPresentationCleanup? { [controller, pictureInPicture] in
                 pictureInPicture.reset()
                 controller.close()
