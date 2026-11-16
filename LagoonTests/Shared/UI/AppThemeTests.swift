@@ -179,6 +179,65 @@ struct AppThemeTests {
         #expect(!inked.contains(CGPoint(x: 14, y: -26)))
     }
 
+    @Test func theSameSeedGivesTheSameSnow() {
+        let flakes = Snowfall.flakes(count: 40, seed: 5)
+        #expect(flakes.count == 40)
+        #expect(flakes == Snowfall.flakes(count: 40, seed: 5))
+        #expect(flakes != Snowfall.flakes(count: 40, seed: 6))
+        #expect(flakes.allSatisfy { (0...1).contains($0.lane) && (0...1).contains($0.depth) })
+        // Spread over the page and through the fall, not bunched together.
+        #expect(Set(flakes.map { Int($0.lane * 4) }).count == 4)
+        #expect(Set(flakes.map { Int($0.start * 4) }).count == 4)
+    }
+
+    @Test func aFlakeFallsFromAboveThePageToBelowItAndStartsAgain() {
+        let page = CGSize(width: 400, height: 800)
+        let radius = 1.0...3.0
+        let flake = Snowfall.Flake(lane: 0.5, start: 0, depth: 1, phase: 0)
+        let seconds = Snowfall.fall.lowerBound
+        // Wholly above the page as it starts, and wholly below as it ends.
+        let entering = Snowfall.pose(of: flake, at: 0, in: page, radius: radius)
+        #expect(entering.center.y + entering.radius <= 0)
+        let leaving = Snowfall.pose(of: flake, at: seconds * 0.9999, in: page, radius: radius)
+        #expect(leaving.center.y - leaving.radius > page.height - 1)
+        // Down all the way, never up.
+        var last = entering.center.y
+        for step in 1..<100 {
+            let y = Snowfall.pose(of: flake, at: seconds * Double(step) / 100, in: page, radius: radius).center.y
+            #expect(y > last, "step \(step)")
+            last = y
+        }
+        // Then from the top again.
+        let again = Snowfall.pose(of: flake, at: seconds * 1.25, in: page, radius: radius)
+        let before = Snowfall.pose(of: flake, at: seconds * 0.25, in: page, radius: radius)
+        #expect(abs(again.center.y - before.center.y) < 0.001)
+        // It sways about its lane without leaving it far behind.
+        for step in 0..<100 {
+            let x = Snowfall.pose(of: flake, at: Double(step) * 0.37, in: page, radius: radius).center.x
+            #expect(abs(x - 200) <= 9.001, "step \(step)")
+        }
+    }
+
+    @Test func aNearFlakeIsBiggerBrighterAndFasterThanAFarOne() {
+        let page = CGSize(width: 400, height: 800)
+        let radius = 1.0...3.0
+        let far = Snowfall.Flake(lane: 0.2, start: 0.3, depth: 0, phase: 0)
+        let near = Snowfall.Flake(lane: 0.2, start: 0.3, depth: 1, phase: 0)
+        let farPose = Snowfall.pose(of: far, at: 0, in: page, radius: radius)
+        let nearPose = Snowfall.pose(of: near, at: 0, in: page, radius: radius)
+        #expect(farPose.radius == 1 && nearPose.radius == 3)
+        #expect(farPose.opacity == Snowfall.opacity.lowerBound && nearPose.opacity == Snowfall.opacity.upperBound)
+        func fallen(_ flake: Snowfall.Flake) -> Double {
+            Snowfall.pose(of: flake, at: 1, in: page, radius: radius).center.y
+                - Snowfall.pose(of: flake, at: 0, in: page, radius: radius).center.y
+        }
+        #expect(fallen(near) > fallen(far) * 1.5)
+    }
+
+    @Test func onlyWinterSnows() {
+        #expect(AppTheme.allCases.filter(\.isSnowy) == [.winter])
+    }
+
     @Test func aCobwebStaysInItsCornerAndEachCornerDiffers() {
         let left = CobwebGeometry.web(size: 100, seed: 3)
         let bounds = left.threads.boundingRect.union(left.spiral.boundingRect)
