@@ -118,6 +118,7 @@ final class PlaybackController {
     private var itemId = ""
     /// Follows each engine this player makes: see `PlayerSubtitleOffset`.
     let subtitleOffset = PlayerSubtitleOffset()
+    private let closedCaptions = PlayerClosedCaptions()
     /// Night mode, dialogue boost and the channel limit, for every engine of
     /// this player. Taken from the viewer's preferences at start.
     private(set) var audioShaping = AudioShaping.off
@@ -659,6 +660,7 @@ final class PlaybackController {
         engine.setVideoOutputSuspended(videoOutputSuspended)
         engine.setHostInBackground(isInBackground)
         subtitleOffset.attach(engine, itemID: media.id)
+        closedCaptions.attach(engine, wanted: tracks.plan.wantsClosedCaptions)
         return engine
     }
 
@@ -668,6 +670,7 @@ final class PlaybackController {
         engine.onFinished = { [weak self] in self?.playbackDidFinish() }
         engine.onTimeAdvanced = { [weak self] position, duration in
             self?.automation.tick(position: position, duration: duration)
+            self?.closedCaptions.check()
         }
         engine.onSeekReady = { [weak self, weak engine] in
             guard let self, let engine, self.engine === engine else { return }

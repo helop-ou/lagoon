@@ -25,6 +25,8 @@ nonisolated struct PlaybackTrackPlan {
         /// Subtitles turned off is carried too, or the next episode
         /// reinstates the server default.
         var subtitlesOff: Bool
+        /// The video's own closed captions, which no stream describes.
+        var subtitleClosedCaptions = false
     }
 
     /// What a viewer's choice does to the remembered one.
@@ -45,6 +47,13 @@ nonisolated struct PlaybackTrackPlan {
     /// drops the remembered override.
     let automaticAudioOrdinal: Int?
     let automaticSubtitleOrdinal: Int?
+    /// Closed captions join the engine's list only when the first is read,
+    /// so they cannot be an initial ordinal. True when they should be picked
+    /// once they turn up: see `PlayerClosedCaptions`.
+    let wantsClosedCaptions: Bool
+    /// The settings alone ask for them, with no subtitle track to show
+    /// instead. Then they are no override to remember, and off is.
+    let closedCaptionsAreAutomatic: Bool
     /// The show or film both choices are remembered under.
     let memoryScope: String
     /// The layouts the scope was resolved against. Held, not re-read when
@@ -162,6 +171,23 @@ nonisolated struct PlaybackTrackPlan {
             }
         }
         initialSubtitleOrdinal = subtitleOrdinal
+
+        let alwaysShows = settings.subtitleMode == .always
+            || (settings.subtitleMode == .system && captionDisplay == .alwaysOn)
+        closedCaptionsAreAutomatic = subtitles.isEmpty && alwaysShows
+        if let benchSubtitleLanguage, !benchSubtitleLanguage.isEmpty {
+            wantsClosedCaptions = false
+        } else if rememberedSubtitle?.isClosedCaptions == true {
+            wantsClosedCaptions = true
+        } else if rememberedSubtitle?.isOff == true {
+            wantsClosedCaptions = false
+        } else if carry?.subtitleClosedCaptions == true {
+            wantsClosedCaptions = true
+        } else if carry?.subtitlesOff == true {
+            wantsClosedCaptions = false
+        } else {
+            wantsClosedCaptions = closedCaptionsAreAutomatic
+        }
     }
 
     /// A subtitle track found by search, which the engine appends after
@@ -180,7 +206,8 @@ nonisolated struct PlaybackTrackPlan {
             audioTitle: audio?.title,
             subtitleLanguage: subtitle?.language,
             subtitleDisplayTitle: subtitle?.displayTitle,
-            subtitlesOff: selectedSubtitle == nil
+            subtitlesOff: selectedSubtitle == nil,
+            subtitleClosedCaptions: selectedSubtitle == PlayerTrack.closedCaptionsEngineID
         )
     }
 
@@ -221,10 +248,22 @@ nonisolated struct PlaybackTrackPlan {
         engineTrackCount: Int
     ) -> MemoryUpdate<RememberedSubtitleChoice>? {
         guard engineTrackCount >= subtitleLayout.count else { return nil }
+        let captions = PlayerTrack.closedCaptionsEngineID
+        if selected == captions {
+            guard !closedCaptionsAreAutomatic else { return .forget }
+            return .remember(RememberedSubtitleChoice(
+                isClosedCaptions: true,
+                ordinal: captions,
+                layout: SubtitleTrackMemoryPolicy.fingerprint(of: subtitleLayout)
+            ))
+        }
         let off = SubtitleTrackMemoryPolicy.offOrdinal
         let ordinal = selected ?? off
         guard ordinal == off || subtitleLayout.indices.contains(ordinal - 1) else { return nil }
-        switch SubtitleTrackMemoryPolicy.outcome(chosen: ordinal, automatic: automaticSubtitleOrdinal) {
+        // Off overrules captions the settings would pick, as it does a
+        // server default.
+        let automatic = closedCaptionsAreAutomatic ? captions : automaticSubtitleOrdinal
+        switch SubtitleTrackMemoryPolicy.outcome(chosen: ordinal, automatic: automatic) {
         case .forget:
             return .forget
         case .remember(let ordinal):
