@@ -80,7 +80,7 @@ nonisolated enum BloomMotif: Equatable, Sendable {
 }
 
 /// One frame of the bloom, drawn for a progress between 0 and 1.
-private struct ThemeBloomFrame: View {
+struct ThemeBloomFrame: View {
     let accent: Color
     let motif: BloomMotif
     let progress: Double
