@@ -3,12 +3,12 @@ import Testing
 @testable import Lagoon
 
 /// The New Year fireworks at one moment: the bursts in the theme's colours,
-/// the scrim and the greeting.
+/// the scrim, and the year in gold under its greeting.
 @Suite("New Year snapshots", .serialized)
 @MainActor
 struct NewYearSnapshotTests {
     @Test func fireworksBurstOverTheBrandTheme() async throws {
-        let show = FireworksFrame(time: 4.6, palette: AppTheme.lagoon.palette)
+        let show = FireworksFrame(time: 6.2, palette: AppTheme.lagoon.palette, year: 2027)
             .background(AppTheme.lagoon.palette.background)
 
         try await Snapshot.verify(show, named: "fireworks-lagoon", size: Self.size)
@@ -16,7 +16,7 @@ struct NewYearSnapshotTests {
 
     /// Reduce Motion's picture, which ignores the clock.
     @Test func theStillMomentShowsBurstsAndTheGreetingInWinter() async throws {
-        let show = FireworksFrame(time: 0, palette: AppTheme.winter.palette, isStill: true)
+        let show = FireworksFrame(time: 0, palette: AppTheme.winter.palette, year: 2027, isStill: true)
             .background(AppTheme.winter.palette.background)
 
         try await Snapshot.verify(show, named: "fireworks-still-winter", size: Self.size)

@@ -342,13 +342,17 @@ enum Metrics {
     static let frostSize: CGFloat = 150
     static let frostLineWidth: CGFloat = 1
     #endif
-    /// The New Year fireworks: how many shells the show has and how thick a
-    /// spark is drawn.
-    static let fireworkShells = 14
+    /// The New Year fireworks: how thick a spark is drawn, the height of the
+    /// year's numerals, a display size outside the Dynamic Type scale, and the
+    /// space between the letters of the line above them.
     #if os(tvOS)
     static let fireworkLineWidth: CGFloat = 4.4
+    static let newYearNumeralSize: CGFloat = 260
+    static let newYearTracking: CGFloat = 14
     #else
     static let fireworkLineWidth: CGFloat = 2.2
+    static let newYearNumeralSize: CGFloat = 108
+    static let newYearTracking: CGFloat = 6
     #endif
 }
 
