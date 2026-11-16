@@ -325,14 +325,22 @@ enum Metrics {
     static let stateGhostSize: CGFloat = 34
     static let flyingGhostSize: CGFloat = 56
     #endif
-    /// A snowy theme's falling snow: how many flakes a page has, and the
-    /// farthest and nearest flake's radius.
+    /// A snowy theme's falling snow: how many flakes a page has, the
+    /// farthest and nearest soft flake's radius, and the same for the flakes
+    /// close enough to be crystals. Then the frost in a page's top corners:
+    /// its size and its thinnest line.
     #if os(tvOS)
-    static let snowflakeCount = 44
-    static let snowflakeRadius: ClosedRange<Double> = 1.6...6
+    static let snowflakeCount = 56
+    static let snowflakeRadius: ClosedRange<Double> = 1.8...4.8
+    static let snowCrystalRadius: ClosedRange<Double> = 8...18
+    static let frostSize: CGFloat = 340
+    static let frostLineWidth: CGFloat = 1.8
     #else
-    static let snowflakeCount = 30
-    static let snowflakeRadius: ClosedRange<Double> = 0.8...2.6
+    static let snowflakeCount = 40
+    static let snowflakeRadius: ClosedRange<Double> = 0.9...2.4
+    static let snowCrystalRadius: ClosedRange<Double> = 4...9
+    static let frostSize: CGFloat = 150
+    static let frostLineWidth: CGFloat = 1
     #endif
     /// The New Year fireworks: how many shells the show has and how thick a
     /// spark is drawn.
