@@ -30,7 +30,7 @@ nonisolated enum AppTheme: String, CaseIterable, Identifiable {
         case .spooky:
             String(localized: "Pumpkin orange over midnight, with cobwebs in the corners and a ghost or two. Still Lagoon, only haunted.")
         case .winter:
-            String(localized: "Icy blue over a winter night, with a spark of berry red. Still Lagoon, only colder.")
+            String(localized: "Icy blue over a winter night, with snow falling softly. Still Lagoon, only colder.")
         }
     }
 
@@ -61,6 +61,9 @@ nonisolated enum AppTheme: String, CaseIterable, Identifiable {
 
     /// Cobwebs in the page corners and a ghost in loading and empty states.
     var isHaunted: Bool { self == .spooky }
+
+    /// Light snow falling behind every page.
+    var isSnowy: Bool { self == .winter }
 }
 
 /// The roles a theme fills. A theme colours brand moments (progress,
@@ -155,6 +158,9 @@ extension ThemePalette {
 
     /// A ghost is white, warmed a little by the accent.
     var ghost: Color { Color.white.mix(with: accent, by: 0.12) }
+
+    /// Snow is white, cooled a little by the accent.
+    var snow: Color { Color.white.mix(with: accent, by: 0.2) }
 
     /// Ice blue over a night-blue sky, with a periwinkle glow.
     static let winter = ThemePalette(
@@ -284,13 +290,14 @@ enum Theme {
     }
 }
 
-/// Behind every page: the theme's background, and its cobwebs, spiders and
-/// passing ghosts when it is haunted.
+/// Behind every page: the theme's background, its cobwebs, spiders and
+/// passing ghosts when it is haunted, and its snow when it is snowy.
 struct ThemePageBackground: View {
     var body: some View {
         ZStack(alignment: .top) {
             Theme.background
             if Theme.current.isHaunted { HauntedDecoration() }
+            if Theme.current.isSnowy { WinterDecoration() }
         }
         .ignoresSafeArea()
     }

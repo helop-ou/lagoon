@@ -22,7 +22,7 @@ report. One marketing version spans many builds.
 
 ### New features
 
-- A Winter theme in Settings, Appearance: icy blue over a winter night, with snowflakes when you pick it.
+- A Winter theme in Settings, Appearance: icy blue over a winter night, with light snow falling behind every page.
 
 ### Improvements
 
