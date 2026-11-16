@@ -306,6 +306,26 @@ struct HomeRowPreferenceTests {
         #expect(try JSONDecoder().decode(HomeSectionPreferenceValues.self, from: encoded) == values)
     }
 
+    // MARK: Watched titles
+
+    @Test func watchedTitlesStayOutUntilAskedForAndInRecordsSavedBeforeTheChoice() throws {
+        #expect(!HomeSectionPreferenceValues().showsWatched)
+        #expect(!(try decoded(#"{"layout":[{"id":"lagoon.nextUp","isEnabled":false}]}"#)).showsWatched)
+        #expect(!(try decoded(#"{"isConfigured":true,"rows":[{"id":"MyList","isEnabled":true}]}"#)).showsWatched)
+    }
+
+    @Test func theChoiceRoundTripsBesideAnArrangementAndOnItsOwn() throws {
+        for layout in [[], [HomeSectionPreferenceRow(id: HomeRowID.nextUp, isEnabled: false)]] {
+            let values = HomeSectionPreferenceValues(layout: layout, showsWatched: true)
+            let stored = try JSONDecoder().decode(
+                HomeSectionPreferenceValues.self, from: try JSONEncoder().encode(values)
+            )
+            #expect(stored == values)
+            // Showing watched titles arranges nothing.
+            #expect(stored.isCustomized == !layout.isEmpty)
+        }
+    }
+
     // MARK: The rows Settings offers
 
     /// The old single Recently Added row became one per kind of library and
@@ -482,6 +502,29 @@ struct HomeRowPreferenceTests {
             HomeRowID.nextUp, "Retired", HomeRowID.continueWatching,
         ])
         #expect(store.values.layout.count == layout.count)
+    }
+
+    @Test @MainActor func showingWatchedTitlesPersistsPerAccountAndOutlivesAnArrangementReset() {
+        let suiteName = "HomeRowPreferenceTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: suiteName)!
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let store = HomeSectionPreferencesStore(defaults: defaults)
+        store.configure(accountID: "server:first")
+        store.setShowsWatched(true)
+        store.toggle(HomeRowID.favorites)
+        #expect(HomeSectionPreferencesStore.savedValues(accountID: "server:first", defaults: defaults).showsWatched)
+        #expect(!HomeSectionPreferencesStore.savedValues(accountID: "server:second", defaults: defaults).showsWatched)
+
+        store.reset()
+        #expect(store.values.showsWatched)
+        #expect(!store.values.isCustomized)
+        let saved = HomeSectionPreferencesStore.savedValues(accountID: "server:first", defaults: defaults)
+        #expect(saved.showsWatched)
+        #expect(saved.isEnabled(HomeRowID.favorites))
+
+        store.setShowsWatched(false)
+        #expect(!HomeSectionPreferencesStore.savedValues(accountID: "server:first", defaults: defaults).showsWatched)
     }
 
     @Test @MainActor func arrangementsDoNotLeakBetweenAccounts() {

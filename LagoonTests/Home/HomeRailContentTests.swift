@@ -478,6 +478,166 @@ struct HomeRailContentTests {
         #expect(rail.items.count == HomeCuratedRows.minimumItems)
     }
 
+    // MARK: Watched titles kept
+
+    @Test func recentlyAddedMoviesComeNewestFirstWithNoWatchedFilter() async throws {
+        let client = makeClient()
+        HomeRailURLProtocol.setRecentlyAdded(
+            movies: #"[{"Id":"new","Type":"Movie","UserData":{"Played":true}},{"Id":"older","Type":"Movie"}]"#
+        )
+
+        let movies = try await client.recentlyAdded(parentId: "movies", limit: 9)
+
+        #expect(movies.map(\.id) == ["new", "older"])
+        #expect(HomeRailURLProtocol.urls.count == 1)
+        let url = try #require(HomeRailURLProtocol.urls.first)
+        #expect(url.path == "/Users/user/Items")
+        #expect(query(url, "ParentId") == "movies")
+        #expect(query(url, "IncludeItemTypes") == "Movie")
+        #expect(query(url, "SortBy") == "DateCreated,SortName")
+        #expect(query(url, "SortOrder") == "Descending")
+        #expect(query(url, "Limit") == "9")
+        #expect(query(url, "Filters") == nil)
+    }
+
+    @Test func recentlyAddedShowsAreTheSeriesOfTheNewestEpisodesInThatOrder() async throws {
+        let client = makeClient()
+        HomeRailURLProtocol.setRecentlyAdded(episodes: [
+            Self.episode("b1", of: "b"), Self.episode("a1", of: "a"),
+            Self.episode("b2", of: "b"), Self.episode("c1", of: "c"),
+        ])
+        HomeRailURLProtocol.set(parents: #"""
+        {"Items":[{"Id":"a","Type":"Series"},{"Id":"c","Type":"Series"},{"Id":"b","Type":"Series","UserData":{"Played":true}}]}
+        """#)
+
+        let shows = try await client.recentlyAddedSeries(parentId: "shows", limit: 9)
+
+        #expect(shows.map(\.id) == ["b", "a", "c"])
+        #expect(HomeRailURLProtocol.urls.count == 2)
+        let episodes = try #require(HomeRailURLProtocol.urls.first)
+        #expect(episodes.path == "/Users/user/Items")
+        #expect(query(episodes, "ParentId") == "shows")
+        #expect(query(episodes, "IncludeItemTypes") == "Episode")
+        #expect(query(episodes, "SortBy") == "DateCreated")
+        #expect(query(episodes, "SortOrder") == "Descending")
+        #expect(query(episodes, "Filters") == nil)
+        // Only their series ids are read.
+        #expect(query(episodes, "EnableUserData") == "false")
+        #expect(query(HomeRailURLProtocol.urls[1], "Ids") == "b,a,c")
+    }
+
+    /// One show's new season can fill a whole page of episodes.
+    @Test func recentlyAddedShowsReadOnUntilEnoughSeriesTurnUp() async throws {
+        let client = makeClient()
+        let season = (0..<200).map { Self.episode("x\($0)", of: "x") }
+        HomeRailURLProtocol.setRecentlyAdded(
+            episodes: season + [Self.episode("y1", of: "y"), Self.episode("z1", of: "z")]
+        )
+        HomeRailURLProtocol.set(parents: #"""
+        {"Items":[{"Id":"x","Type":"Series"},{"Id":"y","Type":"Series"},{"Id":"z","Type":"Series"}]}
+        """#)
+
+        #expect(try await client.recentlyAddedSeries(parentId: "shows", limit: 1).map(\.id) == ["x"])
+        #expect(HomeRailURLProtocol.urls.compactMap { query($0, "StartIndex") } == ["0"])
+
+        #expect(try await client.recentlyAddedSeries(parentId: "shows", limit: 2).map(\.id) == ["x", "y"])
+        #expect(HomeRailURLProtocol.urls.compactMap { query($0, "StartIndex") } == ["0", "0", "200"])
+        #expect(query(try #require(HomeRailURLProtocol.urls.last), "Ids") == "x,y")
+    }
+
+    @Test func byDefaultHomeAsksLatestAndItsChosenRowsLeaveWatchedTitlesOut() async throws {
+        let client = makeClient()
+        let model = HomeViewModel()
+        HomeRailURLProtocol.setWatchHistory(played: Self.dramaWatched, similarCounts: [:])
+
+        await model.load(client: client, accountID: "account")
+        for task in model.discoveryTasks { await task.value }
+
+        #expect(HomeRailURLProtocol.urls.filter { $0.path.hasSuffix("/Latest") }.count == 2)
+        #expect(!HomeRailURLProtocol.urls.contains { query($0, "SortBy") == "DateCreated,SortName" })
+        #expect(curatedFilters() == [
+            "genre": "IsUnplayed", "binge": "IsUnplayed", "surprise": "IsUnplayed",
+            "haventSeen": "IsUnplayed", "haventStarted": "IsUnplayed",
+        ])
+    }
+
+    /// The two rows named for unwatched titles keep their filter.
+    @Test func withWatchedTitlesKeptHomeNeverAsksLatestAndOnlyTheRowsNamedForItFilter() async throws {
+        let client = makeClient()
+        let model = HomeViewModel()
+        HomeRailURLProtocol.setRecentlyAdded(
+            movies: #"[{"Id":"seen","Type":"Movie","UserData":{"Played":true}}]"#,
+            episodes: [Self.episode("e", of: "show")]
+        )
+        HomeRailURLProtocol.set(parents: #"{"Items":[{"Id":"show","Type":"Series"}]}"#)
+        HomeRailURLProtocol.setWatchHistory(played: Self.dramaWatched, similarCounts: [:])
+
+        await model.load(
+            client: client,
+            accountID: "account",
+            homeSectionPreferences: HomeSectionPreferenceValues(showsWatched: true)
+        )
+        for task in model.discoveryTasks { await task.value }
+
+        #expect(model.latestRails.map { $0.items.map(\.id) } == [["show"], ["seen"]])
+        #expect(!HomeRailURLProtocol.urls.contains { $0.path.hasSuffix("/Latest") })
+        #expect(curatedFilters() == ["haventSeen": "IsUnplayed", "haventStarted": "IsUnplayed"])
+        #expect(Set(curatedRows()) == ["genre", "binge", "surprise", "haventSeen", "haventStarted"])
+    }
+
+    @Test func changingTheChoiceRefetchesRecentlyAddedAndTheCuratedRowsOnly() async throws {
+        let client = makeClient()
+        let model = HomeViewModel()
+        await model.load(client: client, accountID: "account")
+        for task in model.discoveryTasks { await task.value }
+        let before = HomeRailURLProtocol.urls.count
+        HomeRailURLProtocol.setRecentlyAdded(movies: #"[{"Id":"seen","Type":"Movie","UserData":{"Played":true}}]"#)
+
+        await model.refreshWatchedRows(
+            client: client,
+            homeSectionPreferences: HomeSectionPreferenceValues(showsWatched: true)
+        )
+
+        let requests = Array(HomeRailURLProtocol.urls.dropFirst(before))
+        #expect(model.latestRails.last?.items.map(\.id) == ["seen"])
+        #expect(!requests.contains { $0.path.hasSuffix("/Latest") })
+        #expect(requests.contains { query($0, "SeriesStatus") == "Ended" && query($0, "Filters") == nil })
+        #expect(!requests.contains { ["/Shows/NextUp", "/Users/user/Items/Resume", "/Genres"].contains($0.path) })
+    }
+
+    private static let dramaWatched = #"[{"Id":"played","Type":"Movie","Name":"Played","Genres":["Drama"]}]"#
+
+    private static func episode(_ id: String, of series: String) -> String {
+        #"{"Id":"\#(id)","Type":"Episode","SeriesId":"\#(series)"}"#
+    }
+
+    /// The curated rows Home asked for, by what tells their requests apart.
+    private func curatedRows() -> [String] {
+        HomeRailURLProtocol.urls.compactMap(curatedRow)
+    }
+
+    /// The watched filter each curated row was asked with, if any.
+    private func curatedFilters() -> [String: String] {
+        var filters: [String: String] = [:]
+        for url in HomeRailURLProtocol.urls {
+            guard let row = curatedRow(url), let filter = query(url, "Filters") else { continue }
+            filters[row] = filter
+        }
+        return filters
+    }
+
+    private func curatedRow(_ url: URL) -> String? {
+        guard url.path == "/Users/user/Items", query(url, "Limit") == "16", query(url, "ParentId") == nil else {
+            return nil
+        }
+        if query(url, "Genres") != nil { return "genre" }
+        if query(url, "SeriesStatus") == "Ended" { return "binge" }
+        if query(url, "SortBy") == "Random" { return "surprise" }
+        if query(url, "MinCommunityRating") != nil { return "haventSeen" }
+        if query(url, "IncludeItemTypes") == "Series", query(url, "SortBy") == "DateCreated" { return "haventStarted" }
+        return nil
+    }
+
     private static func topTenLibrary(_ count: Int) -> [String] {
         (1...count).map { #"{"Id":"\#($0)","Type":"Movie","ProviderIds":{"Tmdb":"\#($0)"}}"# }
     }
@@ -543,6 +703,8 @@ private nonisolated final class HomeRailURLProtocol: URLProtocol, @unchecked Sen
         var topTenPageCap = 500
         var topTenReportsTotal = true
         var played = "[]"
+        var recentMovies = "[]"
+        var recentEpisodes: [String] = []
         var similarCounts: [String: Int] = [:]
         var seerrTotalPages = 1
         var seerrSearch: [String: String] = [:]
@@ -589,6 +751,13 @@ private nonisolated final class HomeRailURLProtocol: URLProtocol, @unchecked Sen
         lock.withLock {
             state.played = played
             state.similarCounts = similarCounts
+        }
+    }
+
+    static func setRecentlyAdded(movies: String? = nil, episodes: [String]? = nil) {
+        lock.withLock {
+            if let movies { state.recentMovies = movies }
+            if let episodes { state.recentEpisodes = episodes }
         }
     }
 
@@ -678,6 +847,15 @@ private nonisolated final class HomeRailURLProtocol: URLProtocol, @unchecked Sen
                 }
                 if Self.query(url, "SortBy") == "DatePlayed" {
                     return (#"{"Items":\#(Self.state.played)}"#, 200)
+                }
+                if Self.query(url, "IncludeItemTypes") == "Episode", Self.query(url, "SortBy") == "DateCreated" {
+                    let start = min(Int(Self.query(url, "StartIndex") ?? "0") ?? 0, Self.state.recentEpisodes.count)
+                    let limit = Int(Self.query(url, "Limit") ?? "") ?? Self.state.recentEpisodes.count
+                    let page = Self.state.recentEpisodes[start..<min(start + limit, Self.state.recentEpisodes.count)]
+                    return (#"{"Items":[\#(page.joined(separator: ","))]}"#, 200)
+                }
+                if Self.query(url, "SortBy") == "DateCreated,SortName" {
+                    return (#"{"Items":\#(Self.state.recentMovies)}"#, 200)
                 }
                 return (#"{"Items":\#(Self.state.discoveryItems)}"#, 200)
             case let path where path.hasPrefix("/Items/") && path.hasSuffix("/Similar"):
