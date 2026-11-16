@@ -87,6 +87,26 @@ nonisolated enum ElfVisit {
         )
     }
 
+    // MARK: - On the page
+
+    /// Where the rope is tied, well above the page, in points from its top.
+    static var knot: Double { -Metrics.elfSize * 1.5 }
+    /// Points to one of the elf's own units.
+    static var unit: Double { Metrics.elfSize / 100 }
+
+    /// How far below the page's top the elf's upper hand is: out of sight
+    /// above it at no reach, at the rope's end at full.
+    static func grip(of pose: Pose, depth: Double) -> Double {
+        let hidden = -(ElfGeometry.bottom + 6) * unit
+        return hidden + (depth * Metrics.elfDrop - hidden) * pose.reach
+    }
+
+    /// How far the rope leans from its knot, in radians, to carry the elf
+    /// its sway to one side.
+    static func lean(of pose: Pose, depth: Double) -> Double {
+        -asin(pose.sway * Metrics.elfSize / max(grip(of: pose, depth: depth) - knot, Metrics.elfSize))
+    }
+
     /// The way up, 0 to 1: a pull, a pause, a pull.
     static func hauled(_ share: Double) -> Double {
         let pull = max(0, min(1, share)) * Double(pulls)
@@ -247,19 +267,43 @@ nonisolated enum ElfGeometry {
     }
 
     static let legLine: Double = 6.4
+    /// How far a leg turns about its hip at a full kick, in radians.
+    static let legSwing: Double = 0.27
+    /// The part of the elf's own space a leg's picture shows, either leg.
+    static let legFrame = CGRect(x: -30, y: 80, width: 60, height: 42)
+    /// And its body's: everything that holds its shape.
+    static let bodyFrame = CGRect(x: -32, y: -12, width: 68, height: 112)
+
+    /// A leg hanging straight, before any kick. -1 is the leading side.
+    static func restingLeg(side: Double) -> Leg {
+        let ankle = CGPoint(x: side * 7.5, y: 112)
+        return Leg(
+            hip: CGPoint(x: side * 6, y: 87),
+            knee: CGPoint(x: side * 9, y: 100),
+            ankle: ankle,
+            toe: CGPoint(x: ankle.x + side * 9, y: ankle.y - 1.5)
+        )
+    }
+
+    /// How a leg turns about its hip for a kick: the two swing against each
+    /// other, apart and together.
+    static func legTurn(side: Double, kick: Double) -> Double {
+        -side * kick * legSwing
+    }
 
     /// The legs, swinging against each other. Trailing leg last.
     static func legs(kick: Double) -> [Leg] {
         [-1.0, 1.0].map { side in
-            let swing = kick * side
-            let knee = CGPoint(x: side * 9 + 3.5 * swing, y: 100)
-            let ankle = CGPoint(x: side * 7.5 + 7 * swing, y: 112)
-            return Leg(
-                hip: CGPoint(x: side * 6, y: 87),
-                knee: knee,
-                ankle: ankle,
-                toe: CGPoint(x: ankle.x + side * 9, y: ankle.y - 1.5)
-            )
+            let rest = restingLeg(side: side)
+            let turn = legTurn(side: side, kick: kick)
+            func turned(_ point: CGPoint) -> CGPoint {
+                let offset = CGPoint(x: point.x - rest.hip.x, y: point.y - rest.hip.y)
+                return CGPoint(
+                    x: rest.hip.x + offset.x * cos(turn) - offset.y * sin(turn),
+                    y: rest.hip.y + offset.x * sin(turn) + offset.y * cos(turn)
+                )
+            }
+            return Leg(hip: rest.hip, knee: turned(rest.knee), ankle: turned(rest.ankle), toe: turned(rest.toe))
         }
     }
 
