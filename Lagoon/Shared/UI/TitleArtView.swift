@@ -19,7 +19,8 @@ struct TitleArtView: View {
 }
 
 /// `TitleArtView` for sources that resolve their own artwork URL, such as
-/// Seerr (which has no logos, so it always shows type).
+/// Seerr, which passes a Jellyfin logo when one is known and shows type
+/// otherwise.
 struct TitleArtImage: View {
     @Environment(\.displayScale) private var displayScale
     let url: URL?

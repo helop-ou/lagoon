@@ -175,7 +175,7 @@ struct DetailBackdropView: View {
                 )
             }
         } else {
-            // A compact page without a poster hero (Seerr, collections):
+            // A compact page without a poster hero (a Seerr request, collections):
             // photographic at the top, near-black before the rails.
             ZStack {
                 Theme.background.opacity(heavy ? 0.9 : 0.3)

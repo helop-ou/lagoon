@@ -78,7 +78,6 @@ nonisolated enum PlaybackTranscodeNotice: Equatable, Sendable {
             || ["SecondaryAudioNotSupported", "UnknownAudioStreamInfo"].contains(reason)
     }
 
-    /// The `TranscodeReasons` query item, in order, without repeats.
     /// The notice for an attempt on `source`, reading its reasons from the
     /// transcoding URL.
     static func notice(
@@ -99,6 +98,7 @@ nonisolated enum PlaybackTranscodeNotice: Equatable, Sendable {
         )
     }
 
+    /// The `TranscodeReasons` query item, in order, without repeats.
     static func reasons(in transcodingURL: String?) -> [String] {
         guard let transcodingURL,
               let value = URLComponents(string: transcodingURL)?.queryItems?
