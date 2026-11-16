@@ -122,6 +122,7 @@ struct MainTabView: View {
         .playerPresentation(item: $playerItem, onDismiss: scheduleLifecycleReplayIfNeeded)
         // Below the player-cover environment, which tells it a title is up.
         .overlay { NewYearOverlay() }
+        .overlay { SantaOverlay() }
         #if os(iOS)
         .environment(playerHub)
         .environment(\.playerCover, playerHub)

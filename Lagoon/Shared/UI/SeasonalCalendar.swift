@@ -71,6 +71,8 @@ nonisolated enum SeasonalCalendar {
     static let halloween = Day(month: 10, day: 31)
     /// The Winter theme's season.
     static let winter = Stretch(first: Day(month: 12, day: 1), last: Day(month: 1, day: 6))
+    /// The days Santa's sleigh crosses the sky.
+    static let santa = Stretch(first: Day(month: 12, day: 24), last: Day(month: 12, day: 25))
     /// The day of the fireworks.
     static let newYear = Day(month: 1, day: 1)
 }
