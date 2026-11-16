@@ -60,17 +60,28 @@ Sections](jellyfin-api.md#home-screen-sections-plugin).
   destinations:
 
 ```text
-welcome → needsServer → needsSignIn → offeringSeerr → signedIn
-                              ↑                           ↓
-                           choosingAccount ←──────────────┘
+welcome → needsServer → needsSignIn → settingUp → offeringSeerr → signedIn
+                              ↑                                       ↓
+                           choosingAccount ←──────────────────────────┘
 ```
 
 - A fresh install opens on `welcome`. Change Server and signing out of the
   last account go to `needsServer`, never back to the welcome.
-- `offeringSeerr` follows only the install's first sign-in, and only when its
-  server has no Seerr address yet. Add Account, signing in again and every
-  later account go straight to `signedIn`. Its screen connects Seerr with the
-  Jellyfin sign-in, and Settings keeps the full setup.
+- `settingUp` follows only the install's first sign-in. Add Account, signing
+  in again and every later account go straight to `signedIn`.
+  `SetupWizardView` asks four things, a step each (`SetupStep`): the theme
+  and Seasonal Themes, the audio and subtitles a title starts with, how
+  subtitles look, and whether to send diagnostic reports. Each step shows the
+  setting's current value and writes straight to the store its Settings page
+  uses, so Continue alone changes nothing and Skip Setup leaves at once.
+  Nothing records that the setup was seen: an install that is quit halfway
+  opens on Home next time. On tvOS Continue holds the focus and Menu goes
+  back a step.
+- `offeringSeerr` comes after the setup, and only when the server has no
+  Seerr address yet. Its screen connects Seerr with the Jellyfin sign-in, and
+  Settings keeps the full setup.
+- The regression bootstrap never makes a first sign-in, so
+  `-debug.setupAtLaunch YES` opens the setup after it in a DEBUG build.
 
 Accounts:
 
