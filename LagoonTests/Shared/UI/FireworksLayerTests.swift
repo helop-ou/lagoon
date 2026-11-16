@@ -8,7 +8,7 @@ import UIKit
 @Suite("New Year fireworks in motion")
 @MainActor
 struct FireworksLayerTests {
-    private static let page = CGSize(width: 1920, height: 1080)
+    private nonisolated static let page = CGSize(width: 1920, height: 1080)
     private static let tints: [UIColor] = [.cyan, .red, .yellow, .white]
 
     /// A show that began `ago` seconds back, laid out at once.
