@@ -29,13 +29,13 @@ nonisolated enum SetupStep: Int, CaseIterable, Identifiable {
     var message: String {
         switch self {
         case .look:
-            String(localized: "Pick the colours Lagoon wears on this profile. Everything here can be changed later in Settings.")
+            String(localized: "You can change all of this later in Settings.")
         case .languages:
-            String(localized: "Choose the audio and the subtitles a title starts with.")
+            String(localized: "What a title starts with.")
         case .subtitleLook:
-            String(localized: "Follow the caption style set in the system's settings, or give Lagoon its own.")
+            String(localized: "The system's caption style, or Lagoon's own.")
         case .reports:
-            String(localized: "Reports tell the developer when playback fails. They never say who you are or what you watch.")
+            String(localized: "Reports never say who you are or what you watch.")
         }
     }
 }
