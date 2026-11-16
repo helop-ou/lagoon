@@ -15,18 +15,15 @@ final class LibraryBrowseUITests: XCTestCase {
         let app = XCUIApplication.regression(extra: ["-debug.navigationRegression", "YES"])
         app.launch()
         openLibrary(app)
-        chooseKind(app, title: "Shows")
+        // Movies: the demo's films span several decades, its shows one.
+        chooseKind(app, title: "Movies")
         focusFilters(app)
         let summary = app.staticTexts["library.filters.summary"]
         let filters = app.descendants(matching: .any)["library.filters"]
         if summary.exists { try chooseFilter(app, title: "Clear Filters") }
         XCTAssertTrue(app.staticTexts["library.count"].waitForExistence(timeout: 35), "The demo catalogue must finish loading before testing its genre filters")
 
-        // Decades the demo normally has. A missing one skips (see `chooseFilter`).
-        let firstDecade = "2000–2009"
-        let secondDecade = "2010–2019"
-
-        try chooseFilter(app, title: firstDecade, submenu: "Decade")
+        let firstDecade = chooseOfferedDecade(app)
         XCTAssertTrue(summary.waitForExistence(timeout: 5))
         XCTAssertTrue(summary.label.contains(firstDecade))
         XCTAssertEqual(filters.value as? String, "1 active")
@@ -52,7 +49,7 @@ final class LibraryBrowseUITests: XCTestCase {
         XCTAssertTrue(summary.label.contains("Drama"))
         XCTAssertTrue(summary.label.contains("Unwatched"))
         XCTAssertEqual(filters.value as? String, "2 active")
-        try chooseFilter(app, title: secondDecade, submenu: "Decade")
+        let secondDecade = chooseOfferedDecade(app, otherThan: firstDecade)
         XCTAssertTrue(summary.label.contains(secondDecade))
         try chooseFilter(app, title: "Clear Filters")
         XCTAssertTrue(summary.waitForNonExistence(timeout: 5))
@@ -245,18 +242,46 @@ final class LibraryBrowseUITests: XCTestCase {
             }
         }
         if !option.exists {
-            // Decades and genres come from the catalogue, so a missing one
-            // skips. A missing fixed option is a failure.
+            // Genres come from the catalogue, so a missing one skips. A
+            // missing fixed option is a failure.
             if submenu != nil {
                 throw XCTSkip("Fixture server required: the catalogue offers no \"\(title)\" option under \(submenu ?? "")")
             }
             XCTFail("Missing filter option: \(title)")
         }
         move(to: option, direction: direction, limit: 24)
-        if submenu == "Decade" { attachScreenshot(of: app, named: "Decade Menu") }
         remote.press(.select)
         XCTAssertTrue(option.waitForNonExistence(timeout: 5))
         Thread.sleep(forTimeInterval: 0.5)
+    }
+
+    /// Chooses the first decade the menu offers and returns its title. Every
+    /// server with dated titles has one, so an empty menu is a failure and
+    /// never a skip: a skip once hid a menu the server had stopped filling.
+    private func chooseOfferedDecade(_ app: XCUIApplication, otherThan excluded: String? = nil) -> String {
+        remote.press(.select)
+        let parent = menuCell(app, title: "Decade")
+        XCTAssertTrue(parent.waitForExistence(timeout: 5))
+        move(to: parent, direction: .down)
+        remote.press(.select)
+        // A row's title is on a child of its cell.
+        let isDecade = NSPredicate(format: "label MATCHES %@", "[0-9]{4}–[0-9]{4}")
+        let decades = app.cells.containing(isDecade)
+        XCTAssertTrue(decades.firstMatch.waitForExistence(timeout: 10), "The Decade menu offers no decades")
+        let titles = decades.allElementsBoundByIndex.map {
+            $0.descendants(matching: .any).matching(isDecade).firstMatch.label
+        }
+        guard let title = titles.first(where: { $0 != excluded }) else {
+            XCTFail("The Decade menu offers no decade other than \(excluded ?? "")")
+            return ""
+        }
+        let option = menuCell(app, title: title)
+        move(to: option, direction: .down, limit: 24)
+        attachScreenshot(of: app, named: "Decade Menu")
+        remote.press(.select)
+        XCTAssertTrue(option.waitForNonExistence(timeout: 5))
+        Thread.sleep(forTimeInterval: 0.5)
+        return title
     }
 
     private func move(to element: XCUIElement, direction: XCUIRemote.Button, limit: Int = 12) {
