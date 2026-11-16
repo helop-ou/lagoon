@@ -187,11 +187,10 @@ struct SetupLookStepView: View {
                 )
                 #endif
             }
-            SetupFootnote(Text(store.theme.settingsDescription))
             SetupGroup {
                 SetupToggleRow(title: "Seasonal Themes", identifier: "setup.seasonal", isOn: followsSeasons)
             }
-            SetupFootnote(Text(AppearanceSettingsView.seasonsFooter))
+            SetupFootnote(Text("Spooky in October, Winter in December."))
         }
     }
 }
@@ -228,7 +227,6 @@ struct SetupLanguagesStepView: View {
                     options: Self.languages(including: trackPreferences.primaryAudioLanguage)
                 )
             }
-            SetupFootnote(Text(trackPreferences.values.audioMode.settingsDescription))
             SetupGroup {
                 SetupChoiceRow(
                     title: "Subtitles", identifier: "setup.subtitles.default",
@@ -240,6 +238,8 @@ struct SetupLanguagesStepView: View {
                     options: Self.languages(including: subtitlePreferences.primaryLanguage)
                 )
             }
+            // The one explanation kept: Smart and System Setting do not say
+            // what they do.
             SetupFootnote(Text(trackPreferences.values.subtitleMode.settingsDescription))
         }
     }
@@ -286,11 +286,6 @@ struct SetupSubtitleLookStepView: View {
                     )
                 }
             }
-            SetupFootnote(Text(
-                followsSystem
-                    ? "Subtitles follow the caption style chosen in the system's Accessibility settings."
-                    : "Subtitle position is in Settings, under Subtitles."
-            ))
         }
     }
 }
@@ -305,7 +300,7 @@ struct SetupReportsStepView: View {
             SetupGroup {
                 SetupToggleRow(title: "Send Diagnostic Reports", identifier: "setup.reports", isOn: $sendsReports)
             }
-            SetupFootnote(Text(DiagnosticsSettingsView.diagnosticReportsFooter))
+            SetupFootnote(Text("Technical details of a failure only. Settings lists them in full."))
         }
     }
 }
@@ -382,7 +377,8 @@ private struct SetupToggleRow: View {
     }
 }
 
-/// The line under a group that says what its choice does.
+/// A short line under a group. The setup keeps its words few: Settings has
+/// the long explanations.
 private struct SetupFootnote: View {
     let text: Text
 
