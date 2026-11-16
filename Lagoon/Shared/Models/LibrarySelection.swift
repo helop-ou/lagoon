@@ -102,13 +102,25 @@ nonisolated struct LibraryYearScope: Hashable {
     let libraryID: String?
 }
 
-/// The year list from Items/Filters, not the limited page of visible titles.
-nonisolated struct LibraryYearFilters: Decodable {
+/// The catalogue's years from `Years`, which answers with one item a year,
+/// named for it. Not the limited page of visible titles.
+nonisolated struct LibraryYearsPage: Decodable {
     let years: [Int]
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: AnyCodingKey.self)
-        years = try container.decodeIfPresent([Int].self, forKey: "years") ?? []
+        let entries = try container.decodeIfPresent([Entry].self, forKey: "items") ?? []
+        years = entries.compactMap(\.year)
+    }
+
+    /// Nil when unusable, so a bad entry drops alone.
+    private struct Entry: Decodable {
+        let year: Int?
+
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: AnyCodingKey.self)
+            year = (try? container.decodeIfPresent(String.self, forKey: "name")).flatMap { Int($0 ?? "") }
+        }
     }
 }
 

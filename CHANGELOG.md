@@ -33,6 +33,10 @@ report. One marketing version spans many builds.
 - On a partly folded iPhone Duo, titles, buttons and poster grids stay clear of the fold.
 - On a partly folded iPhone Duo, the player shows the picture on one side of the fold and keeps its controls on the other, where they stay on screen.
 
+### Bug fixes
+
+- The Library's Decade filter lists the decades your library has. It used to come up empty unless a single library was chosen.
+
 ## 0.9.0 (121)
 
 November 2026
