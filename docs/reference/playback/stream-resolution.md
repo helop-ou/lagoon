@@ -142,9 +142,11 @@ Maximum Quality, and `cappedToBitrate` applies it before the metered cap:
   Accepting re-negotiates on the same rung under a lower ceiling (70% of the
   engine's measured link rate, or half the playing bitrate or the current
   cap, whichever is lowest) and resumes at the playhead. The ceiling holds
-  for the rest of the player session. It is the viewer's choice and never a
-  step down the ladder: stalls say nothing about the samples. Not offered for
-  a download or in a Watch Together group.
+  for the rest of the player session: the next item is negotiated under it
+  too, and one prepared before the viewer accepted is prepared again
+  (`PlaybackSuccessorPreparation.prepare(maxBitrate:)`). It is the viewer's
+  choice and never a step down the ladder: stalls say nothing about the
+  samples. Not offered for a download or in a Watch Together group.
 
 ### Telling the viewer about a transcode
 
