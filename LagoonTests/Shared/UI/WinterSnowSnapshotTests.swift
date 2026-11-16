@@ -2,8 +2,9 @@ import SwiftUI
 import Testing
 @testable import Lagoon
 
-/// A winter page's decoration at one moment, over its own background: frost
-/// in the top corners, crystals close by and soft flakes far off. A flake is
+/// A winter page's decoration standing still, as under Reduce Motion, over
+/// its own background: frost in the top corners, crystals close by and soft
+/// flakes far off. A flake is
 /// a sliver of the picture, so one going missing is under any share worth
 /// allowing: no pixel may change.
 @Suite("Winter snow snapshots", .serialized)
@@ -14,7 +15,7 @@ struct WinterSnowSnapshotTests {
         let page = ZStack(alignment: .top) {
             palette.background
             FrostCorners(color: palette.snow)
-            SnowfallFrame(time: 100, color: palette.snow)
+            SnowfallFrame(time: WinterDecoration.stillMoment, color: palette.snow)
         }
 
         try await Snapshot.verify(page, named: "winter-snow", size: Self.size, tolerance: 0)
