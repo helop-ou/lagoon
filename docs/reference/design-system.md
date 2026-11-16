@@ -633,7 +633,26 @@ happens once a year, so it is meant to feel like an event.
   clean circle about a small heart. Each spark is drawn as a tapering tail
   with a white-hot head, and from `Fireworks.glitterFrom` of its burn it
   glitters, blinking on its own beat as it dies. Like the snow it is a pure
-  function of time, drawn in one `Canvas`.
+  function of time.
+- **In motion the show is layers, not a canvas.** `FireworksLayers` gives
+  each spark, rocket and flash a small picture and keyframes sampled from
+  the same functions, and the render server moves them. A spark's picture
+  is a streak whose middle stretches to its tail's length
+  (`contentsCenter`), so its head and glow keep their shape when it slows.
+  A shell's layers are made just before it leaves the ground and dropped
+  once it has burnt out: the show has about 1,570 sparks, and only a few
+  shells' worth are ever alive. `NewYearGreetingLayers` does the same for
+  the greeting, with pictures of the very views the still one is made of,
+  a band of light masked to the numerals for the shine, and a picture a
+  star. `FireworksFrame` and `NewYearGreeting`, drawn once, are the still
+  moment and the snapshots.
+- **Why:** measured on the Apple TV 4K (3rd generation), Release, three
+  runs each. The show as one canvas redrawn every frame held 43 to 45
+  frames a second on the main thread, about 150 frames late in its
+  thirteen seconds, at 36 % of a core. With the shells as layers and the
+  greeting still drawn every frame it held 50, about 88 late, at 28 %: the
+  greeting alone cost 24 % and lost one frame in fourteen. All layers, it
+  holds 60 with none to two late, at 5 to 6 %.
 - **The greeting** (`NewYearGreeting`) is "HAPPY NEW YEAR" in tracked
   capitals over the year in gold numerals (`Metrics.newYearNumeralSize`, a
   display size outside the Dynamic Type scale). The numerals pop in one
