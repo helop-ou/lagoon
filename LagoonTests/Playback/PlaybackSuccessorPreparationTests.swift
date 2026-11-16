@@ -178,14 +178,12 @@ struct PlaybackSuccessorPreparationTests {
         let full = try prepared(sourceID: "full")
         let capped = try prepared(sourceID: "capped")
         var ceilings: [Int?] = []
-        var accepted: Int?
         let subject = PlaybackSuccessorPreparation(
             negotiate: { _, _, ceiling in
                 ceilings.append(ceiling)
                 return ceiling == nil ? full : capped
             }
         )
-        subject.ceiling = { accepted }
         let staging = StagingSpy()
         let client = JellyfinClient(deviceId: "successor-tests")
         defer { subject.cancel() }
@@ -194,7 +192,7 @@ struct PlaybackSuccessorPreparationTests {
         #expect(staging.staged.count == 1)
         #expect(subject.hasPreparation)
 
-        accepted = 4_000_000
+        subject.ceiling = { 4_000_000 }
         // The owner asks before preparing, and is told there is nothing to keep.
         #expect(!subject.hasPreparation)
         subject.prepare(itemID: full.mediaID, client: client, staging: staging.brief, warms: false)
