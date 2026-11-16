@@ -9,26 +9,17 @@ import Foundation
 ///
 /// This wipes real sign-ins. Only the public-demo lane passes the flag.
 nonisolated enum RegressionStateReset {
+    /// What belongs to no one account, then every per-account record, which
+    /// `AccountLocalData` lists once for both.
     static let keyPrefixes: [String] = [
         "accounts",
         "session.",
         "server.url",
         "server.name",
-        "libraries.",
-        LibrarySelection.keyPrefix,
-        "subtitles.preferences.",
-        "playback.trackPreferences.",
-        RememberedAudioChoice.memoryKeyPrefix,
-        RememberedSubtitleChoice.memoryKeyPrefix,
-        ThemeStore.keyPrefix,
-        ThemeStore.seasonKeyPrefix,
-        ThemeStore.followsSeasonsKeyPrefix,
-        ThemeStore.newYearKeyPrefix,
-        ThemeStore.santaKeyPrefix,
-        "home.sectionPreferences.",
+        // Without its dot, so the history kept before it had an owner goes too.
         "search.recents",
         "seerr.",
-    ]
+    ] + AccountLocalData.perAccountKeyPrefixes
 
     /// A fresh device id per run would litter the server with devices.
     static let preservedCredentialNames: Set<String> = ["deviceId"]

@@ -119,13 +119,6 @@ struct AccountPrivacyTests {
         #expect(fixture.defaults.object(forKey: RememberedAudioChoice.memoryKeyPrefix + fixture.a.id) == nil)
     }
 
-    /// The regression reset must reach every per-account record too.
-    @Test func regressionResetCoversEveryPerAccountKey() {
-        for prefix in AccountLocalData.perAccountKeyPrefixes {
-            #expect(RegressionStateReset.keyPrefixes.contains { prefix.hasPrefix($0) }, "\(prefix)")
-        }
-    }
-
     @Test func logoutDropsLocalAccessBeforeNetworkAndLateCompletionCannotAffectB() async throws {
         let fixture = try Fixture()
         defer { fixture.cleanUp() }

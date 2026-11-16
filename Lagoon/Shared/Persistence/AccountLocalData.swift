@@ -11,10 +11,10 @@ final class AccountLocalData {
     /// the account id. A store that adds one belongs here, or forgetting the
     /// account leaves it behind.
     nonisolated static let perAccountKeyPrefixes: [String] = [
-        "libraries.",
+        SessionStore.libraryCacheKeyPrefix,
         LibrarySelection.keyPrefix,
-        "subtitles.preferences.",
-        "playback.trackPreferences.",
+        SubtitlePreferencesStore.keyPrefix,
+        TrackPreferencesStore.keyPrefix,
         RememberedAudioChoice.memoryKeyPrefix,
         RememberedSubtitleChoice.memoryKeyPrefix,
         ThemeStore.keyPrefix,
@@ -22,8 +22,8 @@ final class AccountLocalData {
         ThemeStore.followsSeasonsKeyPrefix,
         ThemeStore.newYearKeyPrefix,
         ThemeStore.santaKeyPrefix,
-        "home.sectionPreferences.",
-        "search.recents.",
+        HomeSectionPreferencesStore.keyPrefix,
+        RecentSearchStore.keyPrefix,
     ]
     private static let pendingKey = "accounts.pendingCredentialRemoval"
     private static let pendingCookiesKey = "seerr.pendingCookieRemoval"

@@ -528,8 +528,12 @@ final class HomeSectionPreferencesStore {
         defaults.set(data, forKey: Self.key(accountID))
     }
 
+    /// The defaults key before the account id. `AccountLocalData` lists it,
+    /// so the record goes when the account does.
+    nonisolated static let keyPrefix = "home.sectionPreferences."
+
     nonisolated static func key(_ accountID: String) -> String {
-        "home.sectionPreferences.\(accountID)"
+        keyPrefix + accountID
     }
 
     #if DEBUG

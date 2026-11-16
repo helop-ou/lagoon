@@ -427,8 +427,12 @@ final class SubtitlePreferencesStore {
         defaults.set(data, forKey: Self.key(accountID))
     }
 
+    /// The defaults key before the account id. `AccountLocalData` lists it,
+    /// so the record goes when the account does.
+    nonisolated static let keyPrefix = "subtitles.preferences."
+
     private static func key(_ accountID: String) -> String {
-        "subtitles.preferences.\(accountID)"
+        keyPrefix + accountID
     }
 }
 
