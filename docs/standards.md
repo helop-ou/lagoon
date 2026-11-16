@@ -102,6 +102,11 @@ here.
   are in [Playback](playback.md#lifecycle-and-memory).
 - Add a protocol or package only for a concrete boundary, test seam or reuse
   need, like `PlayerEngine`. Not for every type.
+- A settings record saved on the device reads every key as optional and
+  falls back field by field. A synthesized decoder throws on a key the
+  record lacks, and the store then resets every setting, so the first build
+  to add a field would wipe what the viewer chose.
+  `PersistedPlaybackFormatTests` pins the keys and the shapes.
 
 ## Review and verification
 
