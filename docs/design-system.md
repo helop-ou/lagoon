@@ -124,7 +124,8 @@ Keep the list short, because each theme is checked over every screen.
   Winter from 1 December to 6 January, worn over whatever theme it chose.
   Every seasonal date is a month and a day in `SeasonalCalendar`, with no
   year, so each comes round by itself. A new season or surprise gets its
-  dates there, never a literal in its own code.
+  dates there, never a literal in its own code. They are Gregorian dates on
+  the viewer's own clock, whatever calendar the device keeps.
   The choice is never overwritten, so it returns when the season ends. A
   theme chosen during a season stays for that season, and the next season
   comes as usual. Both themes stay in the picker all year.
