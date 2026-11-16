@@ -17,8 +17,8 @@ struct VideoPlayerView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var controller = PlaybackController()
     @State private var pictureInPicture = SampleBufferPictureInPicture()
-    @State private var subtitlePreferences = SubtitlePreferencesStore()
-    @State private var trackPreferences = TrackPreferencesStore()
+    private var subtitlePreferences: SubtitlePreferencesStore { session.subtitlePreferences }
+    private var trackPreferences: TrackPreferencesStore { session.trackPreferences }
     /// Writes straight through to UserDefaults, so it outlives the player.
     @State private var audioTrackMemory = AudioTrackMemoryStore()
     @State private var subtitleTrackMemory = SubtitleTrackMemoryStore()
@@ -143,8 +143,6 @@ struct VideoPlayerView: View {
                 } else { completion(true) }
             }
             guard controller.engine == nil else { return }
-            subtitlePreferences.configure(accountID: session.activeAccount?.id)
-            trackPreferences.configure(accountID: session.activeAccount?.id)
             audioTrackMemory.configure(accountID: session.activeAccount?.id)
             controller.audioTrackMemory = audioTrackMemory
             subtitleTrackMemory.configure(accountID: session.activeAccount?.id)

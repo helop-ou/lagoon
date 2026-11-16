@@ -5,8 +5,8 @@ struct SettingsView: View {
     @Environment(SeerrSessionStore.self) private var seerr
     @Environment(\.openProfilePicker) private var openProfilePicker
 
-    @State private var subtitlePreferences = SubtitlePreferencesStore()
-    @State private var trackPreferences = TrackPreferencesStore()
+    private var subtitlePreferences: SubtitlePreferencesStore { session.subtitlePreferences }
+    private var trackPreferences: TrackPreferencesStore { session.trackPreferences }
     @State private var homePreferences = HomeSectionPreferencesStore()
     @State private var pendingAccountAction: AccountAction?
 
@@ -30,14 +30,12 @@ struct SettingsView: View {
             #endif
         }
         .task(id: session.activeAccount?.id) {
-            subtitlePreferences.configure(accountID: session.activeAccount?.id)
             #if DEBUG
             // The regression test changes this value. Reset it so runs stay deterministic.
             if UserDefaults.standard.bool(forKey: "debug.settingsRegression") {
                 subtitlePreferences.resetAppearanceToSystem()
             }
             #endif
-            trackPreferences.configure(accountID: session.activeAccount?.id)
             homePreferences.configure(accountID: session.activeAccount?.id)
             await homePreferences.loadCatalog(client: session.client)
         }

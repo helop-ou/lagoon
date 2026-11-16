@@ -6,8 +6,8 @@ import SwiftUI
 struct SetupWizardView: View {
     @Environment(SessionStore.self) private var session
     @State private var step = SetupStep.look
-    @State private var subtitlePreferences = SubtitlePreferencesStore()
-    @State private var trackPreferences = TrackPreferencesStore()
+    private var subtitlePreferences: SubtitlePreferencesStore { session.subtitlePreferences }
+    private var trackPreferences: TrackPreferencesStore { session.trackPreferences }
     #if os(tvOS)
     private enum Control { case advance }
     @FocusState private var focus: Control?
@@ -54,10 +54,6 @@ struct SetupWizardView: View {
             .onChange(of: step) { focus = .advance }
             .onExitCommand(perform: exitCommand)
             #endif
-        }
-        .task(id: session.activeAccount?.id) {
-            subtitlePreferences.configure(accountID: session.activeAccount?.id)
-            trackPreferences.configure(accountID: session.activeAccount?.id)
         }
     }
 
