@@ -69,8 +69,14 @@ extension PlayerRegressionUITests {
         }
         XCTAssertTrue(theme.waitForExistence(timeout: 5))
         focusThemeControl()
-        // A profile on the default wears Spooky through October.
-        let defaultTheme = Calendar.current.component(.month, from: Date()) == 10 ? "Spooky" : "Lagoon"
+        // A new profile follows the seasons: Spooky through October, Winter
+        // from 1 December to 6 January.
+        let today = Calendar.current.dateComponents([.month, .day], from: Date())
+        let defaultTheme = switch (today.month ?? 0, today.day ?? 0) {
+        case (10, _): "Spooky"
+        case (12, _), (1, ...6): "Winter"
+        default: "Lagoon"
+        }
         XCTAssertEqual(theme.valueDescription, defaultTheme)
         remote.press(.select)
         selectNativeMenuOption("Baby Pink", in: app, menuIndex: 1)
