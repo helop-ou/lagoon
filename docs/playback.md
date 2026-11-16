@@ -192,6 +192,18 @@ differs and off is a valid answer.
   Always On or Automatic. Within it the viewer's language comes before the
   full-dialogue preference, so a signs-titled track in their language beats
   a full track in another.
+- **Closed captions are a choice, not a track in the layout.** The engine
+  finds the captions carried in the video (CEA-608) only when the first one
+  is read, which can be minutes in, and then lists them last, as Closed
+  Captions. Jellyfin reports no stream for them. So choosing them is
+  remembered and carried as captions (`RememberedSubtitleChoice.isClosedCaptions`,
+  `Carry.subtitleClosedCaptions`), never by ordinal, and the title starts on
+  whatever it would have started on. `PlayerClosedCaptions` picks them when
+  they turn up, unless the viewer has changed subtitles since.
+- **Settings that always show subtitles ask for captions where no track
+  exists**: Always, or System Setting with the device on Always On, on a
+  title with no subtitle stream. Captions picked that way are automatic, so
+  they are not remembered, and turning them off is.
 
 ### The track plan
 
