@@ -144,9 +144,9 @@ Maximum Quality, and `cappedToBitrate` applies it before the metered cap:
   cap, whichever is lowest) and resumes at the playhead. The ceiling holds
   for the rest of the player session: the next item is negotiated under it
   too, and one prepared before the viewer accepted is prepared again
-  (`PlaybackSuccessorPreparation.prepare(maxBitrate:)`). It is the viewer's
-  choice and never a step down the ladder: stalls say nothing about the
-  samples. Not offered for a download or in a Watch Together group.
+  (`PlaybackSuccessorPreparation` asks the controller for it). It is the
+  viewer's choice and never a step down the ladder: stalls say nothing about
+  the samples. Not offered for a download or in a Watch Together group.
 
 ### Telling the viewer about a transcode
 
