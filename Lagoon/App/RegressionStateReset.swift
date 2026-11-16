@@ -18,6 +18,8 @@ nonisolated enum RegressionStateReset {
         LibrarySelection.keyPrefix,
         "subtitles.preferences.",
         "playback.trackPreferences.",
+        RememberedAudioChoice.memoryKeyPrefix,
+        RememberedSubtitleChoice.memoryKeyPrefix,
         ThemeStore.keyPrefix,
         ThemeStore.seasonKeyPrefix,
         ThemeStore.followsSeasonsKeyPrefix,
