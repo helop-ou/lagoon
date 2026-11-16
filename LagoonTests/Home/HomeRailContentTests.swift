@@ -605,6 +605,71 @@ struct HomeRailContentTests {
         #expect(!requests.contains { ["/Shows/NextUp", "/Users/user/Items/Resume", "/Genres"].contains($0.path) })
     }
 
+    // MARK: Series You Haven't Started
+
+    /// The server's unplayed filter keeps a series until its last episode is
+    /// watched.
+    @Test func seriesYouHaventStartedLeavesOutASeriesWithAnEpisodeWatched() async throws {
+        let client = makeClient()
+        let model = HomeViewModel()
+        HomeRailURLProtocol.setUnfinishedSeries([
+            Self.series("new"), Self.series("begun", watched: 1.4), Self.series("untouched", watched: 0),
+            Self.series("halfway", watched: 50), Self.series("older"), Self.series("marked", played: true),
+            Self.series("oldest"),
+        ])
+
+        await model.load(client: client, accountID: "account")
+        for task in model.discoveryTasks { await task.value }
+
+        let rail = try #require(model.curatedRails[HomeCuratedRows.ID.unstartedSeries])
+        #expect(rail.title == "Series You Haven't Started")
+        #expect(rail.items.map(\.id) == ["new", "untouched", "older", "oldest"])
+        // A short page is the end of the list.
+        #expect(unfinishedSeriesStartIndexes() == [0])
+    }
+
+    @Test func seriesYouHaventStartedReadsOnUntilTheRowIsFull() async throws {
+        let client = makeClient()
+        let model = HomeViewModel()
+        HomeRailURLProtocol.setUnfinishedSeries(
+            (0..<16).map { Self.series("begun\($0)", watched: 10) } + (0..<40).map { Self.series("new\($0)") }
+        )
+
+        await model.load(client: client, accountID: "account")
+        for task in model.discoveryTasks { await task.value }
+
+        let rail = try #require(model.curatedRails[HomeCuratedRows.ID.unstartedSeries])
+        #expect(rail.items.map(\.id) == (0..<16).map { "new\($0)" })
+        #expect(unfinishedSeriesStartIndexes() == [0, 16])
+    }
+
+    /// Too few to look deliberate, however far it reads.
+    @Test(arguments: [0, HomeCuratedRows.minimumItems - 1])
+    func seriesYouHaventStartedGivesUpAfterItsPagesAndHidesAThinRow(unstarted: Int) async throws {
+        let client = makeClient()
+        let model = HomeViewModel()
+        HomeRailURLProtocol.setUnfinishedSeries(
+            (0..<unstarted).map { Self.series("new\($0)") } + (0..<200).map { Self.series("begun\($0)", watched: 10) }
+        )
+
+        await model.load(client: client, accountID: "account")
+        for task in model.discoveryTasks { await task.value }
+
+        #expect(model.curatedRails[HomeCuratedRows.ID.unstartedSeries] == nil)
+        #expect(unfinishedSeriesStartIndexes() == (0..<HomeCuratedRows.unstartedSeriesPages).map { $0 * 16 })
+    }
+
+    private static func series(_ id: String, watched percentage: Double? = nil, played: Bool = false) -> String {
+        let progress = percentage.map { #""PlayedPercentage":\#($0),"# } ?? ""
+        return #"{"Id":"\#(id)","Type":"Series","UserData":{\#(progress)"Played":\#(played)}}"#
+    }
+
+    private func unfinishedSeriesStartIndexes() -> [Int] {
+        HomeRailURLProtocol.urls
+            .filter { curatedRow($0) == "haventStarted" }
+            .compactMap { query($0, "StartIndex").flatMap(Int.init) }
+    }
+
     private static let dramaWatched = #"[{"Id":"played","Type":"Movie","Name":"Played","Genres":["Drama"]}]"#
 
     private static func episode(_ id: String, of series: String) -> String {
@@ -705,6 +770,9 @@ private nonisolated final class HomeRailURLProtocol: URLProtocol, @unchecked Sen
         var played = "[]"
         var recentMovies = "[]"
         var recentEpisodes: [String] = []
+        /// When set, what the server's unplayed filter lets through for
+        /// Series You Haven't Started, a page at a time.
+        var unfinishedSeries: [String]?
         var similarCounts: [String: Int] = [:]
         var seerrTotalPages = 1
         var seerrSearch: [String: String] = [:]
@@ -759,6 +827,10 @@ private nonisolated final class HomeRailURLProtocol: URLProtocol, @unchecked Sen
             if let movies { state.recentMovies = movies }
             if let episodes { state.recentEpisodes = episodes }
         }
+    }
+
+    static func setUnfinishedSeries(_ series: [String]) {
+        lock.withLock { state.unfinishedSeries = series }
     }
 
     static func setSeerrSearch(_ results: [String: String]) {
@@ -853,6 +925,12 @@ private nonisolated final class HomeRailURLProtocol: URLProtocol, @unchecked Sen
                     let limit = Int(Self.query(url, "Limit") ?? "") ?? Self.state.recentEpisodes.count
                     let page = Self.state.recentEpisodes[start..<min(start + limit, Self.state.recentEpisodes.count)]
                     return (#"{"Items":[\#(page.joined(separator: ","))]}"#, 200)
+                }
+                if Self.query(url, "IncludeItemTypes") == "Series", Self.query(url, "SortBy") == "DateCreated",
+                   let series = Self.state.unfinishedSeries {
+                    let start = min(Int(Self.query(url, "StartIndex") ?? "0") ?? 0, series.count)
+                    let limit = Int(Self.query(url, "Limit") ?? "") ?? series.count
+                    return (#"{"Items":[\#(series[start..<min(start + limit, series.count)].joined(separator: ","))]}"#, 200)
                 }
                 if Self.query(url, "SortBy") == "DateCreated,SortName" {
                     return (#"{"Items":\#(Self.state.recentMovies)}"#, 200)
