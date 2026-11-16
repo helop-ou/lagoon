@@ -91,8 +91,9 @@ connect code's letter spacing is `Typography.quickConnectCodeTracking` (6).
 
 A theme is a `ThemePalette` of nine roles: `accent`, `signal`, `ground`,
 `background`, `surface`, `glowDepth`, `controlTint`, `artworkTint` and
-`chrome`. Three exist:
-`AppTheme.lagoon` over true black, `AppTheme.babyPink` and `AppTheme.spooky`.
+`chrome`. Four exist:
+`AppTheme.lagoon` over true black, `AppTheme.babyPink`, `AppTheme.spooky` and
+`AppTheme.winter`.
 Keep the list short, because each theme is checked over every screen.
 
 - **Read colours from `Theme.accent`, `.ground`, `.background` and `.glow`
