@@ -565,6 +565,22 @@ nose glowing red, and gold dust that twinkles and falls behind. It takes
 - The page dims by 42 % while the sleigh is over it, or the gold is lost on
   bright artwork.
 - Reduce Motion gets one still moment for four seconds.
+- **In motion it is layers, not a canvas** (`SantaFlightLayers`). Each figure
+  is a picture drawn once by `SantaArt`, each leg two shape layers swinging
+  between stretched and gathered, and each mote a small layer. The team's
+  path is sampled thirty times a second into keyframes, and the render
+  server moves everything, so the app does nothing while the sleigh flies.
+  `SantaFlightFrame`, the canvas, draws the same art once: the still moment
+  and the snapshots. Both take their shapes and numbers from `SantaArt`,
+  `SantaGeometry` and `SantaFlight`, so they cannot drift apart.
+- **Why:** measured on the Apple TV 4K (3rd generation), Release, three
+  alternating runs each. The canvas redrawn every frame held 50 to 56 frames
+  a second on the main thread, with 30 to 83 frames late in an eleven-second
+  flight, at 35 % of a core. The layers hold 60 with none late, at 1 %, and
+  add nothing to the whole device's load. An empty full-screen canvas
+  redrawn every frame held 60, half resolution did not help, and the team
+  alone, with no glow and no dust, still lost frames: the cost is drawing
+  the figures every frame, not the canvas or any one effect.
 - `-debug.santaFlight YES` flies it on a DEBUG build.
 
 **New Year.** `NewYearOverlay` sits over the tabs and plays `Fireworks` with
