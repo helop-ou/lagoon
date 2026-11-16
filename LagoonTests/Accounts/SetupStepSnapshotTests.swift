@@ -55,8 +55,10 @@ struct SetupStepSnapshotTests {
         try await verify(SetupSubtitleLookStepView(subtitlePreferences: subtitles), named: "setup-subtitle-look")
     }
 
+    /// On settings of its own: the simulator's may hold a choice someone
+    /// made in the app.
     @Test func theReportsStepSaysWhatAReportHolds() async throws {
-        try await verify(SetupReportsStepView(), named: "setup-reports")
+        try await verify(SetupReportsStepView(defaults: defaults()), named: "setup-reports")
     }
 
     private func verify(_ step: some View, named name: String) async throws {
