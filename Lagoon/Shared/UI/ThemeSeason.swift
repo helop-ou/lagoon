@@ -1,7 +1,7 @@
 import Foundation
 
-/// A stretch of the year with a theme of its own: Spooky through October,
-/// Winter from 1 December to 6 January.
+/// A stretch of the year with a theme of its own. `SeasonalCalendar` says
+/// when each runs.
 nonisolated struct ThemeSeason: Equatable, Sendable {
     let theme: AppTheme
     /// The year it began in, which tells one winter from the next and keeps
@@ -12,13 +12,14 @@ nonisolated struct ThemeSeason: Equatable, Sendable {
     var id: String { "\(theme.rawValue).\(year)" }
 
     static func current(on date: Date, calendar: Calendar = .current) -> ThemeSeason? {
-        let parts = calendar.dateComponents([.year, .month, .day], from: date)
-        guard let year = parts.year, let month = parts.month, let day = parts.day else { return nil }
-        switch (month, day) {
-        case (10, _): return ThemeSeason(theme: .spooky, year: year)
-        case (12, _): return ThemeSeason(theme: .winter, year: year)
-        case (1, ...6): return ThemeSeason(theme: .winter, year: year - 1)
-        default: return nil
+        let seasons: [(AppTheme, SeasonalCalendar.Stretch)] = [
+            (.spooky, SeasonalCalendar.spooky), (.winter, SeasonalCalendar.winter),
+        ]
+        for (theme, stretch) in seasons {
+            if let year = stretch.startYear(holding: date, calendar: calendar) {
+                return ThemeSeason(theme: theme, year: year)
+            }
         }
+        return nil
     }
 }
