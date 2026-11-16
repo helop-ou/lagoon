@@ -51,9 +51,6 @@ enum TopShelfStore {
         }
     }()
 
-    static func activate(accountID: String?) { publisher?.activate(accountID: accountID) }
-    static func clear() { publisher?.clear() }
-
     static func accepts(owner: String, generation: UUID, itemID: String) -> Bool {
         publisher?.accepts(owner: owner, generation: generation, itemID: itemID) == true
     }

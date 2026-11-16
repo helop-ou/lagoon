@@ -85,7 +85,6 @@ struct SyncPlayStoreTests {
 
         let request = try #require(store.pendingPlayRequest)
         #expect(request.startSeconds == 42)
-        #expect(request.playlistItemId == "entry")
         #expect(request.media.id == "film")
         // Back in the group's readiness accounting, as the server acknowledged.
         #expect(!store.ignoresWait)

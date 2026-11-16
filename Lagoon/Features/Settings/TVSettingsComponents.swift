@@ -9,22 +9,17 @@ struct TVSettingsPage<Content: View>: View {
     let title: LocalizedStringKey
     let backTitle: LocalizedStringKey
     let pageDescription: String?
-    let titleLineLimit: Int
     @ViewBuilder let content: Content
 
     init(
         _ title: LocalizedStringKey,
         backTitle: LocalizedStringKey = "Settings",
         description: String? = nil,
-        // Single long-word titles pass 1: with room to wrap, SwiftUI
-        // hyphenates rather than scales.
-        titleLineLimit: Int = 2,
         @ViewBuilder content: () -> Content
     ) {
         self.title = title
         self.backTitle = backTitle
         self.pageDescription = description
-        self.titleLineLimit = titleLineLimit
         self.content = content()
     }
 
@@ -41,7 +36,7 @@ struct TVSettingsPage<Content: View>: View {
 
                 Text(title)
                     .font(.title.bold())
-                    .lineLimit(titleLineLimit)
+                    .lineLimit(2)
                     .minimumScaleFactor(0.6)
 
                 if let pageDescription {

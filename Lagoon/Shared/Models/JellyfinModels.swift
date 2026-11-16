@@ -361,7 +361,6 @@ nonisolated struct MediaStream: Decodable, Hashable {
     let width: Int?
     let height: Int?
     let bitDepth: Int?
-    let bitRate: Int?
     let realFrameRate: Double?
 }
 

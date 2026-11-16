@@ -66,7 +66,6 @@ struct SyncPlayDecodingTests {
         #expect(queue.playingItem?.itemId == "143aa6bd228bf45c7736c69e0a3cb6e6")
         #expect(queue.playingItem?.playlistItemId == "8a3228756d3e439f9b8cd5bdbfe8deb6")
         #expect(queue.isPlaying == false)
-        #expect(queue.shuffleMode == "Sorted")
         #expect(JellyfinTimestamp.seconds(queue.lastUpdate) != nil)
     }
 

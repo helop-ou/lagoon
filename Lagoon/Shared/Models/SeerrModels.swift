@@ -659,7 +659,6 @@ nonisolated struct SeerrMediaInfo: Decodable, Hashable {
     let mediaType: SeerrMediaType?
     let status: Int?
     let status4k: Int?
-    let externalServiceId: Int?
     let jellyfinMediaId: String?
     let requests: [SeerrRequestReference]?
     let seasons: [SeerrMediaSeasonStatus]?
@@ -674,7 +673,6 @@ nonisolated struct SeerrMediaInfo: Decodable, Hashable {
         mediaType = try? container.decodeIfPresent(SeerrMediaType.self, forKey: .mediaType)
         status = try container.decodeIfPresent(Int.self, forKey: .status)
         status4k = try container.decodeIfPresent(Int.self, forKey: .status4k)
-        externalServiceId = try container.decodeIfPresent(Int.self, forKey: .externalServiceId)
         jellyfinMediaId = try container.decodeIfPresent(String.self, forKey: .jellyfinMediaId)
         requests = try container.decodeIfPresent([SeerrRequestReference].self, forKey: .requests)
         seasons = try container.decodeIfPresent([SeerrMediaSeasonStatus].self, forKey: .seasons)
@@ -684,7 +682,7 @@ nonisolated struct SeerrMediaInfo: Decodable, Hashable {
 
     private enum CodingKeys: String, CodingKey {
         case id, tmdbId, tvdbId, mediaType, status, status4k
-        case externalServiceId, jellyfinMediaId
+        case jellyfinMediaId
         case requests, seasons, downloadStatus, downloadStatus4k
     }
 

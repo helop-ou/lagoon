@@ -155,8 +155,6 @@ nonisolated struct SyncPlayQueueUpdate: Decodable, Hashable, Sendable {
     let playingItemIndex: Int
     let startPositionTicks: Int64
     let isPlaying: Bool
-    let shuffleMode: String
-    let repeatMode: String
 
     var playingItem: SyncPlayQueueItem? {
         playlist.indices.contains(playingItemIndex) ? playlist[playingItemIndex] : nil
@@ -170,8 +168,6 @@ nonisolated struct SyncPlayQueueUpdate: Decodable, Hashable, Sendable {
         playingItemIndex = try c.decodeIfPresent(Int.self, forKey: "playingItemIndex") ?? 0
         startPositionTicks = try c.decodeIfPresent(Int64.self, forKey: "startPositionTicks") ?? 0
         isPlaying = try c.decodeIfPresent(Bool.self, forKey: "isPlaying") ?? false
-        shuffleMode = try c.decodeIfPresent(String.self, forKey: "shuffleMode") ?? ""
-        repeatMode = try c.decodeIfPresent(String.self, forKey: "repeatMode") ?? ""
     }
 }
 

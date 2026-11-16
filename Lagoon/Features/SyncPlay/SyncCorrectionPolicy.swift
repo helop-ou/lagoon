@@ -73,16 +73,4 @@ nonisolated enum SyncPlayCommandSchedule {
             nowSeconds: nowSeconds
         ))
     }
-
-    static func isPast(
-        whenServerSeconds: Double,
-        clockOffset: Double,
-        nowSeconds: Double
-    ) -> Bool {
-        delaySeconds(
-            whenServerSeconds: whenServerSeconds,
-            clockOffset: clockOffset,
-            nowSeconds: nowSeconds
-        ) <= 0
-    }
 }

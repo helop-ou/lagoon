@@ -59,7 +59,6 @@ struct DiagnosticsSettingsView: View {
                     .accessibilityIdentifier("settings.diagnostics.reports")
             }
 
-            #if os(tvOS)
             let status = TopShelfStore.status()
             TVSettingsSection(
                 "Top Shelf",
@@ -89,7 +88,6 @@ struct DiagnosticsSettingsView: View {
                     } ?? "Never"
                 )
             }
-            #endif
         }
     }
     #else

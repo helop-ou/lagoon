@@ -1,7 +1,5 @@
 import SwiftUI
-#if canImport(UIKit)
 import UIKit
-#endif
 
 struct AboutSettingsView: View {
     @Environment(SessionStore.self) private var session
@@ -102,7 +100,6 @@ struct AboutSettingsView: View {
     }
 
     private var deviceRows: [Row] {
-        #if canImport(UIKit)
         [
             Row(title: "Model", value: UIDevice.current.model),
             Row(
@@ -110,9 +107,6 @@ struct AboutSettingsView: View {
                 value: "\(UIDevice.current.systemName) \(UIDevice.current.systemVersion)"
             ),
         ]
-        #else
-        []
-        #endif
     }
 
     private var whatsNewDetail: String {

@@ -8,8 +8,6 @@ extension JellyfinClient {
         /// The section key (`ContinueWatching`, `MyList`), also its fetch path.
         let section: String
         let displayText: String?
-        /// `Landscape`, `Portrait` or `Square` (drawn as a poster rail).
-        let viewMode: String?
         let orderIndex: Int?
         /// Which person, genre or library. The section fetches empty without it.
         let additionalData: String?
@@ -22,7 +20,6 @@ extension JellyfinClient {
             let c = try decoder.container(keyedBy: AnyCodingKey.self)
             section = try c.decode(String.self, forKey: "section")
             displayText = try c.decodeIfPresent(String.self, forKey: "displayText")
-            viewMode = try c.decodeIfPresent(String.self, forKey: "viewMode")
             orderIndex = try c.decodeIfPresent(Int.self, forKey: "orderIndex")
             additionalData = (try? c.decodeIfPresent(String.self, forKey: "additionalData"))
                 .flatMap { $0.isEmpty ? nil : $0 }
