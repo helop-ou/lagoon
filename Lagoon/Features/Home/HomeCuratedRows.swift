@@ -38,6 +38,15 @@ nonisolated enum HomeCuratedRows {
         showsWatched ? [] : ["IsUnplayed"]
     }
 
+    /// Pages of unfinished series read to fill Series You Haven't Started.
+    static let unstartedSeriesPages = 4
+
+    /// Jellyfin's `IsUnplayed` keeps a series until its last episode is
+    /// watched, so one with a single episode watched still passes it.
+    static func isUnstarted(_ series: MediaItem) -> Bool {
+        (series.userData?.playedPercentage ?? 0) <= 0 && series.userData?.played != true
+    }
+
     /// An unknown runtime passes. Servers do not always report one.
     static func isSubstantialSeed(_ item: MediaItem) -> Bool {
         guard let ticks = item.runTimeTicks else { return true }
