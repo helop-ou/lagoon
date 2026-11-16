@@ -109,8 +109,9 @@ Keep the list short, because each theme is checked over every screen.
 - **A grouped form on iOS is a `ThemedForm`**, never a bare `Form` or `List`.
   It themes page, rows and bars, so a new settings page needs nothing else.
 - **A page's backdrop is `.themedPageBackground()`**, not a bare
-  `Theme.background`, so Spooky's cobwebs reach it. Decoration sits behind
-  content or beside a state's glyph, never over text or artwork.
+  `Theme.background`, so Spooky's cobwebs and Winter's snow reach it.
+  Decoration sits behind content or beside a state's glyph, never over text
+  or artwork.
 - **The player surface, its overlays, subtitles and Top Shelf stay pure
   black**, outside the theme.
 - **tvOS controls are never tinted.** `themedControls()` and `themedChrome()`

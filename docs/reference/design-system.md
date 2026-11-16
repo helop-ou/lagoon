@@ -395,7 +395,7 @@ Where it applies:
 - Only the player's panel and the DEBUG Developer page keep the system form.
 - Every page's backdrop is `ThemePageBackground`, through
   `.themedPageBackground()` (`ThemedForm` uses it too), so Spooky's cobwebs
-  reach every page without the page knowing.
+  and Winter's snow reach every page without the page knowing.
 - tvOS's tab bar keeps the system glass.
 
 **Account ownership.** `SessionStore` points `ThemeStore.shared` at the active
@@ -483,6 +483,26 @@ A small `GhostGeometry` ghost also bobs above `LoadingView` and
 Ghosts are pale, never the accent, with faces cut out by an even-odd fill so
 they read over anything. Spooky's bloom motif is `.ghosts`. None of this
 covers text or artwork, and none of it reaches the player or Top Shelf.
+
+**Snow.** Winter decorates pages too (`AppTheme.isSnowy`):
+`ThemePageBackground` draws `WinterDecoration`, light snow falling behind the
+content, so it shows in the gaps between rails and never over a poster.
+
+- `Snowfall` is a fixed, seeded set of flakes (`Metrics.snowflakeCount`, 44
+  on tvOS and 30 on iOS). Each keeps its own lane and depth. A near flake is
+  bigger, brighter and faster: it crosses the page in 14 seconds and the
+  farthest in 30. Depth is squared, so most of the snow is far off and only a
+  few flakes are close.
+- A flake's place depends only on the clock (`Snowfall.pose`), so every page
+  shows the same snow and nothing jumps when one page covers another.
+- It is one `Canvas` of plain discs, redrawn every `Motion.snowFrame` (30
+  times a second). Unlike the spiders and ghosts it never rests while a page
+  is on screen.
+- It stops under Reduce Motion, leaving the flakes where they were, and while
+  the player is up, by the same `playerCover` rule as the haunted decoration.
+
+Frost growing in from the top corners was drawn and left out: as feathered
+spines it read as scribble at corner size.
 
 The tvOS player panel uses regular material for content with separate glass
 tabs and actions. iOS uses a native resizable options sheet.
