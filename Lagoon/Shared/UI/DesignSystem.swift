@@ -334,6 +334,14 @@ enum Metrics {
     static let snowflakeCount = 30
     static let snowflakeRadius: ClosedRange<Double> = 0.8...2.6
     #endif
+    /// The New Year fireworks: how many shells the show has and how thick a
+    /// spark is drawn.
+    static let fireworkShells = 14
+    #if os(tvOS)
+    static let fireworkLineWidth: CGFloat = 4.4
+    #else
+    static let fireworkLineWidth: CGFloat = 2.2
+    #endif
 }
 
 /// The only allowed escapes from the Dynamic Type scale: symbols used as

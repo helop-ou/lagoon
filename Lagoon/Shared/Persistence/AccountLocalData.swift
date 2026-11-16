@@ -18,6 +18,7 @@ final class AccountLocalData {
         ThemeStore.keyPrefix,
         ThemeStore.seasonKeyPrefix,
         ThemeStore.followsSeasonsKeyPrefix,
+        ThemeStore.newYearKeyPrefix,
         "home.sectionPreferences.",
         "search.recents.",
     ]

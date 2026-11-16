@@ -120,6 +120,8 @@ struct MainTabView: View {
         // On the TabView so a Top Shelf selection plays from any tab.
         .restoresFocusAfterPlayer(isPresented: playerItem != nil)
         .playerPresentation(item: $playerItem, onDismiss: scheduleLifecycleReplayIfNeeded)
+        // Below the player-cover environment, which tells it a title is up.
+        .overlay { NewYearOverlay() }
         #if os(iOS)
         .environment(playerHub)
         .environment(\.playerCover, playerHub)

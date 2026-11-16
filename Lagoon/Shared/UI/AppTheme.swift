@@ -187,6 +187,8 @@ final class ThemeStore {
     /// switched from one profile to another, which then arrives in its own
     /// theme. Never at launch, and never by returning to the same profile.
     private(set) var bloomCount = 0
+    /// Bumped when the New Year fireworks should play.
+    private(set) var newYearCount = 0
     private let defaults: UserDefaults
     private let now: () -> Date
     @ObservationIgnored private var activeOwner: ObjectIdentifier?
@@ -244,6 +246,15 @@ final class ThemeStore {
         bloomCount &+= 1
     }
 
+    /// Plays the fireworks the first time a profile is on screen on 1
+    /// January, once a year. A profile that turned the seasons off gets none.
+    func welcomeNewYearIfDue() {
+        guard let accountID, followsSeasons, let year = NewYear.year(on: now()),
+              defaults.integer(forKey: Self.newYearKey(accountID)) != year else { return }
+        defaults.set(year, forKey: Self.newYearKey(accountID))
+        newYearCount &+= 1
+    }
+
     /// Follows a season starting or ending while the app ran. No bloom.
     func refreshSeason() {
         guard let accountID else { return }
@@ -282,6 +293,8 @@ final class ThemeStore {
     /// The season a profile last chose a theme in, as `ThemeSeason.id`.
     nonisolated static let seasonKeyPrefix = "appearance.seasonDeclined."
     nonisolated static let followsSeasonsKeyPrefix = "appearance.followsSeasons."
+    /// The year a profile last saw the New Year fireworks.
+    nonisolated static let newYearKeyPrefix = "appearance.newYearWelcomed."
 
     static func key(_ accountID: String) -> String {
         keyPrefix + accountID
@@ -293,6 +306,10 @@ final class ThemeStore {
 
     static func followsSeasonsKey(_ accountID: String) -> String {
         followsSeasonsKeyPrefix + accountID
+    }
+
+    static func newYearKey(_ accountID: String) -> String {
+        newYearKeyPrefix + accountID
     }
 }
 
