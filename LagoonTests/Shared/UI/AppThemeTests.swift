@@ -257,6 +257,47 @@ struct AppThemeTests {
         #expect(abs(pose(depth: 1, at: 10).turn - (1 + 10 * Snowfall.spin)) < 0.0001)
     }
 
+    @Test func aFlakesFallTimeAndProgressAgreeWithWhereItIsDrawn() {
+        let near = Snowfall.Flake(lane: 0.5, start: 0.25, depth: 1, phase: 0)
+        let far = Snowfall.Flake(lane: 0.5, start: 0.25, depth: 0, phase: 0)
+        #expect(Snowfall.seconds(of: near) == Snowfall.fall.lowerBound)
+        #expect(Snowfall.seconds(of: far) == Snowfall.fall.upperBound)
+        #expect(Snowfall.progress(of: near, at: 0) == 0.25)
+        #expect(abs(Snowfall.progress(of: near, at: Snowfall.fall.lowerBound / 2) - 0.75) < 0.0001)
+        // Once round, it is where it started.
+        #expect(abs(Snowfall.progress(of: near, at: Snowfall.fall.lowerBound) - 0.25) < 0.0001)
+        let pose = Snowfall.pose(of: near, at: 0, in: CGSize(width: 400, height: 800), dot: 1...3, crystal: 4...8)
+        #expect(abs(pose.center.y - (-8 + 0.25 * 816)) < 0.0001)
+        #expect(Snowfall.swing(isCrystal: true) < Snowfall.swing(isCrystal: false))
+    }
+
+    @Test func theMovingSnowIsOneLayerAFlakeSetFallingFromWhereTheClockHasIt() throws {
+        let view = SnowfallLayerView(frame: CGRect(x: 0, y: 0, width: 400, height: 800))
+        view.rebuild(now: 100)
+        let flakes = SnowfallFrame.flakes
+        #expect(view.flakeLayers.count == flakes.count)
+        let crystals = view.flakeLayers.filter { $0 is CAShapeLayer }
+        #expect(crystals.count == flakes.filter { $0.depth >= Snowfall.crystalDepth }.count)
+        #expect(!crystals.isEmpty && crystals.count < flakes.count)
+        for (flake, layer) in zip(flakes, view.flakeLayers) {
+            let fall = try #require(layer.animation(forKey: SnowfallLayerView.fallKey) as? CABasicAnimation)
+            #expect(fall.duration == Snowfall.seconds(of: flake))
+            #expect(fall.repeatCount == .infinity)
+            #expect(abs(fall.timeOffset / fall.duration - Snowfall.progress(of: flake, at: 100)) < 0.0001)
+            // From wholly above the page to wholly below it.
+            let from = try #require(fall.fromValue as? Double)
+            let to = try #require(fall.toValue as? Double)
+            #expect(from < 0 && to > 800)
+            #expect(layer.animation(forKey: SnowfallLayerView.swayKey) != nil)
+            // Only a crystal turns.
+            #expect((layer.animation(forKey: SnowfallLayerView.spinKey) != nil) == (layer is CAShapeLayer))
+        }
+        // Building again replaces the layers. It does not pile them up.
+        view.rebuild(now: 200)
+        #expect(view.flakeLayers.count == flakes.count)
+        #expect(view.layer.sublayers?.count == flakes.count)
+    }
+
     @Test func frostGrowsOutOfTheCornerAlongBothEdgesAndThinsAway() throws {
         let frost = FrostGeometry.frost(size: 100, seed: 3)
         #expect(frost == FrostGeometry.frost(size: 100, seed: 3))
