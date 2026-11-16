@@ -540,7 +540,7 @@ struct PlayerControlPanel: View {
         // Search stays above the list so one Down press reaches it.
         trackCard(
             rows: [(Self.subtitleOffID, String(localized: "Off"), !subtitleTracks.contains(where: \.isSelected))]
-                + subtitleTracks.map { ($0.id, subtitleTrackName($0), $0.isSelected) }
+                + subtitleTracks.map { ($0.id, $0.subtitleMenuTitle, $0.isSelected) }
         ) { rowID in
             if rowID == Self.subtitleOffID {
                 onSelectSubtitleTrack(nil)
@@ -727,18 +727,6 @@ struct PlayerControlPanel: View {
             Label("Downloaded and selected", systemImage: "checkmark.circle")
                 .foregroundStyle(.secondary)
         }
-    }
-
-    private func subtitleTrackName(_ track: PlayerTrack) -> String {
-        var labels = [track.displayName]
-        if track.source == .downloaded {
-            labels.append(String(localized: "Downloaded"))
-        } else if track.source == .external {
-            labels.append(String(localized: "External"))
-        }
-        if track.isForced { labels.append(String(localized: "Forced")) }
-        if track.isHearingImpaired { labels.append(String(localized: "SDH")) }
-        return labels.joined(separator: " · ")
     }
 
     private func subtitleResultDetails(_ result: SubtitleCandidate) -> String {
