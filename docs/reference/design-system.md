@@ -531,7 +531,8 @@ Tried and dropped: plain white discs for every flake read as dots, not
 snow. Frost as feathered spines growing from the corner read as scribble.
 
 **New Year.** `NewYearOverlay` sits over the tabs and plays `Fireworks` with
-a "Happy New Year" line for ten seconds, in every theme, with no sound.
+the year in gold for thirteen seconds, in every theme, with no sound. It
+happens once a year, so it is meant to feel like an event.
 
 - It is due the first time a profile is on screen on 1 January
   (`NewYear.year(on:)`), which covers Lagoon being open as the year turns: on
@@ -543,15 +544,30 @@ a "Happy New Year" line for ten seconds, in every theme, with no sound.
   scene is active and `playerCover` says no player is up, so a year that
   turns during a film is welcomed when the player closes, if it is still
   1 January.
-- `Fireworks` is a fixed, seeded show of `Metrics.fireworkShells` shells in
-  the theme's accent and signal, a warm white and white. A shell climbs for
-  0.9 seconds, bursts into two rings of sparks and burns out over 1.9 as they
-  droop. Like the snow it is a pure function of time, drawn in one `Canvas`.
-- A scrim of 0.62 black sits under it. At 0.5 a row title under the greeting
-  still competed with it.
-- Reduce Motion gets one still moment of the show (`Fireworks.stillMoment`)
-  for five seconds. VoiceOver hears the greeting as an announcement.
+- **The show** (`Fireworks.show`) is fixed and seeded: one big shell in the
+  middle, eleven that come closer together, and a volley of nine across the
+  page from `Fireworks.finale`. Colours are the theme's accent and signal,
+  gold and white. A shell climbs for 0.9 seconds and bursts with a flash.
+  Its `Kind` sets the burst: a peony is a full ball, a chrysanthemum a thin
+  shell with long tails, a willow slow gold that hangs and falls, a ring one
+  clean circle about a small heart. Each spark is drawn as a tapering tail
+  with a white-hot head, and from `Fireworks.glitterFrom` of its burn it
+  glitters, blinking on its own beat as it dies. Like the snow it is a pure
+  function of time, drawn in one `Canvas`.
+- **The greeting** (`NewYearGreeting`) is "HAPPY NEW YEAR" in tracked
+  capitals over the year in gold numerals (`Metrics.newYearNumeralSize`, a
+  display size outside the Dynamic Type scale). The numerals pop in one
+  after another with the opening burst, a shine crosses them three times,
+  and four-pointed stars twinkle around them. The gold is the greeting's
+  own: it is decoration, not text that takes a theme colour.
+- A scrim of 0.7 black sits under it, so the page does not fight the show.
+- Reduce Motion gets one still moment of the volley (`Fireworks.stillMoment`)
+  for six seconds, the greeting at rest. VoiceOver hears the greeting as an
+  announcement.
 - `-debug.newYearFireworks YES` plays it once at launch in a DEBUG build.
+
+Tried and dropped: fourteen shells of two neat rings each, with a plain
+white "Happy New Year", looked lacklustre.
 
 The tvOS player panel uses regular material for content with separate glass
 tabs and actions. iOS uses a native resizable options sheet.
