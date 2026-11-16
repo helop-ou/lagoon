@@ -117,23 +117,17 @@ nonisolated struct SubtitlePreferenceValues: Codable, Equatable {
 
 nonisolated extension SubtitlePreferenceValues {
     /// Every key optional, so preferences saved before a setting existed
-    /// keep the rest instead of resetting. A value this build cannot read
-    /// falls back alone.
+    /// keep the rest instead of resetting.
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         var values = SubtitlePreferenceValues()
-        func read<Value: Decodable>(_ key: CodingKeys, into field: WritableKeyPath<Self, Value>) {
-            if let value = try? container.decodeIfPresent(Value.self, forKey: key) {
-                values[keyPath: field] = value
-            }
-        }
-        read(.followsSystemAppearance, into: \.followsSystemAppearance)
-        read(.textSize, into: \.textSize)
-        read(.edgeStyle, into: \.edgeStyle)
-        read(.background, into: \.background)
-        read(.verticalPosition, into: \.verticalPosition)
-        read(.languageOverrides, into: \.languageOverrides)
-        read(.missingMode, into: \.missingMode)
+        container.read(.followsSystemAppearance, into: &values, at: \.followsSystemAppearance)
+        container.read(.textSize, into: &values, at: \.textSize)
+        container.read(.edgeStyle, into: &values, at: \.edgeStyle)
+        container.read(.background, into: &values, at: \.background)
+        container.read(.verticalPosition, into: &values, at: \.verticalPosition)
+        container.read(.languageOverrides, into: &values, at: \.languageOverrides)
+        container.read(.missingMode, into: &values, at: \.missingMode)
         self = values
     }
 }
