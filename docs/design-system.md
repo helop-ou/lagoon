@@ -119,11 +119,12 @@ Keep the list short, because each theme is checked over every screen.
 - **The theme belongs to the Jellyfin profile**, stored under
   `appearance.theme.<accountID>`, so the account picker and sign-in screens
   show the last viewer's look.
-- **Through October a profile on the default wears Spooky**
-  (`AppTheme.seasonal(on:)`): one that never chose, or chose Lagoon before
-  October. A profile that chose another theme keeps it. Choosing Lagoon during
-  October keeps Lagoon until next October. November brings Lagoon back,
-  and Spooky stays in the picker all year.
+- **A profile follows the seasons until it turns Seasonal Themes off**
+  (`ThemeSeason`, `ThemeStore.followsSeasons`): Spooky through October and
+  Winter from 1 December to 6 January, worn over whatever theme it chose.
+  The choice is never overwritten, so it returns when the season ends. A
+  theme chosen during a season stays for that season, and the next season
+  comes as usual. Both themes stay in the picker all year.
 
 Materials: use native `.glass` actions and the existing circular control
 shape. The iOS player's centre transport uses `.glass(.clear)` so video shows
