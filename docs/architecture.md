@@ -55,6 +55,11 @@ Sections](jellyfin-api.md#home-screen-sections-plugin).
 - Async loading runs from stable `.task(id:)` roots, so a loading-state change
   never cancels its own work. Late results are dropped on account, query or
   filter changes.
+- `SessionStore` owns the one `TrackPreferencesStore` and the one
+  `SubtitlePreferencesStore`, and points them at the active account.
+  Settings, the player and the setup read those two. Each store saves its
+  whole record on a change, so a screen that made its own would save a stale
+  copy over what another screen wrote.
 - `SessionStore` owns the active account and its `SeerrSessionStore`.
   `RootView` switches between connection phases, which are states, not pushed
   destinations:
