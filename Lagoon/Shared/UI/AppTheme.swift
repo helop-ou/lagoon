@@ -134,7 +134,7 @@ nonisolated struct ThemePalette: Equatable, Sendable {
     )
 }
 
-extension ThemePalette {
+nonisolated extension ThemePalette {
     /// Pumpkin orange over a midnight aubergine, with a purple glow.
     static let spooky = ThemePalette(
         accent: Color(red: 0xFF / 255, green: 0x8C / 255, blue: 0x1A / 255),
