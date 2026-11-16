@@ -306,7 +306,6 @@ struct LandscapeArtwork<Metadata: View>: View {
     }
 }
 
-/// 6pt playback progress bar pinned to a card's bottom edge.
 #if os(tvOS)
 /// An ambient halo behind a focused card, sampled from its artwork.
 ///
@@ -373,6 +372,7 @@ extension View {
     }
 }
 
+/// 6pt playback progress bar pinned to a card's bottom edge.
 struct ItemProgressBar: View {
     let progress: Double
 

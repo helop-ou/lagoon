@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Third-party components, their licences, and trademark notices. Built like
-/// `ChangelogView` and for the same tvOS reasons. On tvOS the licence text
+/// `WhatsNewView` and for the same tvOS reasons. On tvOS the licence text
 /// swaps into the panel with Back beside Done, as there is no navigation stack.
 struct AcknowledgementsView: View {
     @Environment(\.dismiss) private var dismiss

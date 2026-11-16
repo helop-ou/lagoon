@@ -84,8 +84,6 @@ final class PlaybackController {
     #endif
 
     private(set) var hudLines: [String] = []
-    /// Read through to the engine, which owns the cache. Nothing here
-    /// mirrors it. HLS has no byte-range model.
 
     private var client: JellyfinClient?
     /// Set by the viewer's start and moved on by each hand-off. A retry or a
@@ -1126,10 +1124,6 @@ final class PlaybackController {
         await restart(next, scope: "handoff", prepared: prepared, preservingPreparedNext: true)
     }
 
-    /// The previous button: the start of this title, or within its first
-    /// seconds the episode or list entry before it, by the same hand-off as
-    /// Up Next. The warmed successor is for the title
-    /// after this one, so it goes.
     /// A row of the Episodes list, by the same hand-off as previous and
     /// next. In a list the queue moves to it, so next follows on from there.
     func playEpisode(_ row: PlayerEpisodeList.Row) async {
@@ -1146,6 +1140,10 @@ final class PlaybackController {
         await restart(row.media, scope: "handoff", preservingPreparedNext: false)
     }
 
+    /// The previous button: the start of this title, or within its first
+    /// seconds the episode or list entry before it, by the same hand-off as
+    /// Up Next. The warmed successor is for the title after this one, so it
+    /// goes.
     func playPrevious() async {
         guard !isAdvancing, groupTransport == nil else { return }
         if PlayerEpisodeButtons.previousAction(position: currentPosition) == .restart {
