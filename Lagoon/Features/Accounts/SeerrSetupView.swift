@@ -32,6 +32,7 @@ struct SeerrSetupView: View {
                     failure
                     notNowButton
                         .buttonStyle(.glass)
+                        .controlSize(.large)
                 }
             }
             #else
@@ -113,9 +114,11 @@ struct SeerrSetupView: View {
     }
 
     private var notNowButton: some View {
-        Button("Not Now") {
+        Button {
             connectionTask?.cancel()
             session.finishSeerrOffer()
+        } label: {
+            OnboardingSecondaryLabel("Not Now")
         }
         .accessibilityIdentifier("seerrSetup.skip")
     }
