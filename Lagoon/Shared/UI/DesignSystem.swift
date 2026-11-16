@@ -325,6 +325,15 @@ enum Metrics {
     static let stateGhostSize: CGFloat = 34
     static let flyingGhostSize: CGFloat = 56
     #endif
+    /// A snowy theme's falling snow: how many flakes a page has, and the
+    /// farthest and nearest flake's radius.
+    #if os(tvOS)
+    static let snowflakeCount = 44
+    static let snowflakeRadius: ClosedRange<Double> = 1.6...6
+    #else
+    static let snowflakeCount = 30
+    static let snowflakeRadius: ClosedRange<Double> = 0.8...2.6
+    #endif
 }
 
 /// The only allowed escapes from the Dynamic Type scale: symbols used as
@@ -358,6 +367,8 @@ enum Motion {
     static let spiderDrop: TimeInterval = 20
     /// A ghost's crossing of a haunted page's background.
     static let ghostCrossing: TimeInterval = 16
+    /// Between two frames of a snowy page's falling snow.
+    static let snowFrame: TimeInterval = 1.0 / 30
 }
 
 // Brand colors are only for branding: progress fills, the lockup, selection
