@@ -111,6 +111,9 @@ struct CustomPlayerView<Surface: View>: View {
     #if os(iOS)
     /// Splits double-taps into back and forward halves.
     @State private var surfaceWidth: CGFloat = 0
+    /// A partly folded iPhone Duo: the picture takes one side of the fold
+    /// and the controls the other.
+    @State private var foldSplit: FoldSplit?
     #endif
     @State private var panelRevealSignpostActive = false
     private let panelSignpostID = OSSignpostID(log: PlaybackPerformance.log)
@@ -145,11 +148,14 @@ struct CustomPlayerView<Surface: View>: View {
                 // and centre controls from moving.
                 .ignoresSafeArea(.container, edges: .top)
                 .toolbar {
-                    ToolbarItem(placement: .cancellationAction) {
+                    ToolbarItem(placement: isStackedFold ? .bottomBar : .cancellationAction) {
                         Button("Close", systemImage: "xmark", role: .close, action: onDismiss)
                             .accessibilityIdentifier("player.close")
                     }
-                    ToolbarItemGroup(placement: .topBarTrailing) {
+                    if isStackedFold {
+                        ToolbarSpacer(.flexible, placement: .bottomBar)
+                    }
+                    ToolbarItemGroup(placement: isStackedFold ? .bottomBar : .topBarTrailing) {
                         if let episodeList {
                             Button("Episodes", systemImage: "list.and.film") { episodeListOpen = true }
                                 .accessibilityIdentifier("player.episodes")
@@ -183,8 +189,9 @@ struct CustomPlayerView<Surface: View>: View {
                             .accessibilityIdentifier("player.info")
                     }
                 }
-                .toolbarBackground(.hidden, for: .navigationBar)
+                .toolbarBackground(.hidden, for: .navigationBar, .bottomBar)
                 .toolbar(transportVisible ? .visible : .hidden, for: .navigationBar)
+                .toolbar(transportVisible && isStackedFold ? .visible : .hidden, for: .bottomBar)
         }
             .sheet(isPresented: $panelOpen, onDismiss: closePanel) {
                 panel
@@ -211,6 +218,7 @@ struct CustomPlayerView<Surface: View>: View {
                     style: subtitleStyle,
                     onDisplayedCaption: reportDisplayedCaption
                 )
+                .foldInset(pictureInsets)
 
                 if case .failed = engine.subtitleLoadState, !panelOpen {
                     VStack {
@@ -224,6 +232,7 @@ struct CustomPlayerView<Surface: View>: View {
                         Spacer()
                     }
                     .allowsHitTesting(false)
+                    .foldInset(pictureInsets)
                 }
 
                 // Animations here are value-driven only: withAnimation and
@@ -250,6 +259,7 @@ struct CustomPlayerView<Surface: View>: View {
                 }
                 .animation(.easeInOut(duration: Motion.fast), value: showsBuffering)
                 .animation(.easeInOut(duration: Motion.fast), value: isWaitingForGroup)
+                .foldInset(pictureInsets)
 
                 Group {
                     if let feedback = seekFeedback {
@@ -257,8 +267,10 @@ struct CustomPlayerView<Surface: View>: View {
                     }
                 }
                 .animation(reduceMotion ? nil : .easeOut(duration: Motion.fast), value: seekFeedback)
+                .foldInset(pictureInsets)
 
                 PlayerSkipOverlay(automation: automation, reduceMotion: reduceMotion, onSkip: skip)
+                    .foldInset(promptInsets)
 
                 PlayerNextUpOverlay(
                     automation: automation,
@@ -266,6 +278,7 @@ struct CustomPlayerView<Surface: View>: View {
                     reduceMotion: reduceMotion,
                     hint: hint
                 )
+                .foldInset(promptInsets)
 
                 if let qualityOffer {
                     PlayerQualityOfferOverlay(
@@ -273,6 +286,7 @@ struct CustomPlayerView<Surface: View>: View {
                         isSuppressed: isQualityOfferSuppressed,
                         reduceMotion: reduceMotion
                     )
+                    .foldInset(promptInsets)
                 }
 
                 if let transcodeNotice {
@@ -281,6 +295,7 @@ struct CustomPlayerView<Surface: View>: View {
                         isSuppressed: isTranscodeNoticeSuppressed,
                         reduceMotion: reduceMotion
                     )
+                    .foldInset(promptInsets)
                 }
 
                 PlayerTransportOverlay(
@@ -319,6 +334,7 @@ struct CustomPlayerView<Surface: View>: View {
                     )
                     .animation(.easeInOut(duration: Motion.fast), value: engine.isPaused)
                     .animation(.easeInOut(duration: Motion.fast), value: panelOpen)
+                    .foldInset(controlsInsets)
 
                 #if os(iOS)
                 // Shares the bottom bar's visibility so both fade together.
@@ -342,6 +358,9 @@ struct CustomPlayerView<Surface: View>: View {
                 .accessibilityHidden(!transportVisible || isScrubbing)
                 .animation(.easeInOut(duration: Motion.fast), value: controlsVisible)
                 .animation(.easeInOut(duration: Motion.fast), value: isScrubbing)
+                // Beside a fold, centred in what the transport leaves free.
+                .padding(.bottom, isFoldSplit ? PlayerCornerMetrics.bottomInset : 0)
+                .foldInset(controlsInsets)
                 #endif
 
                 // Stays mounted and slides by offset: no insertion transition
@@ -359,6 +378,13 @@ struct CustomPlayerView<Surface: View>: View {
             }
         }
         .background(Color.black.ignoresSafeArea())
+        #if os(iOS)
+        .environment(\.playerCornerPromptClearsTransport, !isStackedFold)
+        .onFoldSplitChange { split in
+            foldSplit = split
+            pokeControls()
+        }
+        #endif
         #if os(tvOS)
         .onPlayPauseCommand {
             traceInput("playPause via=onPlayPauseCommand")
@@ -619,6 +645,9 @@ struct CustomPlayerView<Surface: View>: View {
                     pokeControls()
                 }
             }
+            // After the gestures and the safe area: the picture stops at the
+            // fold, and a tap beside it is not a tap on the picture.
+            .padding(foldSplit?.before ?? EdgeInsets())
         #endif
     }
 
@@ -700,7 +729,7 @@ struct CustomPlayerView<Surface: View>: View {
     /// Clears the iOS centre cluster. tvOS has none.
     private var waitingDrop: CGFloat {
         #if os(iOS)
-        isWaitingForGroup ? Metrics.Space.section * 2 : 0
+        isWaitingForGroup && foldSplit == nil ? Metrics.Space.section * 2 : 0
         #else
         0
         #endif
@@ -712,8 +741,49 @@ struct CustomPlayerView<Surface: View>: View {
             voiceOver: voiceOverEnabled,
             isPaused: engine.isPaused,
             isScrubbing: isScrubbing,
+            isFoldSplit: isFoldSplit,
             panelOpen: panelOpen
         ).isVisible
+    }
+
+    private var isFoldSplit: Bool {
+        #if os(iOS)
+        foldSplit != nil
+        #else
+        false
+        #endif
+    }
+
+    /// Below a fold the toolbar's buttons join the controls. Above it they
+    /// would lie over the picture for as long as the pose lasts.
+    private var isStackedFold: Bool {
+        #if os(iOS)
+        foldSplit?.isStacked == true
+        #else
+        false
+        #endif
+    }
+
+    /// Below a fold the controls' side has no room for a prompt beside the
+    /// centre buttons, so it lies over the picture's corner, as on any phone.
+    private var promptInsets: EdgeInsets? {
+        isStackedFold ? pictureInsets : controlsInsets
+    }
+
+    private var pictureInsets: EdgeInsets? {
+        #if os(iOS)
+        foldSplit?.before
+        #else
+        nil
+        #endif
+    }
+
+    private var controlsInsets: EdgeInsets? {
+        #if os(iOS)
+        foldSplit?.after
+        #else
+        nil
+        #endif
     }
 
     /// Needs a known duration. Deliberately not gated on pause.
@@ -1059,3 +1129,15 @@ private enum EpisodePopoverMetrics {
     static let height: CGFloat = 520
 }
 #endif
+
+private extension View {
+    /// Only iOS can fold, so the tvOS tree is left exactly as it is.
+    @ViewBuilder
+    func foldInset(_ insets: EdgeInsets?) -> some View {
+        #if os(iOS)
+        padding(insets ?? EdgeInsets())
+        #else
+        self
+        #endif
+    }
+}

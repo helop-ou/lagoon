@@ -5,9 +5,12 @@ nonisolated struct PlayerTransportVisibility {
     var voiceOver: Bool
     var isPaused: Bool
     var isScrubbing: Bool
+    /// Across a fold the controls have a side of their own, with no picture
+    /// under them to uncover.
+    var isFoldSplit: Bool
     var panelOpen: Bool
 
     var isVisible: Bool {
-        (isRevealed || voiceOver || isPaused || isScrubbing) && !panelOpen
+        (isRevealed || voiceOver || isPaused || isScrubbing || isFoldSplit) && !panelOpen
     }
 }
