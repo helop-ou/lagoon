@@ -83,6 +83,29 @@ struct SeasonalCalendarTests {
         #expect(stretch.startYear(holding: Self.date(2031, 6, 1), calendar: calendar) == nil)
     }
 
+    /// A device on another calendar has no October in its tenth month.
+    @Test(arguments: [
+        Calendar.Identifier.islamicUmmAlQura, .hebrew, .buddhist, .japanese, .persian, .chinese, .indian,
+    ])
+    func theSeasonsAreGregorianWhateverCalendarTheDeviceKeeps(identifier: Calendar.Identifier) throws {
+        var device = Calendar(identifier: identifier)
+        device.timeZone = try #require(TimeZone(identifier: "Europe/Tallinn"))
+        func season(_ year: Int, _ month: Int, _ day: Int) -> ThemeSeason? {
+            ThemeSeason.current(on: Self.date(year, month, day), calendar: device)
+        }
+        #expect(season(2026, 10, 15) == ThemeSeason(theme: .spooky, year: 2026))
+        #expect(season(2026, 12, 24) == ThemeSeason(theme: .winter, year: 2026))
+        #expect(season(2027, 1, 6) == ThemeSeason(theme: .winter, year: 2026))
+        #expect(season(2027, 3, 20) == nil)
+        #expect(season(2027, 7, 1) == nil)
+        #expect(season(2027, 9, 12) == nil)
+        #expect(NewYear.year(on: Self.date(2027, 1, 1), calendar: device) == 2027)
+        #expect(NewYear.year(on: Self.date(2027, 6, 7), calendar: device) == nil)
+        #expect(NewYear.upcomingYear(on: Self.date(2026, 11, 16), calendar: device) == 2027)
+        #expect(NewYear.secondsUntilMidnight(from: Self.date(2026, 12, 31, 23), calendar: device) == 3600)
+        #expect(GhostFlight.isHalloweenNight(Self.date(2026, 10, 31, 20), calendar: device))
+    }
+
     /// The day is the viewer's own, not Greenwich's.
     @Test func aDayTurnsAtTheViewersOwnMidnight() throws {
         var auckland = Calendar(identifier: .gregorian)
