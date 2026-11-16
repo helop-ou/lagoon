@@ -238,18 +238,29 @@ extension JellyfinClient {
     /// Latest can return a lone episode even with GroupItems=true. Resolve
     /// the Series so cards show the show and open its seasons.
     func latestSeries(parentId: String, limit: Int = 16) async throws -> [MediaItem] {
+        let check = try sessionCheck()
+        try check()
+        let recent = try await latest(parentId: parentId, limit: limit)
+        try check()
+        return try await parentSeries(of: recent, check: check)
+    }
+
+    /// Throws once the session a request began under is gone.
+    private func sessionCheck() throws -> () throws -> Void {
         let userId = try requireUserId()
         let serverURL = self.serverURL
         let accessToken = self.accessToken
-        func checkSession() throws {
+        return {
             try Task.checkCancellation()
             guard self.userId == userId, self.serverURL == serverURL,
                   self.accessToken == accessToken else { throw CancellationError() }
         }
+    }
 
-        try checkSession()
-        let recent = try await latest(parentId: parentId, limit: limit)
-        try checkSession()
+    /// The series behind a list of series, seasons and episodes, in
+    /// first-occurrence order.
+    private func parentSeries(of recent: [MediaItem], check: () throws -> Void) async throws -> [MediaItem] {
+        let userId = try requireUserId()
         var seriesByID = Dictionary(
             recent.filter { $0.type == .series }.map { ($0.id, $0) },
             uniquingKeysWith: { first, _ in first }
@@ -277,7 +288,7 @@ extension JellyfinClient {
                 URLQueryItem(name: "ImageTypeLimit", value: "1"),
                 URLQueryItem(name: "EnableTotalRecordCount", value: "false"),
             ])
-            try checkSession()
+            try check()
             for series in page.items where series.type == .series && seriesByID[series.id] == nil {
                 seriesByID[series.id] = series
             }
