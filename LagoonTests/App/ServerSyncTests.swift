@@ -117,7 +117,7 @@ struct ServerSyncTests {
 /// Fixture state for `ServerSyncTests`. Tests mutate `revision`/`isFailing`
 /// after `makeClient()` already built the client, so the registered
 /// `StubURLProtocol` handler reads this live rather than a fixed capture.
-private enum ServerSyncFixture {
+private nonisolated enum ServerSyncFixture {
     private static let lock = NSLock()
     private nonisolated(unsafe) static var revision = 1
     private nonisolated(unsafe) static var isFailing = false

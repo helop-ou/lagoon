@@ -190,7 +190,7 @@ struct SubtitleSearchBrowseStateTests {
 
 /// Fake Jellyfin: one language with a good and a refused result, one with a
 /// single result, and the permission probe.
-private func browseStateResponse(to request: URLRequest) throws -> (Int, [String: String], Data) {
+private nonisolated func browseStateResponse(to request: URLRequest) throws -> (Int, [String: String], Data) {
     guard let url = request.url else { throw URLError(.badURL) }
 
     let payload: Data

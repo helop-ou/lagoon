@@ -7,7 +7,7 @@ import Testing
 @Suite("Playback transcode notice")
 @MainActor
 struct PlaybackTranscodeNoticeTests {
-    private static let auto = PlaybackOffer(maxStreamingBitrate: 31_500_000, cap: .auto, probedBitsPerSecond: 45_000_000)
+    private nonisolated static let auto = PlaybackOffer(maxStreamingBitrate: 31_500_000, cap: .auto, probedBitsPerSecond: 45_000_000)
 
     private func notice(
         method: PlayMethod = .transcode,

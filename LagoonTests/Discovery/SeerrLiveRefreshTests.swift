@@ -279,7 +279,7 @@ private nonisolated struct RecordedDetailRequest: Sendable {
 /// matching the original single-recorder behavior. Serves one Seerr
 /// request, its TMDB details and Jellyfin item. Can go dark on command to
 /// simulate an outage.
-private enum SeerrDetailFixture {
+private nonisolated enum SeerrDetailFixture {
     private static let lock = NSLock()
     private nonisolated(unsafe) static var recorded: [RecordedDetailRequest] = []
     private nonisolated(unsafe) static var requestJSON = ""

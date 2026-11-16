@@ -198,7 +198,7 @@ struct PersonPageModelTests {
 
 /// Tom Hanks on both servers: the library holds Forrest Gump, TMDB adds Big.
 /// Paths answer from a table that tests can edit. A nil body fails the call.
-private enum PersonPageFixture {
+private nonisolated enum PersonPageFixture {
     private static let lock = NSLock()
     private nonisolated(unsafe) static var bodies: [String: String] = [:]
     private nonisolated(unsafe) static var recorded: [String] = []

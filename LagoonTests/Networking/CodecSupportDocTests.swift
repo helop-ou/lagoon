@@ -152,7 +152,7 @@ enum CodecSupportDocument {
         for (codec, conditions) in rows {
             let text = conditions.isEmpty
                 ? "None beyond the container"
-                : conditions.map(describe).joined(separator: "<br>")
+                : conditions.map { describe($0) }.joined(separator: "<br>")
             out += "| `\(codec)` | \(text) |\n"
         }
         return out + "\n"

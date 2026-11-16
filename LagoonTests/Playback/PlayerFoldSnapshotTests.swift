@@ -75,9 +75,10 @@ struct PlayerFoldSnapshotTests {
             .environment(\.displayScale, Snapshot.scale))
         host.view.backgroundColor = .black
         host.safeAreaRegions = []
-        let window = UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }.first
-            .map { UIWindow(windowScene: $0) } ?? UIWindow()
+        // The tests run inside the app, so its scene is there.
+        guard let scene = UIApplication.shared.connectedScenes
+            .compactMap({ $0 as? UIWindowScene }).first else { return nil }
+        let window = UIWindow(windowScene: scene)
         window.frame = CGRect(origin: .zero, size: size)
         window.overrideUserInterfaceStyle = .dark
         window.rootViewController = host

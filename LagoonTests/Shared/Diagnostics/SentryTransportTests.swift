@@ -6,7 +6,7 @@ import Testing
 /// Fixture state for `SentryTransportTests`. The DSN host is fixed, and
 /// `responder` is reassigned mid-test to script a sequence of responses.
 /// The body is always the same placeholder envelope acknowledgement.
-private enum SentryFixture {
+private nonisolated enum SentryFixture {
     private nonisolated struct State: Sendable {
         var responder: @Sendable (URLRequest) -> (status: Int, headers: [String: String]) = { _ in (200, [:]) }
         var recorded: [URLRequest] = []

@@ -124,7 +124,7 @@ struct PlaybackStartWatchTests {
         clock.hold = true
         let watch = PlaybackStartWatch(sleep: clock.sleep, uptime: { clock.now }, isAppActive: { true })
         var engine: SampleBufferPlayerEngine? = SampleBufferPlayerEngine()
-        weak var probe = engine
+        weak let probe = engine
         let recorder = Recorder()
         watch.begin(try #require(engine)) { recorder.stalls.append($0) }
         try await Polling.untilMainActor(timeout: .seconds(5), pollInterval: .milliseconds(1)) {
