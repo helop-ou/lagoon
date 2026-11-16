@@ -15,6 +15,13 @@ nonisolated protocol RememberedTrackChoice: Codable, Equatable {
     var layout: String { get }
 }
 
+extension RememberedTrackChoice {
+    /// The defaults key every account's choices of this kind are stored
+    /// under, before the account id. `AccountLocalData` lists it, so the
+    /// choices go when the account does.
+    static var memoryKeyPrefix: String { "playback.\(memoryNamespace)." }
+}
+
 /// What a layout stream offers the description match: the two fields a
 /// remembered choice can name it by.
 nonisolated protocol TrackLayoutEntry {
@@ -170,6 +177,6 @@ final class TrackMemoryStore<Choice: RememberedTrackChoice> {
     }
 
     private static func key(_ accountID: String) -> String {
-        "playback.\(Choice.memoryNamespace).\(accountID)"
+        Choice.memoryKeyPrefix + accountID
     }
 }
