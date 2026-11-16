@@ -152,6 +152,25 @@ final class SettingsUITests: XCTestCase {
         app.staticTexts["Lagoon"].firstMatch.tap()
     }
 
+    func testSeasonalThemesSwitchIsOnAndRemembersBeingTurnedOff() {
+        let app = launchSettings()
+        defer { app.terminate() }
+        openCategory("appearance", title: "Appearance", in: app)
+        let seasons = app.switches["settings.appearance.seasonal"]
+        reveal(seasons, in: app)
+        expectValue(seasons, "1")
+        attachFullScreenshot(named: "appearance-seasonal-themes")
+        tapToggle(seasons, in: app)
+        expectValue(seasons, "0")
+        goBack(to: "Settings", in: app)
+        openCategory("appearance", title: "Appearance", in: app)
+        reveal(seasons, in: app)
+        expectValue(seasons, "0")
+        // Back on, as a new profile has it.
+        tapToggle(seasons, in: app)
+        expectValue(seasons, "1")
+    }
+
     private func launchSettings(contentSize: String = "UICTContentSizeCategoryL") -> XCUIApplication {
         let app = XCUIApplication.regression(
             extra: [
