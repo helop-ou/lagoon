@@ -340,12 +340,22 @@ private struct SetupChoiceRow<Value: Hashable>: View {
         HStack {
             Text(title)
             Spacer()
-            Picker(title, selection: $selection) {
-                ForEach(options) { option in
-                    Text(option.title).tag(option.value)
+            // A menu with its own label, not a menu-style picker: at one
+            // pixel a point the picker's label is a hair too narrow for its
+            // text, which then breaks mid-word.
+            Menu {
+                Picker(title, selection: $selection) {
+                    ForEach(options) { option in
+                        Text(option.title).tag(option.value)
+                    }
+                }
+            } label: {
+                HStack(spacing: Metrics.Space.xs) {
+                    Text(options.first { $0.value == selection }?.title ?? "")
+                    Image(systemName: "chevron.up.chevron.down")
+                        .font(.footnote.weight(.semibold))
                 }
             }
-            .labelsHidden()
             .accessibilityIdentifier(identifier)
         }
         .modifier(SetupRow())
