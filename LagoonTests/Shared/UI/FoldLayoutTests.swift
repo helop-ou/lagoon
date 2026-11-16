@@ -1,5 +1,6 @@
 #if os(iOS)
 import CoreGraphics
+import SwiftUI
 import Testing
 @testable import Lagoon
 
@@ -69,6 +70,39 @@ struct FoldLayoutTests {
             scaledPosterWidth: Metrics.posterWidth,
             spacing: Metrics.wideCardSpacing
         ))
+    }
+
+    /// The laptop pose, on the open Duo held tall.
+    @Test func aFoldAcrossAViewSplitsItAboveAndBelow() throws {
+        let split = try #require(FoldLayout.split(
+            folds: [CGRect(x: 0, y: 470, width: 669, height: 12)],
+            size: CGSize(width: 669, height: 951)
+        ))
+        #expect(split.isStacked)
+        #expect(split.before == EdgeInsets(top: 0, leading: 0, bottom: 481, trailing: 0))
+        #expect(split.after == EdgeInsets(top: 482, leading: 0, bottom: 0, trailing: 0))
+        #expect(split.insets(.before) == split.before)
+        #expect(split.insets(.after) == split.after)
+    }
+
+    /// The book pose, on the open Duo held wide.
+    @Test func aFoldDownAViewSplitsItSideBySide() throws {
+        let split = try #require(FoldLayout.split(
+            folds: [CGRect(x: 470, y: 0, width: 12, height: 669)],
+            size: CGSize(width: 951, height: 669)
+        ))
+        #expect(!split.isStacked)
+        #expect(split.before == EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 481))
+        #expect(split.after == EdgeInsets(top: 0, leading: 482, bottom: 0, trailing: 0))
+    }
+
+    @Test func onlyAFoldInsideAViewSplitsIt() {
+        let size = CGSize(width: 669, height: 951)
+        #expect(FoldLayout.split(folds: [], size: size) == nil)
+        // At an edge or past it, as for a view on one half.
+        #expect(FoldLayout.split(folds: [CGRect(x: 0, y: 0, width: 669, height: 12)], size: size) == nil)
+        #expect(FoldLayout.split(folds: [CGRect(x: 0, y: 945, width: 669, height: 12)], size: size) == nil)
+        #expect(FoldLayout.split(folds: [CGRect(x: 669, y: 0, width: 12, height: 951)], size: size) == nil)
     }
 }
 #endif
