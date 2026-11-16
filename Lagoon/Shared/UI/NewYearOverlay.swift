@@ -264,7 +264,7 @@ struct NewYearGreeting: View {
                 .frame(width: proxy.size.width)
                 .position(x: proxy.size.width / 2, y: proxy.size.height * Self.height)
             }
-            .opacity(time.map(Self.presence) ?? 1)
+            .opacity(time.map { Self.presence(at: $0) } ?? 1)
         }
     }
 
