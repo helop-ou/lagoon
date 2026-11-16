@@ -554,9 +554,14 @@ waves toward the page, and climbs back up hand over hand: 2.8 seconds down,
   does Spooky's spider.
 - It swings by a share of its own height, not by an angle: on a long rope
   an angle carried it out of its lane.
-- It is drawn in a canvas its own size at thirty frames a second, and only
-  while one is on the page, so a page costs nothing between visits. Never a
-  full-screen canvas: see the snow above.
+- **In motion it is layers** (`ElfVisitLayers`), which exist only while an
+  elf is on the page: a picture for its body, one for each leg, which turns
+  about its hip, one long picture for the rope, and a line for the arm that
+  waves. The visit is sampled thirty times a second into keyframes and the
+  render server moves everything. `ElfFrame`, the canvas, draws the same
+  art once for the snapshots, from `ElfArt`, `ElfGeometry` and `ElfVisit`.
+  As a canvas redrawn thirty times a second the elf held sixty frames a
+  second on the Apple TV but took 15 % of a core for its fifteen seconds.
 - Its red, skin and gold are `ChristmasInk`, the sleigh driver's.
 - `-debug.elfVisit YES` sends one three seconds after a page appears and
   every five after, whatever the date, on a DEBUG build.
