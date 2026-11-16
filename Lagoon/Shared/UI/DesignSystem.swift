@@ -387,6 +387,9 @@ enum Motion {
     static let spiderDrop: TimeInterval = 20
     /// A ghost's crossing of a haunted page's background.
     static let ghostCrossing: TimeInterval = 16
+    /// How often a snowy page's falling snow is drawn. Snow drifts slowly
+    /// enough that half the display's rate shows no difference.
+    static let snowFramesPerSecond: Float = 30
 }
 
 // Brand colors are only for branding: progress fills, the lockup, selection

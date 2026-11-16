@@ -138,9 +138,9 @@ struct SnowfallFrame: View {
 }
 
 /// The moving snow, as Core Animation layers: one small layer a flake, moved
-/// by the render server, so a page costs nothing to keep snowing. One canvas
-/// redrawn thirty times a second took a third of a processor core on the
-/// Apple TV.
+/// by the render server thirty times a second, so the app does nothing to
+/// keep a page snowing. One canvas redrawn thirty times a second took a
+/// third of a processor core on the Apple TV.
 struct SnowfallLayers: UIViewRepresentable {
     let color: Color
 
@@ -244,6 +244,7 @@ final class SnowfallLayerView: UIView {
         fall.duration = seconds
         fall.repeatCount = .infinity
         fall.timeOffset = Snowfall.progress(of: flake, at: now) * seconds
+        Self.pace(fall)
         flakeLayer.add(fall, forKey: Self.fallKey)
 
         let lane = flake.lane * bounds.width
@@ -256,6 +257,7 @@ final class SnowfallLayerView: UIView {
         sway.repeatCount = .infinity
         sway.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
         sway.timeOffset = flake.phase / (2 * .pi) * Snowfall.swayPeriod
+        Self.pace(sway)
         flakeLayer.add(sway, forKey: Self.swayKey)
 
         guard pose.isCrystal else { return }
@@ -264,7 +266,17 @@ final class SnowfallLayerView: UIView {
         spin.toValue = pose.turn + 2 * .pi
         spin.duration = 2 * .pi / Snowfall.spin
         spin.repeatCount = .infinity
+        Self.pace(spin)
         flakeLayer.add(spin, forKey: Self.spinKey)
+    }
+
+    /// Holds an animation to the snow's own frame rate. While anything on
+    /// the page moves, the system draws the whole screen again for every
+    /// frame, so snow at the display's rate cost the Apple TV twice what
+    /// snow this slow needs.
+    private static func pace(_ animation: CAAnimation) {
+        let rate = Motion.snowFramesPerSecond
+        animation.preferredFrameRateRange = CAFrameRateRange(minimum: rate, maximum: rate, preferred: rate)
     }
 
     static let fallKey = "fall"
