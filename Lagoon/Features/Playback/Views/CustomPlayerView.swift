@@ -707,7 +707,13 @@ struct CustomPlayerView<Surface: View>: View {
     }
 
     private var transportVisible: Bool {
-        (controlsVisible || voiceOverEnabled || engine.isPaused || isScrubbing) && !panelOpen
+        PlayerTransportVisibility(
+            isRevealed: controlsVisible,
+            voiceOver: voiceOverEnabled,
+            isPaused: engine.isPaused,
+            isScrubbing: isScrubbing,
+            panelOpen: panelOpen
+        ).isVisible
     }
 
     /// Needs a known duration. Deliberately not gated on pause.
