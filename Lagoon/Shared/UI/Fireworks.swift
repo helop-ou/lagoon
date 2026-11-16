@@ -96,8 +96,13 @@ nonisolated enum Fireworks {
     /// How present the show is, 0 to 1: it fades in as it starts and out as
     /// the last sparks die.
     static func presence(at time: Double) -> Double {
-        max(0, min(1, time / 0.6, (duration - time) / 1.4))
+        max(0, min(1, time / fadeIn, (duration - time) / fadeOut))
     }
+
+    static let fadeIn: Double = 0.6
+    static let fadeOut: Double = 1.4
+    /// How dark the page goes under the show: enough that it does not fight it.
+    static let scrim: Double = 0.7
 
     /// The opening shell, the shells that build, then the closing volley.
     static func show(tints: Int, seed: UInt64) -> [Shell] {
@@ -185,12 +190,41 @@ nonisolated enum Fireworks {
     static func rocket(of shell: Shell, at time: Double, in page: CGSize) -> Streak? {
         let age = time - shell.launch
         guard age >= 0, age < climb else { return nil }
-        func point(_ age: Double) -> CGPoint {
-            let share = max(0, min(1, age / climb))
-            let risen = 1 - pow(1 - share, 2)
-            return CGPoint(x: shell.lane * page.width, y: page.height * (1 - risen * (1 - shell.apex)))
-        }
-        return Streak(from: point(age - 0.12), to: point(age), opacity: 0.7)
+        return Streak(
+            from: rocketPoint(of: shell, aged: age - rocketTail, in: page),
+            to: rocketPoint(of: shell, aged: age, in: page), opacity: rocketOpacity
+        )
+    }
+
+    /// How much of a second the rocket's tail trails behind it, and how
+    /// bright it is.
+    static let rocketTail: Double = 0.12
+    static let rocketOpacity: Double = 0.7
+
+    /// Where the rocket is so long after leaving the ground: fast at first,
+    /// slowing to a stop where it bursts.
+    static func rocketPoint(of shell: Shell, aged age: Double, in page: CGSize) -> CGPoint {
+        let share = max(0, min(1, age / climb))
+        let risen = 1 - pow(1 - share, 2)
+        return CGPoint(x: shell.lane * page.width, y: page.height * (1 - risen * (1 - shell.apex)))
+    }
+
+    /// Where a spark is so long after its shell burst: fast out of the
+    /// burst, then slowing, and falling all the while.
+    static func point(of spark: Spark, in shell: Shell, aged age: Double, in page: CGSize) -> CGPoint {
+        let reach = shell.reach * min(page.width, page.height)
+        let share = max(0, age / shell.kind.burn)
+        let spread = (1 - exp(-3.6 * share)) / (1 - exp(-3.6))
+        return CGPoint(
+            x: shell.lane * page.width + cos(spark.angle) * reach * spark.speed * spread,
+            y: shell.apex * page.height + sin(spark.angle) * reach * spark.speed * spread
+                + reach * shell.kind.droop * share * share
+        )
+    }
+
+    /// How bright a burst is this far through its burn, 0 to 1.
+    static func strength(burnt share: Double) -> Double {
+        1 - pow(share, 3)
     }
 
     /// The flash as the shell bursts. Nil before the burst and once it has
@@ -211,26 +245,17 @@ nonisolated enum Fireworks {
         let burn = shell.kind.burn
         let age = time - shell.launch - climb
         guard age >= 0, age < burn else { return nil }
-        let center = CGPoint(x: shell.lane * page.width, y: shell.apex * page.height)
-        let reach = shell.reach * min(page.width, page.height)
-        func point(_ spark: Spark, _ age: Double) -> CGPoint {
-            let share = max(0, age / burn)
-            // Fast out of the burst, then slowing, and falling all the while.
-            let spread = (1 - exp(-3.6 * share)) / (1 - exp(-3.6))
-            return CGPoint(
-                x: center.x + cos(spark.angle) * reach * spark.speed * spread,
-                y: center.y + sin(spark.angle) * reach * spark.speed * spread
-                    + reach * shell.kind.droop * share * share
-            )
-        }
         let share = age / burn
         let alight = shell.sparks.filter { share < glitterFrom || isLit($0, at: time) }
         let tail = shell.kind.tail
         return Burst(
-            opacity: 1 - pow(share, 3),
+            opacity: strength(burnt: share),
             trails: alight.map { spark in
                 (0..<tailPoints).map { index in
-                    point(spark, age - tail * (1 - Double(index) / Double(tailPoints - 1)))
+                    point(
+                        of: spark, in: shell, aged: age - tail * (1 - Double(index) / Double(tailPoints - 1)),
+                        in: page
+                    )
                 }
             }
         )

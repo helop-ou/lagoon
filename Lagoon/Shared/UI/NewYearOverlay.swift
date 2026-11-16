@@ -29,13 +29,14 @@ struct NewYearOverlay: View {
     var body: some View {
         ZStack {
             if let startedAt {
-                TimelineView(.animation(paused: reduceMotion)) { timeline in
-                    FireworksFrame(
-                        time: timeline.date.timeIntervalSince(startedAt),
-                        palette: Theme.palette,
-                        year: NewYear.upcomingYear(on: startedAt),
-                        isStill: reduceMotion
-                    )
+                let year = NewYear.upcomingYear(on: startedAt)
+                ZStack {
+                    if reduceMotion {
+                        FireworksFrame(time: 0, palette: Theme.palette, year: year, isStill: true)
+                    } else {
+                        FireworksLayers(startedAt: startedAt, palette: Theme.palette)
+                        NewYearGreetingLayers(startedAt: startedAt, year: year)
+                    }
                 }
                 .transition(.opacity)
             }
@@ -86,16 +87,19 @@ struct FireworksFrame: View {
     /// One full moment at full strength, whatever `time` is.
     var isStill = false
 
-    private static let tintCount = 4
-    private static let shells = Fireworks.show(tints: tintCount, seed: 2027)
-    /// Dark enough that the page under the show does not fight it.
-    private static let scrim = 0.7
+    static let tintCount = 4
+
+    /// The show's colours: the theme's two, gold and white.
+    static func tints(for palette: ThemePalette) -> [Color] {
+        [palette.accent, palette.signal, NewYearGreeting.gold, Color.white]
+    }
+    static let shells = Fireworks.show(tints: tintCount, seed: 2027)
 
     var body: some View {
         let moment = isStill ? Fireworks.stillMoment : time
-        let tints = [palette.accent, palette.signal, NewYearGreeting.gold, Color.white]
+        let tints = Self.tints(for: palette)
         ZStack {
-            Color.black.opacity(Self.scrim * (isStill ? 1 : Fireworks.presence(at: time)))
+            Color.black.opacity(Fireworks.scrim * (isStill ? 1 : Fireworks.presence(at: time)))
             Canvas { context, size in
                 context.blendMode = .plusLighter
                 for shell in Self.shells {
@@ -177,7 +181,7 @@ struct NewYearGreeting: View {
     let year: Int
 
     static let gold = Color(red: 1, green: 0xD7 / 255, blue: 0x78 / 255)
-    private static let paleGold = Color(red: 1, green: 0xF6 / 255, blue: 0xD6 / 255)
+    static let paleGold = Color(red: 1, green: 0xF6 / 255, blue: 0xD6 / 255)
     private static let deepGold = Color(red: 0xF0 / 255, green: 0xA6 / 255, blue: 0x30 / 255)
     /// It arrives with the opening burst and leaves before the last sparks.
     static let arrives: Double = 1.5
@@ -187,52 +191,92 @@ struct NewYearGreeting: View {
     /// When a shine starts across the numerals, and how long it takes.
     private static let shines: [Double] = [arrives + 0.8, 5.6, Fireworks.finale + 0.5]
     private static let shineTime: Double = 1.1
+    /// How wide the band of light is, as a share of the numerals' width.
+    static let shineWidth = 0.4
     /// The middle of the greeting, as a share of the page's height.
-    private static let height = 0.56
-    private static let stars = NewYearGreeting.scatter(count: 16, seed: 31)
+    static let height = 0.56
+    static let stars = NewYearGreeting.scatter(count: 16, seed: 31)
 
-    private var digits: [Character] { Array(year.formatted(.number.grouping(.never))) }
+    static func digits(of year: Int) -> [Character] { Array(year.formatted(.number.grouping(.never))) }
+
+    private var digits: [Character] { Self.digits(of: year) }
+
+    // MARK: - Pieces
+
+    /// The line above the numerals, as it stands.
+    static var title: some View {
+        Text("Happy New Year")
+            .textCase(.uppercase)
+            .font(.system(.title, design: .rounded, weight: .bold))
+            .tracking(Metrics.newYearTracking)
+            .lineLimit(1)
+            .minimumScaleFactor(0.5)
+            .foregroundStyle(.white)
+    }
+
+    /// One numeral, in whatever it is filled with.
+    static func numeral(_ digit: Character, size: Double = Metrics.newYearNumeralSize) -> some View {
+        Text(String(digit))
+            .font(.system(size: size, weight: .black, design: .rounded))
+            .lineLimit(1)
+    }
+
+    static let numeralFill = LinearGradient(colors: [paleGold, gold, deepGold], startPoint: .top, endPoint: .bottom)
+    static let numeralGlow = gold.opacity(0.5)
+    static let shadow = Color.black.opacity(0.65)
+
+    // MARK: - Moments
+
+    /// When a numeral pops in, by its place in the year.
+    static func arrival(ofNumeral index: Int) -> Double {
+        arrives + Double(index) * stagger
+    }
+
+    static let titleArrives = arrives + 0.45
+    static let titleRise = 0.5
+    static let numeralRise = 0.12
+
+    /// How present the whole greeting is: full until it leaves with the
+    /// last sparks.
+    static func presence(at time: Double) -> Double {
+        max(0, min(1, (leaves - time) / 1.1))
+    }
+
+    /// How bright a star is at a moment.
+    static func brightness(of star: Star, at time: Double) -> Double {
+        pow(max(0, sin(time * star.speed + star.phase)), 3) * rise(since: arrives + 0.3, at: time, over: 0.6)
+    }
 
     var body: some View {
         GeometryReader { proxy in
             ZStack {
                 Canvas { context, size in drawStars(in: &context, size: size) }
                 VStack(spacing: Metrics.Space.s) {
-                    Text("Happy New Year")
-                        .textCase(.uppercase)
-                        .font(.system(.title, design: .rounded, weight: .bold))
-                        .tracking(Metrics.newYearTracking)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.5)
-                        .foregroundStyle(.white)
-                        .opacity(Self.rise(since: Self.arrives + 0.45, at: time, over: 0.5))
+                    Self.title
+                        .opacity(Self.rise(since: Self.titleArrives, at: time, over: Self.titleRise))
                     numerals
-                        .foregroundStyle(LinearGradient(
-                            colors: [Self.paleGold, Self.gold, Self.deepGold], startPoint: .top, endPoint: .bottom
-                        ))
+                        .foregroundStyle(Self.numeralFill)
                         .overlay { shine.mask(numerals) }
-                        .shadow(color: Self.gold.opacity(0.5), radius: Metrics.Space.xl)
+                        .shadow(color: Self.numeralGlow, radius: Metrics.Space.xl)
                 }
-                .shadow(color: .black.opacity(0.65), radius: Metrics.Space.l)
+                .shadow(color: Self.shadow, radius: Metrics.Space.l)
                 .padding(.horizontal, Metrics.Space.l)
                 .frame(width: proxy.size.width)
                 .position(x: proxy.size.width / 2, y: proxy.size.height * Self.height)
             }
-            .opacity(time.map { max(0, min(1, (Self.leaves - $0) / 1.1)) } ?? 1)
+            .opacity(time.map(Self.presence) ?? 1)
         }
     }
 
     private var numerals: some View {
         HStack(spacing: 0) {
             ForEach(digits.indices, id: \.self) { index in
-                let since = Self.arrives + Double(index) * Self.stagger
-                Text(String(digits[index]))
+                let since = Self.arrival(ofNumeral: index)
+                Self.numeral(digits[index])
                     .scaleEffect(Self.pop(since: since, at: time))
-                    .opacity(Self.rise(since: since, at: time, over: 0.12))
+                    .opacity(Self.rise(since: since, at: time, over: Self.numeralRise))
             }
         }
-        .font(.system(size: Metrics.newYearNumeralSize, weight: .black, design: .rounded))
-        .lineLimit(1)
         .minimumScaleFactor(0.5)
     }
 
@@ -253,8 +297,7 @@ struct NewYearGreeting: View {
         let center = CGPoint(x: size.width / 2, y: size.height * Self.height)
         let spread = Metrics.newYearNumeralSize
         for star in Self.stars {
-            let twinkle = time.map { pow(max(0, sin($0 * star.speed + star.phase)), 3) } ?? star.rest
-            let shown = twinkle * Self.rise(since: Self.arrives + 0.3, at: time, over: 0.6)
+            let shown = time.map { Self.brightness(of: star, at: $0) } ?? star.rest
             guard shown > 0.02 else { continue }
             let at = CGPoint(x: center.x + star.offset.x * spread, y: center.y + star.offset.y * spread)
             context.fill(
