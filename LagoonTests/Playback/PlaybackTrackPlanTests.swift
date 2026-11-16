@@ -283,6 +283,89 @@ struct PlaybackTrackPlanTests {
         #expect(choice.isOff)
     }
 
+    // MARK: Closed captions
+
+    private var captions: Int { PlayerTrack.closedCaptionsEngineID }
+
+    private func always(mode: SubtitleDefaultMode = .always) -> TrackSelectionSettings {
+        TrackSelectionSettings(subtitleMode: mode, preferredAudioLanguages: ["en"], preferredSubtitleLanguages: ["en"])
+    }
+
+    /// The captions are no stream in the layout, so the choice says so.
+    @Test func choosingClosedCaptionsIsRememberedAsCaptions() throws {
+        let plan = plan(subtitles: [try stream("Subtitle", index: 4, language: "eng")])
+        #expect(!plan.wantsClosedCaptions)
+        guard case .remember(let choice) = plan.subtitleMemoryUpdate(selected: captions, engineTrackCount: 2) else {
+            Issue.record("expected the captions to be remembered")
+            return
+        }
+        #expect(choice.isClosedCaptions == true)
+        #expect(!choice.isOff)
+        #expect(choice.language == nil)
+    }
+
+    /// They join the engine's list late, so the title starts on what it
+    /// would have anyway and the plan asks for them once they turn up.
+    @Test func rememberedCaptionsAreAskedForWithoutChangingWhereTheTitleStarts() throws {
+        let subtitles = [try stream("Subtitle", index: 4, language: "eng")]
+        let remembered = RememberedSubtitleChoice(isClosedCaptions: true, ordinal: captions, layout: "")
+        let chosen = plan(subtitles: subtitles, defaultSubtitle: 4, rememberedSubtitle: remembered)
+        let untouched = plan(subtitles: subtitles, defaultSubtitle: 4)
+
+        #expect(chosen.wantsClosedCaptions)
+        #expect(chosen.initialSubtitleOrdinal == untouched.initialSubtitleOrdinal)
+        // Not automatic: the viewer chose them, so picking them again is kept.
+        #expect(!chosen.closedCaptionsAreAutomatic)
+    }
+
+    @Test func captionsCarryToTheNextEpisodeUnlessTheShowRemembersOtherwise() throws {
+        let previous = plan(subtitles: [try stream("Subtitle", index: 4, language: "eng")])
+        let carry = previous.carry(selectedAudio: nil, selectedSubtitle: captions)
+        #expect(carry.subtitleClosedCaptions)
+        #expect(!carry.subtitlesOff)
+        #expect(carry.subtitleLanguage == nil)
+
+        #expect(plan(carry: carry).wantsClosedCaptions)
+        let off = RememberedSubtitleChoice(isOff: true, ordinal: 0, layout: "")
+        #expect(!plan(carry: carry, rememberedSubtitle: off).wantsClosedCaptions)
+        // A carried track or a carried off is no request for captions.
+        #expect(!plan(carry: previous.carry(selectedAudio: nil, selectedSubtitle: 1)).wantsClosedCaptions)
+        #expect(!plan(carry: previous.carry(selectedAudio: nil, selectedSubtitle: nil)).wantsClosedCaptions)
+    }
+
+    /// Recordings often carry captions and no subtitle track at all.
+    @Test func settingsThatAlwaysShowSubtitlesAskForCaptionsWhereNoTrackExists() throws {
+        #expect(plan(settings: always()).wantsClosedCaptions)
+        #expect(plan(settings: always(mode: .system), captionDisplay: .alwaysOn).wantsClosedCaptions)
+        #expect(!plan(settings: always(mode: .system), captionDisplay: .automatic).wantsClosedCaptions)
+        #expect(!plan(settings: always(mode: .smart)).wantsClosedCaptions)
+        #expect(!plan(settings: always(mode: .off)).wantsClosedCaptions)
+        // A real track answers the setting.
+        let subtitled = plan(subtitles: [try stream("Subtitle", index: 4, language: "eng")], settings: always())
+        #expect(!subtitled.wantsClosedCaptions)
+        // Off, carried or remembered, still wins.
+        let carriedOff = plan().carry(selectedAudio: nil, selectedSubtitle: nil)
+        #expect(!plan(settings: always(), carry: carriedOff).wantsClosedCaptions)
+        let rememberedOff = RememberedSubtitleChoice(isOff: true, ordinal: 0, layout: "")
+        #expect(!plan(settings: always(), rememberedSubtitle: rememberedOff).wantsClosedCaptions)
+        #expect(!plan(settings: always(), bench: "en").wantsClosedCaptions)
+    }
+
+    /// What the settings picked is no override, but turning it off is.
+    @Test func captionsTheSettingsPickedAreNotRememberedAndTurningThemOffIs() throws {
+        let plan = plan(settings: always())
+        #expect(plan.closedCaptionsAreAutomatic)
+        guard case .forget = plan.subtitleMemoryUpdate(selected: captions, engineTrackCount: 1) else {
+            Issue.record("expected automatic captions to leave nothing remembered")
+            return
+        }
+        guard case .remember(let choice) = plan.subtitleMemoryUpdate(selected: nil, engineTrackCount: 1) else {
+            Issue.record("expected off to be remembered")
+            return
+        }
+        #expect(choice.isOff)
+    }
+
     @Test func aSearchedSubtitleIsNotRemembered() throws {
         var plan = plan(subtitles: [try stream("Subtitle", index: 4, language: "eng")])
         plan.appendSearchedSubtitle(try stream("Subtitle", index: 99, language: "fra", external: true))
