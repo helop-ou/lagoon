@@ -299,8 +299,15 @@ struct SetupSubtitleLookStepView: View {
 
 /// Whether failures are reported to the developer, and what a report holds.
 struct SetupReportsStepView: View {
-    @AppStorage(DiagnosticsPreference.reportingEnabledKey)
-    private var sendsReports = DiagnosticsPreference.defaultReportingEnabled
+    @AppStorage private var sendsReports: Bool
+
+    /// The app's own settings, unless a test brings its own.
+    init(defaults: UserDefaults = .standard) {
+        _sendsReports = AppStorage(
+            wrappedValue: DiagnosticsPreference.defaultReportingEnabled,
+            DiagnosticsPreference.reportingEnabledKey, store: defaults
+        )
+    }
 
     var body: some View {
         VStack(spacing: Metrics.Space.l) {
