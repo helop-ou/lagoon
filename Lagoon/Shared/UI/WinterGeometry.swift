@@ -104,6 +104,20 @@ nonisolated enum Snowfall {
         }
     }
 
+    /// Seconds a flake takes from the top of the page to the bottom.
+    static func seconds(of flake: Flake) -> Double {
+        fall.upperBound - (fall.upperBound - fall.lowerBound) * flake.depth
+    }
+
+    /// How far through its fall a flake is, 0 to 1.
+    static func progress(of flake: Flake, at time: TimeInterval) -> Double {
+        (flake.start + time / seconds(of: flake)).truncatingRemainder(dividingBy: 1)
+    }
+
+    /// How far a flake swings to either side of its lane, in its own radii.
+    /// A crystal is wide already. A dot swings further for its size.
+    static func swing(isCrystal: Bool) -> Double { isCrystal ? 1.5 : 3 }
+
     /// `dot` is the farthest soft flake's radius and the nearest's, `crystal`
     /// the same for the flakes close enough to be crystals. A flake enters
     /// and leaves wholly off the page.
@@ -117,10 +131,8 @@ nonisolated enum Snowfall {
         } else {
             dot.lowerBound + (dot.upperBound - dot.lowerBound) * flake.depth / crystalDepth
         }
-        let seconds = fall.upperBound - (fall.upperBound - fall.lowerBound) * flake.depth
-        let progress = (flake.start + time / seconds).truncatingRemainder(dividingBy: 1)
-        // A crystal is wide already. A dot swings further for its size.
-        let sway = sin(time / swayPeriod * 2 * .pi + flake.phase) * size * (isCrystal ? 1.5 : 3)
+        let progress = progress(of: flake, at: time)
+        let sway = sin(time / swayPeriod * 2 * .pi + flake.phase) * size * swing(isCrystal: isCrystal)
         return Pose(
             center: CGPoint(
                 x: flake.lane * page.width + sway,
