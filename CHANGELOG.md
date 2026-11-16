@@ -39,6 +39,7 @@ report. One marketing version spans many builds.
 - Night Mode, Dialogue Boost and a channel limit chosen in the player are kept when you next change something in Settings. Settings used to put the old values back.
 - Series You Haven't Started no longer lists a series you have begun.
 - A card whose picture has no title in it now shows the title, so no row is left with unnamed pictures.
+- A lower quality you accepted after stalls now holds for the next episode too. It used to start at full quality again.
 - The Library's Decade filter lists the decades your library has. It used to come up empty unless a single library was chosen.
 - Removing an account also forgets the audio and subtitle choices Lagoon remembered for it.
 - Seasonal themes arrive on the right days on a device that keeps another calendar, such as the Buddhist or Islamic one.

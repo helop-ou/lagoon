@@ -10,12 +10,12 @@ struct PlaybackSuccessorPreparationTests {
         let expected = try prepared(sourceID: "ready")
         var negotiations = 0
         let subject = PlaybackSuccessorPreparation(
-            negotiate: { _, _ in negotiations += 1; return expected }
+            negotiate: { _, _, _ in negotiations += 1; return expected }
         )
         let staging = StagingSpy()
         defer { subject.cancel() }
         subject.prepare(itemID: expected.mediaID, client: JellyfinClient(deviceId: "successor-tests"),
-                        staging: staging.brief, warms: true)
+                        maxBitrate: nil, staging: staging.brief, warms: true)
         await waitUntil { !subject.isPreparing }
         #expect(staging.staged.map(\.url) == [expected.streamURL])
         #expect(subject.hasPreparation)
@@ -34,7 +34,7 @@ struct PlaybackSuccessorPreparationTests {
         let started = SuccessorTestGate()
         let release = SuccessorTestGate()
         let subject = PlaybackSuccessorPreparation(
-            negotiate: { _, _ in
+            negotiate: { _, _, _ in
                 started.open()
                 await release.wait()
                 return expected
@@ -43,7 +43,7 @@ struct PlaybackSuccessorPreparationTests {
         let staging = StagingSpy()
         defer { subject.cancel() }
         subject.prepare(itemID: expected.mediaID, client: JellyfinClient(deviceId: "successor-tests"),
-                        staging: staging.brief, warms: true)
+                        maxBitrate: nil, staging: staging.brief, warms: true)
         await started.wait()
         let handoff = Task { await subject.preparedForHandoff() }
         await waitUntil { staging.endWarmingCount == 1 }
@@ -57,11 +57,11 @@ struct PlaybackSuccessorPreparationTests {
 
     @Test func forcedPreparationSkipsWarming() async throws {
         let expected = try prepared(sourceID: "forced")
-        let subject = PlaybackSuccessorPreparation(negotiate: { _, _ in expected })
+        let subject = PlaybackSuccessorPreparation(negotiate: { _, _, _ in expected })
         let staging = StagingSpy()
         defer { subject.cancel() }
         subject.prepare(itemID: expected.mediaID, client: JellyfinClient(deviceId: "successor-tests"),
-                        staging: staging.brief, warms: false)
+                        maxBitrate: nil, staging: staging.brief, warms: false)
         #expect(await subject.preparedForHandoff()?.source.id == "forced")
         #expect(staging.staged.map(\.warms) == [false])
     }
@@ -75,7 +75,7 @@ struct PlaybackSuccessorPreparationTests {
         let newRelease = SuccessorTestGate()
         var negotiations = 0
         let subject = PlaybackSuccessorPreparation(
-            negotiate: { _, _ in
+            negotiate: { _, _, _ in
                 negotiations += 1
                 if negotiations == 1 {
                     oldStarted.open()
@@ -90,7 +90,7 @@ struct PlaybackSuccessorPreparationTests {
         let staging = StagingSpy()
         defer { subject.cancel() }
         let client = JellyfinClient(deviceId: "successor-tests")
-        subject.prepare(itemID: old.mediaID, client: client, staging: staging.brief, warms: false)
+        subject.prepare(itemID: old.mediaID, client: client, maxBitrate: nil, staging: staging.brief, warms: false)
         await oldStarted.wait()
         let handoffStarted = SuccessorTestGate()
         let oldHandoff = Task {
@@ -99,7 +99,7 @@ struct PlaybackSuccessorPreparationTests {
         }
         await handoffStarted.wait()
         subject.cancel()
-        subject.prepare(itemID: replacement.mediaID, client: client, staging: staging.brief, warms: false)
+        subject.prepare(itemID: replacement.mediaID, client: client, maxBitrate: nil, staging: staging.brief, warms: false)
         await newStarted.wait()
         oldRelease.open()
         #expect(await oldHandoff.value == nil)
@@ -120,7 +120,7 @@ struct PlaybackSuccessorPreparationTests {
         let release = SuccessorTestGate()
         let finished = SuccessorTestGate()
         var subject: PlaybackSuccessorPreparation? = PlaybackSuccessorPreparation(
-            negotiate: { _, _ in
+            negotiate: { _, _, _ in
                 started.open()
                 await release.wait()
                 finished.open()
@@ -129,7 +129,7 @@ struct PlaybackSuccessorPreparationTests {
         )
         let staging = StagingSpy()
         subject?.prepare(itemID: expected.mediaID, client: JellyfinClient(deviceId: "successor-tests"),
-                         staging: staging.brief, warms: true)
+                         maxBitrate: nil, staging: staging.brief, warms: true)
         await started.wait()
         weak let released = subject
         subject = nil
@@ -142,11 +142,11 @@ struct PlaybackSuccessorPreparationTests {
     @Test func releasingOwnerDiscardsItsStagedScope() async throws {
         let expected = try prepared(sourceID: "released")
         var subject: PlaybackSuccessorPreparation? = PlaybackSuccessorPreparation(
-            negotiate: { _, _ in expected }
+            negotiate: { _, _, _ in expected }
         )
         let staging = StagingSpy()
         subject?.prepare(itemID: expected.mediaID, client: JellyfinClient(deviceId: "successor-tests"),
-                         staging: staging.brief, warms: true)
+                         maxBitrate: nil, staging: staging.brief, warms: true)
         await waitUntil { !staging.staged.isEmpty }
         weak let released = subject
         subject = nil
@@ -172,7 +172,7 @@ struct PlaybackSuccessorPreparationTests {
         }
         defer { StubURLProtocol.unregister(host: host) }
         let client = StubURLProtocol.makeJellyfinClient(host: host, deviceId: "successor-tests")
-        return try await PlaybackSuccessorPreparation.negotiate(itemID: "episode-2", client: client)
+        return try await PlaybackSuccessorPreparation.negotiate(itemID: "episode-2", client: client, maxBitrate: nil)
     }
 
     private static let plainFile = #"{"Id":"file","Container":"mkv","SupportsDirectPlay":true}"#

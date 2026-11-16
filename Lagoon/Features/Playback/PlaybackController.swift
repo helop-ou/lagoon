@@ -1069,8 +1069,7 @@ final class PlaybackController {
     /// Negotiates and warms the successor in the last two minutes of a
     /// title.
     private func prepareNextIfNeeded(force: Bool = false) {
-        guard !successorPreparation.hasPreparation,
-              let next = nextUp, let client else { return }
+        guard let next = nextUp, let client else { return }
         if !force {
             guard let engine, engine.duration > 0,
                   engine.duration - engine.timePosition <= 120 else { return }
@@ -1079,6 +1078,7 @@ final class PlaybackController {
         successorPreparation.prepare(
             itemID: next.id,
             client: client,
+            maxBitrate: qualityCap,
             staging: successorStaging,
             warms: !isAdvancing
         )
