@@ -243,11 +243,12 @@ nonisolated enum GhostFlight {
         return hour >= 19 || hour < 6
     }
 
-    /// From 17:00 on 31 October until morning.
+    /// From 17:00 on Halloween until morning.
     static func isHalloweenNight(_ date: Date, calendar: Calendar) -> Bool {
-        let parts = calendar.dateComponents([.month, .day, .hour], from: date)
-        guard let month = parts.month, let day = parts.day, let hour = parts.hour else { return false }
-        return (month == 10 && day == 31 && hour >= 17) || (month == 11 && day == 1 && hour < 6)
+        let hour = calendar.component(.hour, from: date)
+        if hour >= 17 { return SeasonalCalendar.halloween.isDay(of: date, calendar: calendar) }
+        guard hour < 6, let yesterday = calendar.date(byAdding: .day, value: -1, to: date) else { return false }
+        return SeasonalCalendar.halloween.isDay(of: yesterday, calendar: calendar)
     }
 
     static func plan(at date: Date, calendar: Calendar, using random: inout some RandomNumberGenerator) -> Plan {
