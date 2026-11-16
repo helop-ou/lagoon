@@ -8,7 +8,7 @@ import UIKit
 @Suite("Santa's sleigh in motion")
 @MainActor
 struct SantaFlightLayerTests {
-    private static let page = CGSize(width: 1920, height: 1080)
+    private nonisolated static let page = CGSize(width: 1920, height: 1080)
 
     private func flight(startedAt: Date = .now, size: CGSize = page) -> SantaFlightLayerView {
         let view = SantaFlightLayerView(startedAt: startedAt)

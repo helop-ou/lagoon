@@ -90,20 +90,20 @@ nonisolated enum ElfVisit {
     // MARK: - On the page
 
     /// Where the rope is tied, well above the page, in points from its top.
-    static var knot: Double { -Metrics.elfSize * 1.5 }
+    @MainActor static var knot: Double { -Metrics.elfSize * 1.5 }
     /// Points to one of the elf's own units.
-    static var unit: Double { Metrics.elfSize / 100 }
+    @MainActor static var unit: Double { Metrics.elfSize / 100 }
 
     /// How far below the page's top the elf's upper hand is: out of sight
     /// above it at no reach, at the rope's end at full.
-    static func grip(of pose: Pose, depth: Double) -> Double {
+    @MainActor static func grip(of pose: Pose, depth: Double) -> Double {
         let hidden = -(ElfGeometry.bottom + 6) * unit
         return hidden + (depth * Metrics.elfDrop - hidden) * pose.reach
     }
 
     /// How far the rope leans from its knot, in radians, to carry the elf
     /// its sway to one side.
-    static func lean(of pose: Pose, depth: Double) -> Double {
+    @MainActor static func lean(of pose: Pose, depth: Double) -> Double {
         -asin(pose.sway * Metrics.elfSize / max(grip(of: pose, depth: depth) - knot, Metrics.elfSize))
     }
 
