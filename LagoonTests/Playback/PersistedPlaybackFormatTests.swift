@@ -160,6 +160,48 @@ struct PersistedPlaybackFormatTests {
         }
     }
 
+    /// A build that adds a setting reads records written without it. They
+    /// must keep what they hold, not go back to the defaults.
+    @MainActor
+    @Test func subtitlePreferencesSavedBeforeAFieldExistedKeepTheRest() throws {
+        try withDefaults { defaults in
+            defaults.set(Data(#"""
+            {"followsSystemAppearance":false,"textSize":"extraLarge","languageOverrides":["et"]}
+            """#.utf8), forKey: "subtitles.preferences.account-1")
+
+            let store = SubtitlePreferencesStore(defaults: defaults)
+            store.configure(accountID: "account-1")
+            #expect(store.values == SubtitlePreferenceValues(
+                followsSystemAppearance: false,
+                textSize: .extraLarge,
+                languageOverrides: ["et"]
+            ))
+        }
+    }
+
+    /// A value this build does not know, such as one a newer build wrote,
+    /// falls back alone.
+    @MainActor
+    @Test func aSubtitlePreferenceThisBuildDoesNotKnowFallsBackAlone() throws {
+        try withDefaults { defaults in
+            defaults.set(Data(#"""
+            {"followsSystemAppearance":false,"textSize":"enormous","edgeStyle":"outline",
+             "background":7,"verticalPosition":"high","languageOverrides":["et"],
+             "missingMode":"automaticSearch"}
+            """#.utf8), forKey: "subtitles.preferences.account-1")
+
+            let store = SubtitlePreferencesStore(defaults: defaults)
+            store.configure(accountID: "account-1")
+            #expect(store.values == SubtitlePreferenceValues(
+                followsSystemAppearance: false,
+                edgeStyle: .outline,
+                verticalPosition: .high,
+                languageOverrides: ["et"],
+                missingMode: .automaticSearch
+            ))
+        }
+    }
+
     @MainActor
     @Test func subtitlePreferencesAreWrittenUnderTheFrozenKeyWithRawValues() throws {
         try withDefaults { defaults in
