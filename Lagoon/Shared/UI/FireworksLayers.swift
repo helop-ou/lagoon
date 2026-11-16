@@ -21,9 +21,7 @@ struct FireworksLayers: UIViewRepresentable {
     }
 }
 
-final class FireworksLayerView: UIView {
-    /// When the show began, on the layers' own clock.
-    let began: CFTimeInterval
+final class FireworksLayerView: TimedLayerView {
     var tints: [UIColor] {
         didSet { if tints != oldValue { rebuild() } }
     }
@@ -32,7 +30,6 @@ final class FireworksLayerView: UIView {
     /// One layer a shell that is on the page or about to be, by its place in
     /// the show.
     private(set) var shellLayers: [Int: CALayer] = [:]
-    private var builtSize: CGSize = .zero
     /// Bumped by every rebuild, so a shell waiting to be added to an older
     /// build is not.
     private var build = 0
@@ -50,54 +47,22 @@ final class FireworksLayerView: UIView {
     static let dimKey = "dim"
     static let flyKey = "fly"
 
-    init(startedAt: Date, tints: [UIColor], now: CFTimeInterval = CACurrentMediaTime()) {
-        began = now - Date.now.timeIntervalSince(startedAt)
+    init(startedAt: Date, tints: [UIColor]) {
         self.tints = tints
-        super.init(frame: .zero)
-        isUserInteractionEnabled = false
-        backgroundColor = .clear
-        // Going to the background removes every animation.
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(resume), name: UIApplication.didBecomeActiveNotification, object: nil
-        )
+        super.init(startedAt: startedAt)
     }
 
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) is not used")
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        if bounds.size != builtSize { rebuild() }
-    }
-
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
-        // Leaving a window removes them too.
-        if window != nil { rebuild() }
-    }
-
-    @objc private func resume() {
-        rebuild()
-    }
-
-    /// Lays the show out from `began`, so one rebuilt partway carries on
-    /// from where the clock has it. Each shell's layers are made just before
-    /// it flies and dropped once it has burnt out, so only a few shells'
-    /// worth are ever alive.
-    func rebuild(now: CFTimeInterval = CACurrentMediaTime()) {
+    override func forgetLayers() {
         build &+= 1
-        layer.sublayers?.forEach { $0.removeFromSuperlayer() }
         scrimLayer = nil
         shellLayers = [:]
-        builtSize = bounds.size
-        guard bounds.width > 0, bounds.height > 0 else { return }
-        let elapsed = now - began
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
+    }
+
+    /// Each shell's layers are made just before it flies and dropped once
+    /// it has burnt out, so only a few shells' worth are ever alive.
+    override func addLayers() {
+        let elapsed = CACurrentMediaTime() - began
         addScrim()
-        CATransaction.commit()
         let build = build
         for (index, shell) in FireworksFrame.shells.enumerated() {
             let ends = shell.launch + Fireworks.climb + shell.kind.burn
@@ -117,8 +82,6 @@ final class FireworksLayerView: UIView {
             }
         }
     }
-
-    private var start: CFTimeInterval { layer.convertTime(began, from: nil) }
 
     // MARK: - Scrim
 
