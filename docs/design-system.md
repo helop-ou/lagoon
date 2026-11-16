@@ -130,6 +130,11 @@ Keep the list short, because each theme is checked over every screen.
   theme chosen during a season stays for that season, and the next season
   comes as usual. Both themes stay in the picker all year.
 
+- **An elf comes down a rope at the side of a snowy page now and then**
+  from 1 to 26 December (`ElfVisitor`, part of `WinterDecoration`). It is
+  backdrop decoration like Spooky's spider, so it follows the theme, not the
+  Seasonal Themes switch, and never comes under Reduce Motion or while the
+  player is up.
 - **New Year fireworks play once per profile on 1 January**, in every theme,
   unless the profile turned Seasonal Themes off (`NewYearOverlay`). They are
   a surprise, so they get no changelog line.
