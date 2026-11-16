@@ -23,6 +23,7 @@ report. One marketing version spans many builds.
 ### Improvements
 
 - On a partly folded iPhone Duo, titles, buttons and poster grids stay clear of the fold.
+- On a partly folded iPhone Duo, the player shows the picture on one side of the fold and keeps its controls on the other, where they stay on screen.
 
 ## 0.9.0 (121)
 

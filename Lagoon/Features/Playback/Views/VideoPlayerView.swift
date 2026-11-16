@@ -62,10 +62,16 @@ struct VideoPlayerView: View {
                 // The error overlay carries its own focus and exit handling
                 // so Menu never strands.
                 errorOverlay(errorMessage)
+                    #if os(iOS)
+                    .onFoldSide(.before)
+                    #endif
             } else if let engine = controller.engine {
                 playerSurface(engine: engine)
             } else {
                 LoadingView()
+                    #if os(iOS)
+                    .onFoldSide(.before)
+                    #endif
             }
 
             if !controller.hudLines.isEmpty, !panelOpen {
@@ -79,6 +85,9 @@ struct VideoPlayerView: View {
             // episode handoff, so the cover never flashes its presenter.
             if controller.isTransitionOverlayVisible, controller.errorMessage == nil {
                 episodeTransition
+                    #if os(iOS)
+                    .onFoldSide(.before)
+                    #endif
             }
 
             #if DEBUG

@@ -8,8 +8,28 @@ nonisolated struct FoldCrossing: Equatable {
 }
 
 #if os(iOS)
+/// The two sides of an active fold through a view, whichever way it runs.
+nonisolated struct FoldSplit: Equatable {
+    enum Side {
+        case before
+        case after
+    }
+
+    /// Above and below the fold, as in the laptop pose, not side by side.
+    var isStacked: Bool
+    /// Keeps content above or before the fold.
+    var before: EdgeInsets
+    /// Keeps content below or after it.
+    var after: EdgeInsets
+
+    func insets(_ side: Side) -> EdgeInsets {
+        side == .before ? before : after
+    }
+}
+
 /// Text and controls stay on one side of an active vertical fold. Content
 /// that scrolls through a horizontal fold is left alone, as system lists do.
+/// A view that does not scroll, such as the player, takes a side either way.
 enum FoldLayout {
     /// Clear space kept between content and the fold.
     static let margin = Metrics.Space.l
@@ -20,6 +40,32 @@ enum FoldLayout {
             .filter { $0.height > $0.width && $0.maxX > 0 && $0.minX < width }
             .min { $0.minX < $1.minX }
             .map { FoldCrossing(leadingEdge: max(0, $0.minX), trailingEdge: min(width, $0.maxX)) }
+    }
+
+    /// The first active fold strictly inside a view of `size`.
+    nonisolated static func split(folds: [CGRect], size: CGSize) -> FoldSplit? {
+        for fold in folds {
+            if fold.height > fold.width {
+                guard fold.minX > 0, fold.maxX < size.width else { continue }
+                return FoldSplit(
+                    isStacked: false,
+                    before: EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: size.width - fold.minX),
+                    after: EdgeInsets(top: 0, leading: fold.maxX, bottom: 0, trailing: 0)
+                )
+            }
+            guard fold.minY > 0, fold.maxY < size.height else { continue }
+            return FoldSplit(
+                isStacked: true,
+                before: EdgeInsets(top: 0, leading: 0, bottom: size.height - fold.minY, trailing: 0),
+                after: EdgeInsets(top: fold.maxY, leading: 0, bottom: 0, trailing: 0)
+            )
+        }
+        return nil
+    }
+
+    nonisolated fileprivate static func activeFolds(in proxy: GeometryProxy) -> [CGRect] {
+        guard #available(iOS 27.1, *) else { return [] }
+        return proxy.reservedRegions(kind: .division).filter(\.isActive).map(\.frame)
     }
 
     /// The widest leading-anchored content that starts `inset` in and still
@@ -48,6 +94,16 @@ extension View {
     func onFoldCrossingChange(_ action: @escaping (FoldCrossing?) -> Void) -> some View {
         modifier(FoldCrossingReader(action: action))
     }
+
+    /// Reports the two sides of an active fold through this view.
+    func onFoldSplitChange(_ action: @escaping (FoldSplit?) -> Void) -> some View {
+        modifier(FoldSplitReader(action: action))
+    }
+
+    /// Fills its container, or one side of an active fold through it.
+    func onFoldSide(_ side: FoldSplit.Side) -> some View {
+        modifier(FoldSideLayout(side: side))
+    }
 }
 
 private struct FoldCrossingReader: ViewModifier {
@@ -57,15 +113,36 @@ private struct FoldCrossingReader: ViewModifier {
     func body(content: Content) -> some View {
         let override = override
         return content.onGeometryChange(for: FoldCrossing?.self) { proxy in
-            FoldLayout.crossing(folds: override ?? Self.activeFolds(in: proxy), width: proxy.size.width)
+            FoldLayout.crossing(folds: override ?? FoldLayout.activeFolds(in: proxy), width: proxy.size.width)
         } action: { crossing in
             action(crossing)
         }
     }
+}
 
-    nonisolated private static func activeFolds(in proxy: GeometryProxy) -> [CGRect] {
-        guard #available(iOS 27.1, *) else { return [] }
-        return proxy.reservedRegions(kind: .division).filter(\.isActive).map(\.frame)
+private struct FoldSplitReader: ViewModifier {
+    @Environment(\.foldFramesOverride) private var override
+    let action: (FoldSplit?) -> Void
+
+    func body(content: Content) -> some View {
+        let override = override
+        return content.onGeometryChange(for: FoldSplit?.self) { proxy in
+            FoldLayout.split(folds: override ?? FoldLayout.activeFolds(in: proxy), size: proxy.size)
+        } action: { split in
+            action(split)
+        }
+    }
+}
+
+private struct FoldSideLayout: ViewModifier {
+    let side: FoldSplit.Side
+    @State private var split: FoldSplit?
+
+    func body(content: Content) -> some View {
+        content
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(split?.insets(side) ?? EdgeInsets())
+            .onFoldSplitChange { split = $0 }
     }
 }
 #endif
