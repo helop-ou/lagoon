@@ -77,6 +77,50 @@ nonisolated enum SantaFlight {
         )
     }
 
+    /// One of the team: the sleigh or a reindeer.
+    struct Member: Equatable, Sendable {
+        enum Kind: Equatable, Sendable {
+            case sleigh
+            /// The reindeer of a pair nearer the viewer, and the one beyond it.
+            case near
+            case far
+        }
+
+        let kind: Kind
+        /// Units ahead of the sleigh's middle, and above the flight's line.
+        let ahead: Double
+        let lift: Double
+        /// How far it rises and falls with its stride, in units.
+        let bob: Double
+        /// Where it is in its stride, so no two run in step.
+        let phase: Double
+        /// The reindeer with the red nose.
+        let isLead: Bool
+    }
+
+    /// The team in the order it is drawn: each pair's far reindeer, then its
+    /// near one, from the sleigh outward, and the sleigh over them all.
+    static let team: [Member] = pairs.enumerated().flatMap { index, ahead in
+        let phase = Double(index) * 1.9
+        return [
+            Member(
+                kind: .far, ahead: ahead + farOffset.x, lift: farOffset.y, bob: 3, phase: phase + 1.1, isLead: false
+            ),
+            Member(kind: .near, ahead: ahead, lift: 0, bob: 3, phase: phase, isLead: index == pairs.count - 1),
+        ]
+    } + [Member(kind: .sleigh, ahead: 0, lift: 0, bob: 1.4, phase: 2.2, isLead: false)]
+
+    static func placement(of member: Member, at time: Double, in size: CGSize) -> Placement {
+        placement(ahead: member.ahead, lift: member.lift, bob: member.bob, phase: member.phase, at: time, in: size)
+    }
+
+    /// How much the page dims while the sleigh is over it: enough that the
+    /// gold reads over bright artwork, and the page stays a page.
+    static let scrim = 0.42
+    /// Seconds the page takes to dim as the sleigh arrives, and to clear.
+    static let dimIn: Double = 1
+    static let dimOut: Double = 1.6
+
     /// A reindeer's legs: 0 stretched out, 1 gathered under it.
     static func stride(at time: Double, phase: Double) -> Double {
         0.5 - 0.5 * cos(time * 2 * .pi * gallop + phase)
@@ -85,7 +129,7 @@ nonisolated enum SantaFlight {
     /// How much of the show is on the page, for the dimming behind it: it
     /// arrives over a second and leaves with the last of the dust.
     static func presence(at time: Double) -> Double {
-        max(0, min(1, time / 1.0, (duration - time) / 1.6))
+        max(0, min(1, time / dimIn, (duration - time) / dimOut))
     }
 
     // MARK: - Dust
@@ -148,36 +192,66 @@ nonisolated enum SantaFlight {
 
     /// The dust still alight at a moment.
     static func sparks(at time: Double, in size: CGSize) -> [Spark] {
+        dust.compactMap { spark(of: $0, aged: time - $0.born, in: size) }
+    }
+
+    /// A mote so long after it left the sleigh. Nil before that and once it
+    /// has burnt out.
+    static func spark(of mote: Mote, aged age: Double, in size: CGSize) -> Spark? {
+        guard age > 0, age < mote.life else { return nil }
         let unit = scale(in: size)
-        return dust.compactMap { mote in
-            let age = time - mote.born
-            guard age > 0, age < mote.life else { return nil }
-            let birth = placement(ahead: wake, at: mote.born, in: size).center
-            let spent = age / mote.life
-            let glitter = 0.5 + 0.5 * sin(age * mote.twinkle + mote.phase)
-            return Spark(
-                center: CGPoint(
-                    x: birth.x + (mote.offset.x - mote.drift * age) * unit,
-                    y: birth.y + (mote.offset.y + mote.fall * age + 9 * age * age) * unit
-                ),
-                radius: mote.size * unit * (1 - 0.35 * spent),
-                opacity: min(1, age / 0.12) * pow(1 - spent, 1.3) * (0.35 + 0.65 * glitter),
-                turn: mote.phase + age * 0.9,
-                isStar: mote.isStar,
-                tint: mote.tint
-            )
+        let birth = placement(ahead: wake, at: mote.born, in: size).center
+        let spent = age / mote.life
+        let glitter = 0.5 + 0.5 * sin(age * mote.twinkle + mote.phase)
+        return Spark(
+            center: CGPoint(
+                x: birth.x + (mote.offset.x - mote.drift * age) * unit,
+                y: birth.y + (mote.offset.y + mote.fall * age + 9 * age * age) * unit
+            ),
+            radius: mote.size * unit * (1 - moteShrink * spent),
+            opacity: min(1, age / 0.12) * pow(1 - spent, 1.3) * (0.35 + 0.65 * glitter),
+            turn: mote.phase + age * moteSpin,
+            isStar: mote.isStar,
+            tint: mote.tint
+        )
+    }
+
+    /// How much smaller a mote is by the time it burns out, and how fast a
+    /// star turns, in radians a second.
+    static let moteShrink = 0.35
+    static let moteSpin = 0.9
+
+    // MARK: - Reins
+
+    static let reinsLine: Double = 1.5
+    static let reinsOpacity = 0.8
+
+    /// A figure's own point, on the page.
+    static func point(_ own: CGPoint, on placement: Placement, unit: Double) -> CGPoint {
+        let turned = CGPoint(
+            x: own.x * cos(placement.turn) - own.y * sin(placement.turn),
+            y: own.x * sin(placement.turn) + own.y * cos(placement.turn)
+        )
+        return CGPoint(x: placement.center.x + turned.x * unit, y: placement.center.y + turned.y * unit)
+    }
+
+    /// The corners of the reins: the driver's hand, then each near
+    /// reindeer's collar, the lead's last.
+    static func reinPoints(at time: Double, in size: CGSize) -> [CGPoint] {
+        let unit = scale(in: size)
+        return team.filter { $0.kind == .sleigh }.map {
+            point(SantaGeometry.hand, on: placement(of: $0, at: time, in: size), unit: unit)
+        } + team.filter { $0.kind == .near }.map {
+            point(SantaGeometry.collar, on: placement(of: $0, at: time, in: size), unit: unit)
         }
     }
 
-    /// The bright wake straight behind the sleigh: where it was over the
-    /// last moments, newest first.
-    static func ribbon(at time: Double, in size: CGSize, points: Int = 16) -> [CGPoint] {
-        (0..<points).compactMap { index in
-            let past = time - Double(index) * 0.045
-            guard past > 0 else { return nil }
-            return placement(ahead: wake + 6, lift: 18, at: past, in: size).center
-        }
+    static func reins(at time: Double, in size: CGSize) -> Path {
+        var path = Path()
+        path.addLines(reinPoints(at: time, in: size))
+        return path
     }
+
 }
 
 /// When the Christmas surprise is due, by the viewer's own clock.

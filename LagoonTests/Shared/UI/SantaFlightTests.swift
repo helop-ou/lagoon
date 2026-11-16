@@ -205,12 +205,24 @@ struct SantaFlightTests {
         #expect(SantaFlight.motes(count: 40, seed: 9) != SantaFlight.motes(count: 40, seed: 10))
     }
 
-    @Test func theWakeTrailsWhereTheSleighHasJustBeen() {
+    @Test func theReinsRunFromTheDriversHandToEachNearReindeer() {
         let page = Self.tv
-        #expect(SantaFlight.ribbon(at: 0, in: page).isEmpty)
-        let wake = SantaFlight.ribbon(at: 4, in: page)
-        #expect(wake.count == 16)
-        #expect(zip(wake, wake.dropFirst()).allSatisfy { $0.x > $1.x })
+        let corners = SantaFlight.reinPoints(at: 4, in: page)
+        #expect(corners.count == 1 + SantaFlight.pairs.count)
+        // Forward along the team, the lead's collar last.
+        #expect(zip(corners, corners.dropFirst()).allSatisfy { $0.x < $1.x })
+        let sleigh = SantaFlight.sleighX(at: 4, in: page)
+        #expect(corners[0].x > sleigh)
+        #expect(corners[0].x < sleigh + 60 * SantaFlight.scale(in: page))
+    }
+
+    @Test func theTeamIsThreePairsAndTheSleighDrawnOverThem() {
+        let team = SantaFlight.team
+        #expect(team.map(\.kind) == [.far, .near, .far, .near, .far, .near, .sleigh])
+        #expect(team.filter(\.isLead).count == 1)
+        #expect(team.last(where: { $0.kind == .near })?.isLead == true)
+        // No two reindeer run in step.
+        #expect(Set(team.filter { $0.kind != .sleigh }.map(\.phase)).count == 6)
     }
 
     @Test func thePageDimsAsTheSleighArrivesAndClearsWithTheLastDust() {

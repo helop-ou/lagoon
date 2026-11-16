@@ -75,8 +75,13 @@ nonisolated enum SantaGeometry {
     static let farAntler = CGPoint(x: 5, y: -1)
     static let antlerLine: Double = 2.7
 
-    /// The lead reindeer's nose.
+    /// The lead reindeer's nose, and how far its glow reaches.
     static let nose = CGPoint(x: 79.5, y: -35)
+    static let noseGlow: Double = 15
+
+    /// The part of a reindeer's own space its body's picture shows: body,
+    /// antlers and nose, with room for their glow. The legs are not in it.
+    static let bodyFrame = CGRect(x: -80, y: -110, width: 190, height: 152)
 
     /// Where the traces meet a reindeer, at its shoulder.
     static let collar = CGPoint(x: 30, y: -16)
@@ -174,6 +179,13 @@ nonisolated enum SantaGeometry {
 
     static let runnerLine: Double = 4.2
 
+    /// The part of the sleigh's own space its picture shows, the wake behind
+    /// it included.
+    static let sleighFrame = CGRect(x: -214, y: -88, width: 326, height: 152)
+
+    /// The bright streak behind the sleigh.
+    static let wake = CGRect(x: -200, y: 9, width: 136, height: 18)
+
     /// The sack of presents behind the driver, tied at the top.
     static let sack: Path = {
         var path = Path()
@@ -240,6 +252,11 @@ nonisolated enum SantaGeometry {
     static let hand = CGPoint(x: 38, y: -15)
 
     // MARK: - Dust
+
+    /// How far a star's glow reaches, in its own radii.
+    static let starGlow: Double = 1.5
+    /// Points to a mote's radius in the picture a layer stretches.
+    static let motePictureRadius: Double = 16
 
     /// A four-pointed star of radius 1 about the origin.
     static let star: Path = {
