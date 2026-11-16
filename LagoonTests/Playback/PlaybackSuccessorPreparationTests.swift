@@ -154,6 +154,72 @@ struct PlaybackSuccessorPreparationTests {
         #expect(staging.discarded == [expected.mediaID])
     }
 
+    // MARK: - The session's ceiling
+
+    /// The lower quality a viewer accepted holds for the next item, so its
+    /// stream is asked for under the same ceiling.
+    @Test func aPreparationIsNegotiatedUnderTheSessionsCeiling() async throws {
+        let expected = try prepared(sourceID: "capped")
+        var ceilings: [Int?] = []
+        let subject = PlaybackSuccessorPreparation(
+            negotiate: { _, _, ceiling in ceilings.append(ceiling); return expected }
+        )
+        defer { subject.cancel() }
+        subject.prepare(itemID: expected.mediaID, client: JellyfinClient(deviceId: "successor-tests"),
+                        maxBitrate: 4_000_000, staging: StagingSpy().brief, warms: false)
+        #expect(await subject.preparedForHandoff()?.source.id == "capped")
+        #expect(ceilings == [4_000_000])
+    }
+
+    /// The next item was prepared, then the viewer took the lower quality:
+    /// what was prepared is the stream that stalled.
+    @Test func aLoweredCeilingReplacesThePreparationMadeBeforeIt() async throws {
+        let full = try prepared(sourceID: "full")
+        let capped = try prepared(sourceID: "capped")
+        var ceilings: [Int?] = []
+        let subject = PlaybackSuccessorPreparation(
+            negotiate: { _, _, ceiling in
+                ceilings.append(ceiling)
+                return ceiling == nil ? full : capped
+            }
+        )
+        let staging = StagingSpy()
+        let client = JellyfinClient(deviceId: "successor-tests")
+        defer { subject.cancel() }
+        subject.prepare(itemID: full.mediaID, client: client, maxBitrate: nil, staging: staging.brief, warms: true)
+        await waitUntil { !subject.isPreparing }
+        #expect(staging.staged.count == 1)
+
+        subject.prepare(
+            itemID: full.mediaID, client: client, maxBitrate: 4_000_000, staging: staging.brief, warms: false
+        )
+        // The first one's scope goes before the second stages its own.
+        #expect(staging.discarded == [full.mediaID])
+        #expect(await subject.preparedForHandoff()?.source.id == "capped")
+        #expect(ceilings == [nil, 4_000_000])
+        #expect(staging.staged.count == 2)
+    }
+
+    @Test func theSameCeilingKeepsThePreparation() async throws {
+        let expected = try prepared(sourceID: "kept")
+        var negotiations = 0
+        let subject = PlaybackSuccessorPreparation(
+            negotiate: { _, _, _ in negotiations += 1; return expected }
+        )
+        let staging = StagingSpy()
+        let client = JellyfinClient(deviceId: "successor-tests")
+        defer { subject.cancel() }
+        for _ in 0..<3 {
+            subject.prepare(
+                itemID: expected.mediaID, client: client, maxBitrate: 4_000_000, staging: staging.brief, warms: true
+            )
+            await waitUntil { !subject.isPreparing }
+        }
+        #expect(negotiations == 1)
+        #expect(staging.staged.count == 1)
+        #expect(staging.discarded.isEmpty)
+    }
+
     // MARK: - What the server answers
 
     /// Negotiates against a stub server answering PlaybackInfo with `sources`.
