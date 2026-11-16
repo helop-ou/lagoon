@@ -122,6 +122,9 @@ Keep the list short, because each theme is checked over every screen.
 - **A profile follows the seasons until it turns Seasonal Themes off**
   (`ThemeSeason`, `ThemeStore.followsSeasons`): Spooky through October and
   Winter from 1 December to 6 January, worn over whatever theme it chose.
+  Every seasonal date is a month and a day in `SeasonalCalendar`, with no
+  year, so each comes round by itself. A new season or surprise gets its
+  dates there, never a literal in its own code.
   The choice is never overwritten, so it returns when the season ends. A
   theme chosen during a season stays for that season, and the next season
   comes as usual. Both themes stay in the picker all year.
