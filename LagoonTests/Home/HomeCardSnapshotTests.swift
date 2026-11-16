@@ -101,6 +101,45 @@ struct HomeCardSnapshotTests {
         )
     }
 
+    /// A check in the corner, with no colour.
+    @Test func aWatchedTitleCarriesACheck() async throws {
+        let item = try decodeItem(#"{"Id":"seen","Name":"Arrival","Type":"Movie","ImageTags":{"Thumb":"t"},"UserData":{"Played":true,"PlayedPercentage":0}}"#)
+        try storeLandscapeArtwork(for: item, seed: 8)
+
+        try await Snapshot.verify(
+            LandscapeCard(item: item)
+                .environment(\.jellyfinClient, client),
+            named: "landscape-card-watched",
+            size: Self.landscapeCardSize
+        )
+    }
+
+    /// The same count a poster carries.
+    @Test func aStartedSeriesCardCarriesItsUnwatchedCount() async throws {
+        let item = try decodeItem(#"{"Id":"good-place-wide","Name":"The Good Place","Type":"Series","ImageTags":{"Thumb":"t"},"UserData":{"PlayedPercentage":50,"UnplayedItemCount":25}}"#)
+        try storeLandscapeArtwork(for: item, seed: 9)
+
+        try await Snapshot.verify(
+            LandscapeCard(item: item)
+                .environment(\.jellyfinClient, client),
+            named: "landscape-card-unwatched",
+            size: Self.landscapeCardSize
+        )
+    }
+
+    /// Its progress bar says enough.
+    @Test func aWatchedTitleInProgressAgainCarriesNoCheck() async throws {
+        let item = try decodeItem(#"{"Id":"again","Name":"The Station Agent","Type":"Movie","ImageTags":{"Thumb":"t"},"UserData":{"Played":true,"PlayedPercentage":32}}"#)
+        try storeLandscapeArtwork(for: item, seed: 10)
+
+        try await Snapshot.verify(
+            LandscapeCard(item: item)
+                .environment(\.jellyfinClient, client),
+            named: "landscape-card-watching-again",
+            size: Self.landscapeCardSize
+        )
+    }
+
     /// The count sits in the corner in the theme's signal colour.
     @Test func aStartedSeriesPosterCarriesItsUnwatchedCount() async throws {
         let item = try decodeItem(#"{"Id":"good-place","Name":"The Good Place","Type":"Series","ProductionYear":2016,"ImageTags":{"Primary":"p"},"UserData":{"PlayedPercentage":50,"UnplayedItemCount":25}}"#)
