@@ -100,7 +100,7 @@ final class NewYearGreetingLayerView: UIView {
         let greeting = CALayer()
         greeting.frame = bounds
         greeting.opacity = 0
-        animate(greeting, "opacity", times.map(NewYearGreeting.presence), Self.fadeKey)
+        animate(greeting, "opacity", times.map { NewYearGreeting.presence(at: $0) }, Self.fadeKey)
         addStars(to: greeting, page: page, times: times)
         addWords(to: greeting, page: page, times: times)
         layer.addSublayer(greeting)
