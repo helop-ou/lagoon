@@ -4,7 +4,7 @@ import XCTest
 /// local network, so iOS types its address.
 @MainActor
 final class FirstRunUITests: XCTestCase {
-    func testAFreshInstallWelcomesSearchesTheNetworkAndOffersSeerr() throws {
+    func testAFreshInstallWelcomesSearchesTheNetworkSetsUpAndOffersSeerr() throws {
         continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-accounts", "()", "-server.url", "", "-session.activeAccountId", "",
@@ -34,6 +34,10 @@ final class FirstRunUITests: XCTestCase {
         username.tap()
         username.typeText("demo")
         app.buttons["signin.submit"].tap()
+        // The setup comes first. Its own journey walks the steps.
+        XCTAssertTrue(app.staticTexts["setup.title"].waitForExistence(timeout: 20))
+        attachScreenshot(of: app, named: "setup")
+        app.skipSetup()
         XCTAssertTrue(app.staticTexts["seerrSetup.message"].waitForExistence(timeout: 20))
         attachScreenshot(of: app, named: "seerr-offer")
         app.skipSeerrOffer()

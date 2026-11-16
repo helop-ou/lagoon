@@ -56,6 +56,7 @@ final class ServerAddressUITests: XCTestCase {
         username.tap()
         username.typeText("Fixture viewer\n")
         app.buttons["signin.submit"].tap()
+        app.skipSetup()
         app.skipSeerrOffer()
         #endif
         openSeerr(in: app)

@@ -14,6 +14,13 @@ extension XCUIApplication {
     }
 
     #if os(iOS)
+    /// Leaves the first sign-in's setup from its first step.
+    func skipSetup() {
+        let skip = buttons["setup.skip"]
+        XCTAssertTrue(skip.waitForExistence(timeout: 20), "The first sign-in did not open the setup")
+        skip.tap()
+    }
+
     func skipSeerrOffer() {
         let skip = buttons["seerrSetup.skip"]
         XCTAssertTrue(skip.waitForExistence(timeout: 20), "The first sign-in did not offer Seerr")
