@@ -153,9 +153,7 @@ struct PosterCard: View {
     private var accessibilityLabel: String {
         var label = item.name ?? String(localized: "Item")
         if let count = item.unwatchedEpisodeCount {
-            label += ", " + (count == 1
-                ? String(localized: "1 unwatched episode")
-                : String(localized: "\(count) unwatched episodes"))
+            label += ", " + UnwatchedMark.spokenLabel(count: count)
         }
         return label.appendingDownloadedSuffix(if: downloads?.isDownloaded(item.id) == true)
     }
@@ -208,7 +206,13 @@ struct LandscapeCard: View {
     }
 
     private var landscapeAccessibilityLabel: String {
-        item.railTitle.appendingDownloadedSuffix(if: downloads?.isDownloaded(item.id) == true)
+        var label = item.railTitle
+        if let count = item.unwatchedEpisodeCount {
+            label += ", " + UnwatchedMark.spokenLabel(count: count)
+        } else if item.showsWatchedMark {
+            label += ", " + String(localized: "watched")
+        }
+        return label.appendingDownloadedSuffix(if: downloads?.isDownloaded(item.id) == true)
     }
 
     private var thumbURL: URL? {
@@ -238,7 +242,13 @@ struct LandscapeCard: View {
                 }
             }
         }
-        .downloadedBadge(itemID: item.id)
+        .downloadedBadge(itemID: item.id, inset: Metrics.cardMarkInset) {
+            if let count = item.unwatchedEpisodeCount {
+                UnwatchedMark(count: count)
+            } else if item.showsWatchedMark {
+                WatchedMark()
+            }
+        }
     }
 }
 
@@ -407,9 +417,16 @@ struct UnwatchedMark: View {
             .background(Capsule().fill(Theme.signal))
             .accessibilityHidden(true)
     }
+
+    /// What a card carrying the mark says, since the mark itself is silent.
+    static func spokenLabel(count: Int) -> String {
+        count == 1
+            ? String(localized: "1 unwatched episode")
+            : String(localized: "\(count) unwatched episodes")
+    }
 }
 
-/// Badge for a played episode: a checkmark on `DownloadedMark`'s disc. No
+/// Badge for a watched title: a checkmark on `DownloadedMark`'s disc. No
 /// colour, like every watched state in the app.
 struct WatchedMark: View {
     var body: some View {
@@ -516,6 +533,12 @@ extension MediaItem {
     var playbackProgress: Double? {
         guard let percentage = userData?.playedPercentage, percentage > 0, percentage < 95 else { return nil }
         return percentage / 100
+    }
+
+    /// A watched title that is not being watched again. One in progress
+    /// shows its progress bar instead.
+    var showsWatchedMark: Bool {
+        userData?.played == true && playbackProgress == nil
     }
 
     /// Episodes left in a series the viewer has started. Nil for one never
