@@ -235,6 +235,19 @@ extension JellyfinClient {
         ])
     }
 
+    /// A movie library's newest titles with the watched ones kept.
+    /// `Items/Latest` leaves them out unless the user's own server setting
+    /// says otherwise, and takes no parameter that returns both.
+    func recentlyAdded(parentId: String, limit: Int = 16) async throws -> [MediaItem] {
+        try await items(
+            parentId: parentId,
+            includeTypes: [.movie],
+            sortBy: "DateCreated,SortName",
+            sortOrder: "Descending",
+            limit: limit
+        ).items
+    }
+
     /// Latest can return a lone episode even with GroupItems=true. Resolve
     /// the Series so cards show the show and open its seasons.
     func latestSeries(parentId: String, limit: Int = 16) async throws -> [MediaItem] {
@@ -244,6 +257,43 @@ extension JellyfinClient {
         try check()
         return try await parentSeries(of: recent, check: check)
     }
+
+    /// A show library's most recently added series with the watched ones
+    /// kept: its newest episodes, each swapped for its series like
+    /// `latestSeries`. Episodes come a page at a time until enough series
+    /// turn up, since one show's new season can fill a page.
+    func recentlyAddedSeries(parentId: String, limit: Int = 16) async throws -> [MediaItem] {
+        let userId = try requireUserId()
+        let check = try sessionCheck()
+        var episodes: [MediaItem] = []
+        var seriesIDs: [String] = []
+        for _ in 0..<Self.recentEpisodePages {
+            try check()
+            let page: ItemsPage = try await get("Users/\(userId)/Items", query: [
+                URLQueryItem(name: "ParentId", value: parentId),
+                URLQueryItem(name: "IncludeItemTypes", value: MediaItemType.episode.rawValue),
+                URLQueryItem(name: "Recursive", value: "true"),
+                URLQueryItem(name: "SortBy", value: "DateCreated"),
+                URLQueryItem(name: "SortOrder", value: "Descending"),
+                URLQueryItem(name: "StartIndex", value: String(episodes.count)),
+                URLQueryItem(name: "Limit", value: String(Self.recentEpisodePageSize)),
+                URLQueryItem(name: "EnableUserData", value: "false"),
+                URLQueryItem(name: "EnableImages", value: "false"),
+                URLQueryItem(name: "EnableTotalRecordCount", value: "false"),
+            ])
+            episodes.append(contentsOf: page.items)
+            for id in page.items.compactMap(\.seriesId) where !id.isEmpty && !seriesIDs.contains(id) {
+                seriesIDs.append(id)
+            }
+            if seriesIDs.count >= limit || page.items.count < Self.recentEpisodePageSize { break }
+        }
+        try check()
+        let wanted = Set(seriesIDs.prefix(limit))
+        return try await parentSeries(of: episodes.filter { wanted.contains($0.seriesId ?? "") }, check: check)
+    }
+
+    private static let recentEpisodePageSize = 200
+    private static let recentEpisodePages = 5
 
     /// Throws once the session a request began under is gone.
     private func sessionCheck() throws -> () throws -> Void {

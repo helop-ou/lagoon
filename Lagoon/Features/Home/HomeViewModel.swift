@@ -163,7 +163,9 @@ final class HomeViewModel {
             fields: "Genres,CommunityRating"
         )
 
-        let rails = await loadLatestRails(libraries: libraries, client: client)
+        let rails = await loadLatestRails(
+            libraries: libraries, client: client, showsWatched: preferences.showsWatched
+        )
 
         let resolvedResume = await resumeItems
         let resolvedNextUp = await nextUpItems ?? []
@@ -247,7 +249,8 @@ final class HomeViewModel {
                 guard let self else { return }
                 await self.loadCuratedRails(
                     client: client,
-                    generation: generation
+                    generation: generation,
+                    showsWatched: preferences.showsWatched
                 )
             },
             Task { [weak self] in
@@ -328,14 +331,17 @@ final class HomeViewModel {
         let generation = loadGeneration
 
         async let progress: Void = refreshProgress(client: client)
-        async let latest: Void = refreshLatestRails(client: client)
+        async let latest: Void = refreshLatestRails(
+            client: client, showsWatched: homeSectionPreferences.showsWatched
+        )
         async let plugin: Void = refreshPluginRails(
             client: client,
             preferences: homeSectionPreferences
         )
         async let curated: Void = loadCuratedRails(
             client: client,
-            generation: generation
+            generation: generation,
+            showsWatched: homeSectionPreferences.showsWatched
         )
         async let topTen: Void = loadTopTenRails(
             client: client, seerr: seerr,
@@ -367,14 +373,33 @@ final class HomeViewModel {
         }
     }
 
-    private func refreshLatestRails(client: JellyfinClient) async {
+    /// Re-fetches the rows that leave watched titles out or keep them, once
+    /// the viewer changes which.
+    func refreshWatchedRows(
+        client: JellyfinClient,
+        homeSectionPreferences: HomeSectionPreferenceValues
+    ) async {
+        guard hasLoaded, !isLoading else { return }
+        let generation = loadGeneration
+        async let latest: Void = refreshLatestRails(
+            client: client, showsWatched: homeSectionPreferences.showsWatched
+        )
+        async let curated: Void = loadCuratedRails(
+            client: client,
+            generation: generation,
+            showsWatched: homeSectionPreferences.showsWatched
+        )
+        _ = await (latest, curated)
+    }
+
+    private func refreshLatestRails(client: JellyfinClient, showsWatched: Bool) async {
         guard hasLoaded, !isLoading else { return }
         let generation = loadGeneration
         let identity = client.sessionIdentity
         guard let libraries = try? await client.userViews()
             .filter({ LibraryMediaKind.isBrowsable(collectionType: $0.collectionType) }) else { return }
         guard isCurrent(generation, identity: identity, client: client) else { return }
-        let refreshed = await loadLatestRails(libraries: libraries, client: client)
+        let refreshed = await loadLatestRails(libraries: libraries, client: client, showsWatched: showsWatched)
         guard isCurrent(generation, identity: identity, client: client) else { return }
 
         // A failed request keeps the rail's last value. A successful empty
@@ -400,19 +425,23 @@ final class HomeViewModel {
         ]
     }
 
+    /// `Items/Latest` hides watched titles on the server, so keeping them
+    /// takes the client's own date-sorted queries.
     private func loadLatestRails(
         libraries: [MediaItem],
-        client: JellyfinClient
+        client: JellyfinClient,
+        showsWatched: Bool
     ) async -> [LibraryRail] {
         await withTaskGroup(of: (Int, LibraryRail)?.self) { group in
             for (index, library) in libraries.enumerated() {
                 group.addTask {
                     let items: [MediaItem]
                     do {
-                        items = if library.collectionType == "tvshows" {
-                            try await client.latestSeries(parentId: library.id)
-                        } else {
-                            try await client.latest(parentId: library.id)
+                        items = switch (library.collectionType == "tvshows", showsWatched) {
+                        case (true, false): try await client.latestSeries(parentId: library.id)
+                        case (true, true): try await client.recentlyAddedSeries(parentId: library.id)
+                        case (false, false): try await client.latest(parentId: library.id)
+                        case (false, true): try await client.recentlyAdded(parentId: library.id)
                         }
                     } catch {
                         return nil
@@ -438,13 +467,16 @@ final class HomeViewModel {
     /// assignment. A failed row just does not appear.
     private func loadCuratedRails(
         client: JellyfinClient,
-        generation: Int
+        generation: Int,
+        showsWatched: Bool
     ) async {
         let identity = client.sessionIdentity
         // Watch history decides the genre spotlight.
         let played = await recentlyPlayed(client: client)
         guard isCurrent(generation, identity: identity, client: client) else { return }
-        let resolved = await fetchCuratedRails(watchHistory: played, on: Date.now, client: client)
+        let resolved = await fetchCuratedRails(
+            watchHistory: played, on: Date.now, client: client, showsWatched: showsWatched
+        )
         guard isCurrent(generation, identity: identity, client: client) else { return }
         publishCuratedRails(resolved)
     }
@@ -463,8 +495,10 @@ final class HomeViewModel {
     private func fetchCuratedRails(
         watchHistory played: [MediaItem],
         on today: Date,
-        client: JellyfinClient
+        client: JellyfinClient,
+        showsWatched: Bool
     ) async -> [LibraryRail] {
+        let watchedFilters = HomeCuratedRows.watchedFilters(showsWatched: showsWatched)
         let genre = HomeRotation.genre(
             rankedByWatchHistory: HomeRotation.rankGenres(byWatchHistory: played),
             for: today
@@ -491,7 +525,7 @@ final class HomeViewModel {
             sortOrder: "Descending",
             is4K: true
         )
-        async let genreRail = spotlightRail(genre: genre, client: client)
+        async let genreRail = spotlightRail(genre: genre, client: client, filters: watchedFilters)
         async let decadeRail = spotlightRail(decade: decade, client: client)
         async let unstarted = rail(
             id: HomeCuratedRows.ID.unstartedSeries,
@@ -509,7 +543,7 @@ final class HomeViewModel {
             includeTypes: [.series],
             sortBy: "CommunityRating",
             sortOrder: "Descending",
-            filters: ["IsUnplayed"],
+            filters: watchedFilters,
             seriesStatus: "Ended"
         )
         // Mixes movies and shows, so it sits below both blocks.
@@ -519,7 +553,7 @@ final class HomeViewModel {
             client: client,
             includeTypes: [.movie, .series],
             sortBy: "Random",
-            filters: ["IsUnplayed"]
+            filters: watchedFilters
         )
 
         return await [
@@ -681,7 +715,7 @@ final class HomeViewModel {
     }
 
     /// Nil when there is too little watch history to pick a genre.
-    private func spotlightRail(genre: String?, client: JellyfinClient) async -> LibraryRail? {
+    private func spotlightRail(genre: String?, client: JellyfinClient, filters: [String]) async -> LibraryRail? {
         guard let genre else { return nil }
         return await rail(
             id: HomeCuratedRows.ID.genreSpotlight,
@@ -691,7 +725,7 @@ final class HomeViewModel {
             includeTypes: [.movie],
             sortBy: "Random",
             genres: [genre],
-            filters: ["IsUnplayed"]
+            filters: filters
         )
     }
 
