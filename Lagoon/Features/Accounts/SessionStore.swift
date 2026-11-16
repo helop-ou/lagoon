@@ -12,12 +12,16 @@ final class SessionStore {
         case needsSignIn
         /// Several accounts remembered, none active: the profile picker.
         case choosingAccount
+        /// The install's first sign-in, asking a few settings before Home.
+        case settingUp
         /// The install's first sign-in, offering Seerr before Home.
         case offeringSeerr
         case signedIn
     }
 
     private(set) var phase: Phase = .needsServer
+    /// Whether the Seerr offer follows the setup the first sign-in opened.
+    @ObservationIgnored private var seerrOfferPending = false
     private(set) var serverName: String?
     private(set) var userName: String?
     /// In the order they were added.
@@ -471,6 +475,13 @@ final class SessionStore {
         phase = .needsServer
     }
 
+    /// Leaves the setup, finished or skipped, for the Seerr offer or Home.
+    func finishSetup() {
+        guard phase == .settingUp else { return }
+        phase = seerrOfferPending ? .offeringSeerr : .signedIn
+        seerrOfferPending = false
+    }
+
     func finishSeerrOffer() {
         guard phase == .offeringSeerr else { return }
         phase = .signedIn
@@ -548,6 +559,7 @@ final class SessionStore {
             if UserDefaults.standard.bool(forKey: "debug.accountPrivacyRegression"), url.host == "127.0.0.1" {
                 // Fixture only: persist normally so tests drive the real picker.
                 try completeSignIn(with: result)
+                finishSetup()
                 finishSeerrOffer()
                 if let term = environment["LAGOON_REGRESSION_SEARCH"] { recentSearches.record(term) }
                 return
@@ -563,7 +575,8 @@ final class SessionStore {
             client.activateSession(token: result.accessToken, userId: result.user.id)
             activeAccount = account
             userName = result.user.name
-            phase = .signedIn
+            // The setup follows a first sign-in the harness never makes.
+            phase = UserDefaults.standard.bool(forKey: "debug.setupAtLaunch") ? .settingUp : .signedIn
         } catch {
             print("RegressionBootstrap failed: \(error.localizedDescription)")
         }
@@ -601,9 +614,10 @@ final class SessionStore {
             primaryImageTag: result.user.primaryImageTag
         )
         // Only the install's first account. Adding one later, or signing in
-        // again, goes straight to Home, and so does a server that has Seerr.
-        let offersSeerr = !isAccountDraft && reauthenticationAccount == nil && accounts.isEmpty
-            && !seerr.hasSavedServer(for: account)
+        // again, goes straight to Home. Seerr is offered after the setup,
+        // unless the server already has it.
+        let isFirstSignIn = !isAccountDraft && reauthenticationAccount == nil && accounts.isEmpty
+        seerrOfferPending = isFirstSignIn && !seerr.hasSavedServer(for: account)
         if isAccountDraft {
             pendingAuthentication = result
         } else {
@@ -619,7 +633,7 @@ final class SessionStore {
         activeAccount = account
         reauthenticationAccount = nil
         userName = result.user.name
-        phase = offersSeerr ? .offeringSeerr : .signedIn
+        phase = isFirstSignIn ? .settingUp : .signedIn
     }
 
     private func persistSignIn(_ result: AuthenticationResult, account: StoredAccount) throws {

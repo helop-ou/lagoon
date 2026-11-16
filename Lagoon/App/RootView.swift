@@ -21,6 +21,8 @@ struct RootView: View {
                 SignInView()
             case .choosingAccount:
                 AccountPickerView()
+            case .settingUp:
+                SetupWizardView()
             case .offeringSeerr:
                 SeerrSetupView()
             case .signedIn:

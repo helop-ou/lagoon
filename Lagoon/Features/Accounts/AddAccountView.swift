@@ -18,7 +18,7 @@ struct AddAccountView: View {
                 // A draft never welcomes or offers Seerr.
                 case .welcome, .needsServer: ServerConnectView()
                 case .needsSignIn: SignInView(changeServerTitle: "Use Another Server")
-                case .signedIn, .choosingAccount, .offeringSeerr: ProgressView("Signing In")
+                case .signedIn, .choosingAccount, .settingUp, .offeringSeerr: ProgressView("Signing In")
                 }
             }
             .environment(draft)
