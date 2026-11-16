@@ -29,6 +29,34 @@ struct AccountPrivacyTests {
         #expect(fixture.defaults.data(forKey: "search.recents") == nil)
     }
 
+    /// Settings, the player and the setup all use the session's stores, so
+    /// those follow the profile without a screen pointing them at it.
+    @Test func pickerSwitchingScopesTrackAndSubtitleChoices() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        let store = fixture.store()
+        #expect(store.trackPreferences.accountID == fixture.a.id)
+        #expect(store.subtitlePreferences.accountID == fixture.a.id)
+        store.trackPreferences.values.nightMode = true
+        store.subtitlePreferences.values.textSize = .large
+        store.showAccountPicker()
+        #expect(!store.trackPreferences.values.nightMode)
+        #expect(store.subtitlePreferences.values.textSize == .medium)
+        store.switchTo(fixture.b)
+        #expect(!store.trackPreferences.values.nightMode)
+        #expect(store.subtitlePreferences.values.textSize == .medium)
+        store.trackPreferences.values.channelLimit = .stereo
+        store.showAccountPicker()
+        store.switchTo(fixture.a)
+        #expect(store.trackPreferences.values.nightMode)
+        #expect(store.trackPreferences.values.channelLimit == .off)
+        #expect(store.subtitlePreferences.values.textSize == .large)
+        // The next launch reads the same choices.
+        let relaunched = fixture.store()
+        #expect(relaunched.trackPreferences.values.nightMode)
+        #expect(relaunched.subtitlePreferences.values.textSize == .large)
+    }
+
     @Test func forgettingInactiveAccountRemovesEveryCookieAndPreferenceOnlyForThatIdentity() throws {
         let fixture = try Fixture()
         defer { fixture.cleanUp() }
