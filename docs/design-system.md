@@ -169,7 +169,9 @@ notes](reference/design-system.md#themes).
     alignment.
   - Landscape tiles (`LandscapeCard`, `EpisodeCard`) share `LandscapeArtwork`
     for the 16:9 clip, bottom metadata wash and progress bar. Each supplies
-    its own `metadata` closure for the title block.
+    its own `metadata` closure for the title block. A `LandscapeCard` leaves
+    a `Thumb` clean, since the title is printed in it, and draws the title
+    block over an episode still, a backdrop or a poster.
   - Genre and collection cards (`GenreCard`, `CollectionCard`,
     `SeerrGenreCard`) share `NamedArtworkBackground` (artwork, or a gradient
     picked deterministically from the name) and `GenreCardLabel` (the
