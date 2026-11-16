@@ -133,6 +133,9 @@ Keep the list short, because each theme is checked over every screen.
 - **New Year fireworks play once per profile on 1 January**, in every theme,
   unless the profile turned Seasonal Themes off (`NewYearOverlay`). They are
   a surprise, so they get no changelog line.
+- **Santa's sleigh crosses the sky once a day per profile on Christmas Eve
+  and Christmas Day**, in every theme, unless the profile turned Seasonal
+  Themes off (`SantaOverlay`). A surprise too, so no changelog line.
 
 Materials: use native `.glass` actions and the existing circular control
 shape. The iOS player's centre transport uses `.glass(.clear)` so video shows
