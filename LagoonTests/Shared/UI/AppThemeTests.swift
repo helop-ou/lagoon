@@ -10,6 +10,8 @@ struct AppThemeTests {
     /// Mid-month, so no time zone moves them across a month boundary.
     nonisolated static let september = date(2026, 9, 15)
     nonisolated static let october = date(2026, 10, 15)
+    nonisolated static let november = date(2026, 11, 15)
+    nonisolated static let december = date(2026, 12, 15)
 
     nonisolated private static func date(_ year: Int, _ month: Int, _ day: Int) -> Date {
         Calendar(identifier: .gregorian).date(from: DateComponents(
@@ -321,39 +323,69 @@ struct AppThemeTests {
         #expect(GhostFlight.duration(of: plan, crossing: 10) == 12)
     }
 
-    // MARK: - October
+    // MARK: - Seasons
 
-    @Test func aProfileOnTheDefaultWearsSpookyThroughOctoberOnly() {
-        #expect(AppTheme.seasonal(on: Self.october) == .spooky)
-        #expect(AppTheme.seasonal(on: Self.september) == nil)
-        #expect(AppTheme.seasonal(on: Self.date(2026, 11, 15)) == nil)
+    @Test func octoberIsSpookyAndWinterRunsFromDecemberToTheSixthOfJanuary() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try #require(TimeZone(identifier: "UTC"))
+        func season(_ year: Int, _ month: Int, _ day: Int) -> ThemeSeason? {
+            ThemeSeason.current(on: Self.date(year, month, day), calendar: calendar)
+        }
+        #expect(season(2026, 9, 30) == nil)
+        #expect(season(2026, 10, 1) == ThemeSeason(theme: .spooky, year: 2026))
+        #expect(season(2026, 10, 31) == ThemeSeason(theme: .spooky, year: 2026))
+        #expect(season(2026, 11, 1) == nil)
+        #expect(season(2026, 11, 30) == nil)
+        #expect(season(2026, 12, 1) == ThemeSeason(theme: .winter, year: 2026))
+        #expect(season(2026, 12, 31) == ThemeSeason(theme: .winter, year: 2026))
+        // The same winter on the other side of New Year, and not the next.
+        #expect(season(2027, 1, 6) == ThemeSeason(theme: .winter, year: 2026))
+        #expect(season(2027, 1, 7) == nil)
+        #expect(season(2027, 12, 1)?.id != season(2026, 12, 1)?.id)
+    }
 
+    @Test func aNewProfileWearsEachSeasonsThemeAndItsOwnBetweenThem() {
         let defaults = defaults()
         var today = Self.october
         let store = ThemeStore(defaults: defaults, now: { today })
-        // Never chose, or chose the default before October: both haunted.
         store.configure(accountID: "new")
+        #expect(store.followsSeasons)
         #expect(store.theme == .spooky)
-        defaults.set("lagoon", forKey: ThemeStore.key("old"))
-        store.configure(accountID: "old")
-        #expect(store.theme == .spooky)
-        // Nothing was saved for them by the season.
+        // The season saves nothing of its own.
         #expect(defaults.string(forKey: ThemeStore.key("new")) == nil)
 
-        today = Self.date(2026, 11, 1)
+        today = Self.november
+        store.refreshSeason()
+        #expect(store.theme == .lagoon)
+        today = Self.december
+        store.refreshSeason()
+        #expect(store.theme == .winter)
+        today = Self.date(2027, 1, 20)
         store.refreshSeason()
         #expect(store.theme == .lagoon)
     }
 
-    @Test func aChosenThemeIsNeverReplacedBySpooky() {
+    @Test func aChosenThemeGivesWayToTheSeasonAndReturnsAfterIt() {
         let defaults = defaults()
-        defaults.set("babyPink", forKey: ThemeStore.key("a"))
-        let store = ThemeStore(defaults: defaults, now: { Self.october })
+        var today = Self.september
+        let store = ThemeStore(defaults: defaults, now: { today })
         store.configure(accountID: "a")
+        store.select(.babyPink)
+        #expect(store.themeAfterSeason == nil)
+
+        today = Self.december
+        store.refreshSeason()
+        #expect(store.theme == .winter)
+        #expect(store.themeAfterSeason == .babyPink)
+        #expect(defaults.string(forKey: ThemeStore.key("a")) == "babyPink")
+
+        today = Self.date(2027, 1, 20)
+        store.refreshSeason()
         #expect(store.theme == .babyPink)
+        #expect(store.themeAfterSeason == nil)
     }
 
-    @Test func choosingLagoonInOctoberKeepsItUntilNextOctober() {
+    @Test func aThemeChosenDuringASeasonStaysForItAndTheNextSeasonStillComes() {
         let defaults = defaults()
         var today = Self.october
         let store = ThemeStore(defaults: defaults, now: { today })
@@ -361,25 +393,101 @@ struct AppThemeTests {
         #expect(store.theme == .spooky)
         store.select(.lagoon)
         #expect(store.theme == .lagoon)
+        // Through a profile switch and the rest of October.
         store.configure(accountID: "b")
         store.configure(accountID: "a")
         #expect(store.theme == .lagoon)
+        today = Self.date(2026, 10, 28)
+        store.refreshSeason()
+        #expect(store.theme == .lagoon)
 
+        // Winter is another season, and so is the next October.
+        today = Self.december
+        store.refreshSeason()
+        #expect(store.theme == .winter)
         today = Self.date(2027, 10, 5)
         store.refreshSeason()
         #expect(store.theme == .spooky)
     }
 
-    @Test func choosingSpookyKeepsItAfterOctober() {
-        let defaults = defaults()
+    @Test func aThemeChosenInDecemberStaysPastNewYearUntilWinterEnds() {
+        var today = Self.december
+        let store = ThemeStore(defaults: defaults(), now: { today })
+        store.configure(accountID: "a")
+        store.select(.babyPink)
+        today = Self.date(2027, 1, 3)
+        store.refreshSeason()
+        #expect(store.theme == .babyPink)
+        today = Self.date(2027, 12, 15)
+        store.refreshSeason()
+        #expect(store.theme == .winter)
+    }
+
+    @Test func choosingTheSeasonsOwnThemeKeepsItAfterTheSeason() {
         var today = Self.october
-        let store = ThemeStore(defaults: defaults, now: { today })
+        let store = ThemeStore(defaults: defaults(), now: { today })
         store.configure(accountID: "a")
         store.select(.babyPink)
         store.select(.spooky)
-        today = Self.date(2026, 11, 20)
+        today = Self.november
         store.refreshSeason()
         #expect(store.theme == .spooky)
+    }
+
+    @Test func aProfileThatTurnedTheSeasonsOffKeepsItsOwnTheme() {
+        var today = Self.september
+        let store = ThemeStore(defaults: defaults(), now: { today })
+        store.configure(accountID: "a")
+        store.setFollowsSeasons(false)
+        #expect(!store.followsSeasons)
+        today = Self.october
+        store.refreshSeason()
+        #expect(store.theme == .lagoon)
+        today = Self.december
+        store.refreshSeason()
+        #expect(store.theme == .lagoon)
+        // The switch belongs to the profile, like the theme.
+        store.configure(accountID: "b")
+        #expect(store.followsSeasons)
+        #expect(store.theme == .winter)
+        store.configure(accountID: "a")
+        #expect(!store.followsSeasons)
+        #expect(store.theme == .lagoon)
+    }
+
+    @Test func turningTheSeasonsOnOrOffDuringOneChangesTheThemeAtOnce() {
+        let defaults = defaults()
+        defaults.set("babyPink", forKey: ThemeStore.key("a"))
+        let store = ThemeStore(defaults: defaults, now: { Self.december })
+        store.configure(accountID: "a")
+        #expect(store.theme == .winter)
+
+        store.setFollowsSeasons(false)
+        #expect(store.theme == .babyPink)
+        #expect(store.bloomCount == 1)
+        store.setFollowsSeasons(true)
+        #expect(store.theme == .winter)
+        #expect(store.bloomCount == 2)
+        // Asking for what is already so does nothing.
+        store.setFollowsSeasons(true)
+        #expect(store.bloomCount == 2)
+
+        // On again brings the season back, even after a choice made in it.
+        store.select(.lagoon)
+        #expect(store.theme == .lagoon)
+        store.setFollowsSeasons(false)
+        store.setFollowsSeasons(true)
+        #expect(store.theme == .winter)
+        #expect(store.themeAfterSeason == .lagoon)
+    }
+
+    /// Builds before the switch stored a bare year for a declined October.
+    @Test func anOctoberDeclinedByAnOlderBuildDoesNotDeclineWinter() {
+        let defaults = defaults()
+        defaults.set(2026, forKey: ThemeStore.seasonKey("a"))
+        let store = ThemeStore(defaults: defaults, now: { Self.december })
+        store.configure(accountID: "a")
+        #expect(store.theme == .winter)
     }
 
     @Test func theSeasonTurningIsNotABloom() {
@@ -392,8 +500,9 @@ struct AppThemeTests {
         #expect(store.bloomCount == 0)
     }
 
-    @Test func forgettingAnAccountForgetsItsSeasonChoiceToo() {
+    @Test func forgettingAnAccountForgetsItsSeasonChoicesToo() {
         #expect(AccountLocalData.perAccountKeyPrefixes.contains(ThemeStore.seasonKeyPrefix))
+        #expect(AccountLocalData.perAccountKeyPrefixes.contains(ThemeStore.followsSeasonsKeyPrefix))
     }
 
     /// `UnwatchedMark` draws black figures on the signal colour.
