@@ -1,8 +1,9 @@
 import SwiftUI
 
-/// A snowy page's backdrop decoration: frost in the top corners and light
-/// snow falling behind the content. The snow stands still under Reduce
-/// Motion and while the player is up.
+/// A snowy page's backdrop decoration: frost in the top corners, light snow
+/// falling behind the content, and now and then an elf down a rope at the
+/// page's side. The snow stands still under Reduce Motion and while the
+/// player is up, and no elf comes.
 struct WinterDecoration: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @Environment(\.playerCover) private var playerCover
@@ -19,6 +20,7 @@ struct WinterDecoration: View {
             } else {
                 SnowfallLayers(color: ice)
             }
+            ElfVisitor(isStill: isStill)
         }
         .allowsHitTesting(false)
         .accessibilityHidden(true)
