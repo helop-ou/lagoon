@@ -9,6 +9,12 @@ nonisolated enum NewYear {
         return parts.year
     }
 
+    /// The year the greeting names: this one on 1 January, and the next on
+    /// any other day, which only a preview asks for.
+    static func upcomingYear(on date: Date, calendar: Calendar = .current) -> Int {
+        year(on: date, calendar: calendar) ?? calendar.component(.year, from: date) + 1
+    }
+
     /// Seconds until the year turns, on 31 December only.
     static func secondsUntilMidnight(from date: Date, calendar: Calendar = .current) -> TimeInterval? {
         let parts = calendar.dateComponents([.month, .day], from: date)
