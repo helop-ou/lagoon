@@ -16,10 +16,8 @@ struct NewYearGreetingLayers: UIViewRepresentable {
     func updateUIView(_ view: NewYearGreetingLayerView, context: Context) {}
 }
 
-final class NewYearGreetingLayerView: UIView {
+final class NewYearGreetingLayerView: TimedLayerView {
     let year: Int
-    /// When the show began, on the layers' own clock.
-    let began: CFTimeInterval
     private let dynamicTypeSize: DynamicTypeSize
 
     private(set) var greetingLayer: CALayer?
@@ -27,7 +25,6 @@ final class NewYearGreetingLayerView: UIView {
     private(set) var numeralLayers: [CALayer] = []
     private(set) var shineLayer: CALayer?
     private(set) var starLayers: [CALayer] = []
-    private var builtSize: CGSize = .zero
 
     /// How often the greeting is sampled. The render server draws the
     /// frames between.
@@ -39,40 +36,10 @@ final class NewYearGreetingLayerView: UIView {
     static let popKey = "pop"
     static let crossKey = "cross"
 
-    init(
-        startedAt: Date, year: Int, dynamicTypeSize: DynamicTypeSize = .large,
-        now: CFTimeInterval = CACurrentMediaTime()
-    ) {
+    init(startedAt: Date, year: Int, dynamicTypeSize: DynamicTypeSize = .large) {
         self.year = year
         self.dynamicTypeSize = dynamicTypeSize
-        began = now - Date.now.timeIntervalSince(startedAt)
-        super.init(frame: .zero)
-        isUserInteractionEnabled = false
-        backgroundColor = .clear
-        // Going to the background removes every animation.
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(resume), name: UIApplication.didBecomeActiveNotification, object: nil
-        )
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) is not used")
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        if bounds.size != builtSize { rebuild() }
-    }
-
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
-        // Leaving a window removes them too.
-        if window != nil { rebuild() }
-    }
-
-    @objc private func resume() {
-        rebuild()
+        super.init(startedAt: startedAt)
     }
 
     /// Every moment the greeting is worked out for.
@@ -81,22 +48,19 @@ final class NewYearGreetingLayerView: UIView {
         return (0...count).map { Double($0) / Double(count) * Fireworks.duration }
     }
 
-    /// Lays the greeting out as the still picture has it and sets it going
-    /// from `began`, so one rebuilt partway carries on from where the clock
-    /// has it. Outside the show it is out of sight.
-    func rebuild() {
-        layer.sublayers?.forEach { $0.removeFromSuperlayer() }
+    override func forgetLayers() {
         greetingLayer = nil
         titleLayer = nil
         numeralLayers = []
         shineLayer = nil
         starLayers = []
-        builtSize = bounds.size
-        guard bounds.width > 0, bounds.height > 0 else { return }
+    }
+
+    /// The greeting as the still picture has it. Outside the show it is out
+    /// of sight.
+    override func addLayers() {
         let page = bounds.size
         let times = Self.sampleTimes
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
         let greeting = CALayer()
         greeting.frame = bounds
         greeting.opacity = 0
@@ -104,17 +68,11 @@ final class NewYearGreetingLayerView: UIView {
         addStars(to: greeting, page: page, times: times)
         addWords(to: greeting, page: page, times: times)
         layer.addSublayer(greeting)
-        CATransaction.commit()
         greetingLayer = greeting
     }
 
     private func animate(_ target: CALayer, _ keyPath: String, _ values: [Any], _ key: String) {
-        let animation = CAKeyframeAnimation(keyPath: keyPath)
-        animation.values = values
-        animation.calculationMode = .linear
-        animation.duration = Fireworks.duration
-        animation.beginTime = layer.convertTime(began, from: nil)
-        target.add(animation, forKey: key)
+        animate(target, keyPath, values, over: Fireworks.duration, key: key)
     }
 
     // MARK: - Stars
