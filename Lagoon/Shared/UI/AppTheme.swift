@@ -190,6 +190,8 @@ final class ThemeStore {
     private(set) var bloomCount = 0
     /// Bumped when the New Year fireworks should play.
     private(set) var newYearCount = 0
+    /// Counts the times the sleigh was asked to fly, for the overlay to watch.
+    private(set) var santaCount = 0
     private let defaults: UserDefaults
     private let now: () -> Date
     @ObservationIgnored private var activeOwner: ObjectIdentifier?
@@ -256,6 +258,16 @@ final class ThemeStore {
         newYearCount &+= 1
     }
 
+    /// Flies the sleigh the first time a profile is on screen on Christmas
+    /// Eve, and again on Christmas Day. A profile that turned the seasons
+    /// off gets none.
+    func welcomeSantaIfDue() {
+        guard let accountID, followsSeasons, let day = Christmas.day(on: now()),
+              defaults.integer(forKey: Self.santaKey(accountID)) != day else { return }
+        defaults.set(day, forKey: Self.santaKey(accountID))
+        santaCount &+= 1
+    }
+
     /// Follows a season starting or ending while the app ran. No bloom.
     func refreshSeason() {
         guard let accountID else { return }
@@ -296,6 +308,7 @@ final class ThemeStore {
     nonisolated static let followsSeasonsKeyPrefix = "appearance.followsSeasons."
     /// The year a profile last saw the New Year fireworks.
     nonisolated static let newYearKeyPrefix = "appearance.newYearWelcomed."
+    nonisolated static let santaKeyPrefix = "appearance.santaWelcomed."
 
     static func key(_ accountID: String) -> String {
         keyPrefix + accountID
@@ -307,6 +320,10 @@ final class ThemeStore {
 
     static func followsSeasonsKey(_ accountID: String) -> String {
         followsSeasonsKeyPrefix + accountID
+    }
+
+    static func santaKey(_ accountID: String) -> String {
+        santaKeyPrefix + accountID
     }
 
     static func newYearKey(_ accountID: String) -> String {
