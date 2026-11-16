@@ -377,6 +377,13 @@ Palettes:
   pale pumpkin `#FFB870`, signal in lifted violet `#B07CFF`. Its artwork tint
   is the purple, not the accent: an orange blush turned every page brown,
   which read as autumn rather than night.
+- `AppTheme.winter`: `#9ADBFF` ice blue accent, `#0F2A4E` night blue ground,
+  `#060C18` background, `#101C30` rows, `#4A5FD0` periwinkle as the third
+  glow. Signal in berry red `#FF6464`, the one warm colour: a candle gold
+  read as Lagoon's sand, and a green aurora glow as Lagoon's aqua. Controls
+  in `#8FD0F7`, a step deeper than the accent, because a toggle's white knob
+  was lost on anything paler. No artwork tint, so posters keep their own
+  colours.
 
 Where it applies:
 
@@ -405,9 +412,11 @@ the regression reset clears it.
 
 **The bloom.** Choosing a theme in Settings › Appearance plays
 `ThemeBloomOverlay` from the root: a bloom of the new accent with the theme's
-`bloomMotif` drifting up through it for under two seconds. Baby Pink's motif is
+`bloomMotif` drifting through it for under two seconds. Baby Pink's motif is
 flowers. Lagoon's is the jellyfish, beating as it rises with the same
-`JellyfishGeometry` as the sign-in screens. A new theme names its motif in
+`JellyfishGeometry` as the sign-in screens. Winter's is snowflakes
+(`SnowflakeGeometry`), the one motif that falls instead of rising
+(`BloomMotif.falls`). A new theme names its motif in
 `AppTheme.bloomMotif`. Reduce Motion makes it a plain fade. It plays for a
 viewer's choice and when switching to another profile, in that profile's
 theme (`ThemeStore.bloomCount`), but never at launch and never on returning to
