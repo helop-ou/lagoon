@@ -20,6 +20,34 @@ struct LibraryBrowseTests {
         #expect(LibrarySelection.restore(accountID: "server|alice", defaults: defaults) == LibrarySelection())
     }
 
+    /// A build that adds a filter reads selections saved without it.
+    @Test func aSelectionSavedBeforeAFilterExistedKeepsTheRest() {
+        let name = "LibrarySelectionTests.\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defer { defaults.removePersistentDomain(forName: name) }
+        defaults.set(
+            Data(#"{"kind":"shows","sort":"rating","genre":"Drama","unwatchedOnly":true}"#.utf8),
+            forKey: LibrarySelection.keyPrefix + "server|alice"
+        )
+        var expected = LibrarySelection()
+        expected.kind = .shows
+        expected.sort = .rating
+        expected.genre = "Drama"
+        expected.unwatchedOnly = true
+        #expect(LibrarySelection.restore(accountID: "server|alice", defaults: defaults) == expected)
+
+        // A sort this build does not know falls back alone.
+        defaults.set(
+            Data(#"{"kind":"movies","sort":"mood","favoritesOnly":true,"only4K":true}"#.utf8),
+            forKey: LibrarySelection.keyPrefix + "server|alice"
+        )
+        expected = LibrarySelection()
+        expected.kind = .movies
+        expected.favoritesOnly = true
+        expected.only4K = true
+        #expect(LibrarySelection.restore(accountID: "server|alice", defaults: defaults) == expected)
+    }
+
     @Test func decadesHaveExactBoundariesAndOnlyIncludeYearsInTheLibrary() throws {
         let decade = try #require(LibraryDecade(rawValue: 2000))
         #expect(decade.title == "2000–2009")
