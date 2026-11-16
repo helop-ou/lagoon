@@ -38,6 +38,7 @@ report. One marketing version spans many builds.
 
 - Series You Haven't Started no longer lists a series you have begun.
 - A card whose picture has no title in it now shows the title, so no row is left with unnamed pictures.
+- A lower quality you accepted after stalls now holds for the next episode too. It used to start at full quality again.
 - The Library's Decade filter lists the decades your library has. It used to come up empty unless a single library was chosen.
 - Removing an account also forgets the audio and subtitle choices Lagoon remembered for it.
 

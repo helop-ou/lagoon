@@ -27,7 +27,8 @@ final class PlaybackSuccessorPreparation {
         static let none = Staging(stage: { _, _ in }, endWarming: {}, discard: { _ in })
     }
 
-    typealias Negotiation = @MainActor (String, JellyfinClient) async throws -> PreparedPlayback?
+    /// The item, the client and the bitrate ceiling the viewer accepted, if any.
+    typealias Negotiation = @MainActor (String, JellyfinClient, Int?) async throws -> PreparedPlayback?
 
     private let negotiate: Negotiation
     private var staging = Staging.none
@@ -35,6 +36,8 @@ final class PlaybackSuccessorPreparation {
     private var preparationTask: Task<PreparedPlayback?, Never>?
     private var prepared: PreparedPlayback?
     private var itemID: String?
+    /// The ceiling the preparation was negotiated under.
+    private var maxBitrate: Int?
     private var allowsWarming = false
 
     var isPreparing: Bool { preparationTask != nil }
@@ -49,23 +52,30 @@ final class PlaybackSuccessorPreparation {
         if let itemID { staging.discard(itemID) }
     }
 
+    /// `maxBitrate` is the session's ceiling: a lower quality the viewer
+    /// accepted holds for the next item too.
     func prepare(
         itemID: String,
         client: JellyfinClient,
+        maxBitrate: Int?,
         staging: Staging,
         warms: Bool
     ) {
+        // One made under another ceiling is a stream the viewer has since
+        // turned down.
+        if hasPreparation, self.maxBitrate != maxBitrate { cancel() }
         guard !hasPreparation else { return }
         generation &+= 1
         let generation = generation
         self.itemID = itemID
+        self.maxBitrate = maxBitrate
         self.staging = staging
         self.allowsWarming = warms
         let negotiate = negotiate
         preparationTask = Task { [weak self] in
             defer { self?.finishPreparation(generation: generation) }
             do {
-                guard let result = try await negotiate(itemID, client),
+                guard let result = try await negotiate(itemID, client, maxBitrate),
                       !Task.isCancelled,
                       let self, self.generation == generation else { return nil }
                 // Read the flag now: a handoff that began meanwhile has given up its
@@ -116,8 +126,10 @@ final class PlaybackSuccessorPreparation {
         preparationTask = nil
     }
 
-    static func negotiate(itemID: String, client: JellyfinClient) async throws -> PreparedPlayback? {
-        let (info, offer) = try await client.negotiate(itemId: itemID)
+    static func negotiate(
+        itemID: String, client: JellyfinClient, maxBitrate: Int?
+    ) async throws -> PreparedPlayback? {
+        let (info, offer) = try await client.negotiate(itemId: itemID, maxBitrate: maxBitrate)
         guard !Task.isCancelled,
               info.errorCode == nil,
               let source = info.mediaSources.first else { return nil }
