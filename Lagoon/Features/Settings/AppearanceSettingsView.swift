@@ -27,7 +27,7 @@ struct AppearanceSettingsView: View {
         )
     }
 
-    private static let seasonsFooter: LocalizedStringKey =
+    static let seasonsFooter: LocalizedStringKey =
         "Spooky through October and Winter from 1 December to 6 January, over the theme you chose. Your own theme returns afterwards."
 
     private var footer: String {

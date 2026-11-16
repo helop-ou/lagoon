@@ -131,5 +131,5 @@ struct DiagnosticsSettingsView: View {
     #endif
 
     /// One string, so both platforms make the same promise.
-    private static let diagnosticReportsFooter: LocalizedStringKey = "When playback or a server request fails unexpectedly, Lagoon sends a technical report to the developer: app build, device model and OS version, codec and delivery details, error codes, and about a minute of playback measurements. Reports never include your account, server address, media titles, subtitles, or screenshots. Reports are kept for 30 days."
+    static let diagnosticReportsFooter: LocalizedStringKey = "When playback or a server request fails unexpectedly, Lagoon sends a technical report to the developer: app build, device model and OS version, codec and delivery details, error codes, and about a minute of playback measurements. Reports never include your account, server address, media titles, subtitles, or screenshots. Reports are kept for 30 days."
 }
