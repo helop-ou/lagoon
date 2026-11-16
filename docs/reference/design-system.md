@@ -539,6 +539,28 @@ shows in the gaps between rails and never over a poster.
 Tried and dropped: plain white discs for every flake read as dots, not
 snow. Frost as feathered spines growing from the corner read as scribble.
 
+**The elf.** `ElfVisitor` is part of a snowy page's backdrop. Now and then
+an elf in a red cap slides down a rope at the side of the page, hangs there,
+waves toward the page, and climbs back up hand over hand: 2.8 seconds down,
+7 staying, 4.8 up in seven pulls (`ElfVisit.pose(at:)`).
+
+- Elves are about on the days of `SeasonalCalendar.elves`. A page's first
+  visit comes 20 to 50 seconds after it appears and the ones after it every
+  100 to 220 seconds (`ElfVisit.plan`), each on either side, at its own
+  place across the side's lane and its own depth. A page left before the
+  wait is over never shows one.
+- The elf hangs in the lane a page leaves open beside its content, so on a
+  phone, where that lane is narrow, the content covers part of it, as it
+  does Spooky's spider.
+- It swings by a share of its own height, not by an angle: on a long rope
+  an angle carried it out of its lane.
+- It is drawn in a canvas its own size at thirty frames a second, and only
+  while one is on the page, so a page costs nothing between visits. Never a
+  full-screen canvas: see the snow above.
+- Its red, skin and gold are `ChristmasInk`, the sleigh driver's.
+- `-debug.elfVisit YES` sends one three seconds after a page appears and
+  every five after, whatever the date, on a DEBUG build.
+
 **Christmas.** `SantaOverlay` sits over the tabs like the fireworks and
 flies `SantaFlight`: a gold sleigh and three pairs of reindeer on an arc
 across the top of the page, the driver in red with a green sack, the lead's
