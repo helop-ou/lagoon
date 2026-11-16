@@ -151,7 +151,7 @@ presents it ([Playback](../playback.md#controls-and-presentation)).
   Filters never flips Movies to Shows or clears the 4K filter. Only
   watch-state, favorites and 4K are Toggles. The rest are single-selection
   Pickers.
-- Decade ranges come from Jellyfin's `Items/Filters` years for the current
+- Decade ranges come from Jellyfin's `Years` endpoint for the current
   media type and source, not the loaded page or a fixed range. Gaps and
   undated titles make no choices. Queries use the `Years` parameter. A saved
   decade stays clearable while loading or offline and drops only when a

@@ -134,7 +134,7 @@ Settings → Playback → Maximum Quality on Auto asks before negotiating
 | --- | --- | --- |
 | Libraries | `Users/{uid}/Views` | filter `CollectionType` to `movies`/`tvshows` |
 | Browse/search | `Users/{uid}/Items` | `ParentId`, `IncludeItemTypes`, `SearchTerm`, paged via `StartIndex`/`Limit` |
-| Decade choices | `Items/Filters` | `Years` for `UserId`, `IncludeItemTypes`, optional `ParentId`. Recursive full catalogue. Not `Filters2`, which has no years |
+| Decade choices | `Years` | one item a year, named for it, for `UserId`, `IncludeItemTypes`, `Recursive=true`, optional `ParentId`. Not `Items/Filters`, which returns no years without a `ParentId`, nor `Filters2`, which has none |
 | Item detail | `Users/{uid}/Items/{id}` | re-fetched after playback for fresh `UserData` |
 | Continue watching | `Users/{uid}/Items/Resume` | `MediaTypes=Video` |
 | Next up | `Shows/NextUp?UserId=` | Home uses `EnableResumable=false&EnableRewatching=false`. **Never** for autoplay, see below |
