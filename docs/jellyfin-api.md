@@ -306,7 +306,9 @@ official clients:
   has a headshot, so the person page builds it from the person item's own
   `ImageTags.Primary`
 
-A landscape card with no artwork shows its title.
+Only a `Thumb` has the title printed in it. A landscape card whose artwork
+is anything else, or missing, draws the title itself
+(`MediaItem.hasTitledArtwork`).
 
 ## Downloads
 
