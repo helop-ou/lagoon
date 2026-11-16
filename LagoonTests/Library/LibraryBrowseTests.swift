@@ -255,16 +255,25 @@ struct LibraryBrowseTests {
                 let years = try await client.libraryYears(LibraryYearScope(kind: kind, libraryID: libraryID))
                 #expect(years == [1978, 2001, 2009, 2001, 2032])
                 let url = try #require(StubURLProtocol.requests(host: "library.test").last?.url)
-                #expect(url.path == "/Items/Filters")
+                // Items/Filters answers with no years unless it has a ParentId.
+                #expect(url.path == "/Years")
                 let query = Dictionary(uniqueKeysWithValues: URLComponents(url: url, resolvingAgainstBaseURL: false)!.queryItems!.map { ($0.name, $0.value ?? "") })
-                var expected = ["UserId": "user", "IncludeItemTypes": kind.includeTypes.map(\.rawValue).joined(separator: ",")]
+                var expected = [
+                    "UserId": "user", "IncludeItemTypes": kind.includeTypes.map(\.rawValue).joined(separator: ","),
+                    "Recursive": "true", "EnableImages": "false", "EnableUserData": "false",
+                ]
                 expected["ParentId"] = libraryID
                 #expect(query == expected)
             }
         }
-        for json in [#"{}"#, #"{"years":null}"#] {
-            #expect(try JSONDecoder().decode(LibraryYearFilters.self, from: Data(json.utf8)).years.isEmpty)
+    }
+
+    @Test func aYearsAnswerKeepsOnlyItsUsableYears() throws {
+        for json in [#"{}"#, #"{"items":null}"#, #"{"items":[]}"#] {
+            #expect(try JSONDecoder().decode(LibraryYearsPage.self, from: Data(json.utf8)).years.isEmpty)
         }
+        let mixed = #"{"items":[{"name":"1999"},{"name":"Unknown"},{"name":7},{},{"name":"2004"}]}"#
+        #expect(try JSONDecoder().decode(LibraryYearsPage.self, from: Data(mixed.utf8)).years == [1999, 2004])
     }
 
     @Test func preferencesSavedBeforeDecadeFilteringStillRestore() throws {
@@ -495,8 +504,8 @@ struct LibraryBrowseTests {
 
     private func makeClient() -> JellyfinClient {
         StubURLProtocol.register(host: "library.test") { request in
-            let body = request.url?.path == "/Items/Filters"
-                ? #"{"Years":[1978,2001,2009,2001,2032]}"#
+            let body = request.url?.path == "/Years"
+                ? #"{"Items":[{"Name":"1978","Type":"Year"},{"Name":"2001"},{"Name":"2009"},{"Name":"2001"},{"Name":"2032"}],"TotalRecordCount":5}"#
                 : #"{"Items":[],"TotalRecordCount":0}"#
             return (200, ["Content-Type": "application/json"], Data(body.utf8))
         }
