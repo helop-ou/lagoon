@@ -16,6 +16,24 @@ struct OnboardingErrorText: View {
     }
 }
 
+/// The label of an onboarding screen's second button, such as Back or Not
+/// Now. As wide as the column on iOS, so it is as easy to hit as the first:
+/// sized to its text it was 31 points tall. tvOS keeps it compact.
+struct OnboardingSecondaryLabel: View {
+    let title: LocalizedStringKey
+
+    init(_ title: LocalizedStringKey) {
+        self.title = title
+    }
+
+    var body: some View {
+        Text(title)
+            #if os(iOS)
+            .frame(maxWidth: .infinity)
+            #endif
+    }
+}
+
 #if os(iOS)
 /// The iPhone and iPad onboarding column: centred while everything fits, and
 /// scrolling once the custom headers, the heading or the keyboard take the room.

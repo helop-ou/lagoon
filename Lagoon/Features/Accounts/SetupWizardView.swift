@@ -28,6 +28,7 @@ struct SetupWizardView: View {
                     .font(.title3.weight(.semibold))
                 secondaryButton
                     .buttonStyle(.glass)
+                    .controlSize(.large)
             }
             #else
             ScrollView {
@@ -103,11 +104,17 @@ struct SetupWizardView: View {
     @ViewBuilder
     private var secondaryButton: some View {
         if step.previous == nil {
-            Button("Skip Setup") { session.finishSetup() }
-                .accessibilityIdentifier("setup.skip")
+            Button {
+                session.finishSetup()
+            } label: {
+                OnboardingSecondaryLabel("Skip Setup")
+            }
+            .accessibilityIdentifier("setup.skip")
         } else {
-            Button("Back", action: goBack)
-                .accessibilityIdentifier("setup.back")
+            Button(action: goBack) {
+                OnboardingSecondaryLabel("Back")
+            }
+            .accessibilityIdentifier("setup.back")
         }
     }
 
