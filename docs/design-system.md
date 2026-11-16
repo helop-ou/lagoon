@@ -126,6 +126,10 @@ Keep the list short, because each theme is checked over every screen.
   theme chosen during a season stays for that season, and the next season
   comes as usual. Both themes stay in the picker all year.
 
+- **New Year fireworks play once per profile on 1 January**, in every theme,
+  unless the profile turned Seasonal Themes off (`NewYearOverlay`). They are
+  a surprise, so they get no changelog line.
+
 Materials: use native `.glass` actions and the existing circular control
 shape. The iOS player's centre transport uses `.glass(.clear)` so video shows
 through. No `.glassProminent`, no nested glass. Cards over credits use
