@@ -125,11 +125,21 @@ struct AppThemeTests {
         #expect(ThemeStore.storedTheme(for: "a", in: defaults) == .babyPink)
     }
 
-    /// Posters keep their own colours under the brand and Baby Pink.
-    @Test func artworkGlowsAreLeftAloneByTheBrandAndPink() {
+    /// The picker lists every case, and a saved choice is the case's name on
+    /// disk: renaming one forgets every profile that chose it.
+    @Test func savedThemeNamesNeverChange() {
+        #expect(AppTheme.allCases.map(\.rawValue) == ["lagoon", "babyPink", "spooky", "winter"])
+        let defaults = defaults()
+        defaults.set("winter", forKey: ThemeStore.key("a"))
+        #expect(ThemeStore.storedTheme(for: "a", in: defaults) == .winter)
+    }
+
+    /// Posters keep their own colours under the brand, Baby Pink and Winter.
+    @Test func artworkGlowsAreLeftAloneByTheBrandPinkAndWinter() {
         let artwork = ArtworkPalette(colors: [.red, .green, .blue])
         #expect(AppTheme.lagoon.palette.glow(for: artwork) == artwork)
         #expect(AppTheme.babyPink.palette.glow(for: artwork) == artwork)
+        #expect(AppTheme.winter.palette.glow(for: artwork) == artwork)
     }
 
     @Test func spookyBlushesArtworkGlows() {
@@ -150,6 +160,23 @@ struct AppThemeTests {
         // containment test miscounts crossings.
         #expect(ghost.contains(CGPoint(x: rect.minX + 25, y: rect.minY + 12), eoFill: true))
         #expect(!ghost.contains(CGPoint(x: rect.minX + 16, y: rect.minY + 22), eoFill: true))
+    }
+
+    @Test func aSnowflakeHasSixArmsThatReachItsRadius() {
+        let radius = 40.0
+        let flake = SnowflakeGeometry.path(radius: radius)
+        let bounds = flake.boundingRect
+        // An arm points straight up and another straight down. The four
+        // between them lean 60 degrees, so they stop short of the sides.
+        #expect(abs(bounds.minY + radius) < 0.01 && abs(bounds.maxY - radius) < 0.01)
+        #expect(abs(bounds.width - 2 * radius * sin(.pi / 3)) < 0.01)
+        // A sixth of a turn lands every arm on its neighbour.
+        let turned = flake.applying(CGAffineTransform(rotationAngle: .pi / 3)).boundingRect
+        #expect(abs(turned.width - bounds.width) < 0.01 && abs(turned.height - bounds.height) < 0.01)
+        // Each arm carries side branches, which stop short of the next arm.
+        let inked = flake.strokedPath(SnowflakeGeometry.strokeStyle(radius: radius))
+        #expect(inked.contains(CGPoint(x: 6, y: -21.5)))
+        #expect(!inked.contains(CGPoint(x: 14, y: -26)))
     }
 
     @Test func aCobwebStaysInItsCornerAndEachCornerDiffers() {
