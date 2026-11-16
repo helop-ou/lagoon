@@ -528,7 +528,16 @@ shows in the gaps between rails and never over a poster.
   Apple TV 4K it idles on Home at 0.2 to 0.8 % of a core, the same as the
   Lagoon theme. The first version drew every flake in one `Canvas` thirty
   times a second, which looked the same and took 33 % of a core, because the
-  whole 4K layer was drawn again for each frame. Leaving the window or the
+  whole 4K layer was drawn again for each frame.
+- **The snow runs at thirty frames a second** (`Motion.snowFramesPerSecond`,
+  set as each animation's `preferredFrameRateRange`). The app's own share
+  hides most of what moving snow costs: while anything on the page moves,
+  the system composes the whole screen again for every frame. Measured
+  across the whole Apple TV, as the busy share of one core, median of three
+  runs on Home: 22 % with no snow, 67 % with snow at the display's sixty
+  frames, 37 % at thirty, 33 % at twenty. Drawing a crystal as a picture
+  instead of a shape layer changed nothing, and nor did leaving the
+  crystals out: the frame rate is what costs. Leaving the window or the
   foreground removes the animations, so the view builds them again when it
   comes back.
 - Under Reduce Motion, and while the player is up (the `playerCover` rule
