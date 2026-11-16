@@ -201,8 +201,12 @@ final class TrackPreferencesStore {
         defaults.set(data, forKey: Self.key(accountID))
     }
 
+    /// The defaults key before the account id. `AccountLocalData` lists it,
+    /// so the record goes when the account does.
+    nonisolated static let keyPrefix = "playback.trackPreferences."
+
     private static func key(_ accountID: String) -> String {
-        "playback.trackPreferences.\(accountID)"
+        keyPrefix + accountID
     }
 }
 

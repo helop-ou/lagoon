@@ -406,8 +406,12 @@ final class SessionStore {
         defaults.set(try? JSONEncoder().encode(libraries), forKey: key)
     }
 
+    /// The cached library list's defaults key before the account id.
+    /// `AccountLocalData` lists it, so the cache goes when the account does.
+    nonisolated static let libraryCacheKeyPrefix = "libraries."
+
     private var libraryCacheKey: String? {
-        activeAccount.map { "libraries.\($0.id)" }
+        activeAccount.map { Self.libraryCacheKeyPrefix + $0.id }
     }
 
     private func loadAccounts() -> [StoredAccount] {

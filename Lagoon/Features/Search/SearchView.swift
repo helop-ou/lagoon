@@ -89,7 +89,10 @@ final class RecentSearchStore {
     static let limit = 10
 
     private let defaults: UserDefaults
-    private var key: String? { accountID.map { "search.recents.\($0)" } }
+    /// The defaults key before the account id. `AccountLocalData` lists it,
+    /// so the record goes when the account does.
+    nonisolated static let keyPrefix = "search.recents."
+    private var key: String? { accountID.map { Self.keyPrefix + $0 } }
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
