@@ -115,6 +115,29 @@ nonisolated struct SubtitlePreferenceValues: Codable, Equatable {
     var missingMode: MissingSubtitleMode = .ask
 }
 
+nonisolated extension SubtitlePreferenceValues {
+    /// Every key optional, so preferences saved before a setting existed
+    /// keep the rest instead of resetting. A value this build cannot read
+    /// falls back alone.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        var values = SubtitlePreferenceValues()
+        func read<Value: Decodable>(_ key: CodingKeys, into field: WritableKeyPath<Self, Value>) {
+            if let value = try? container.decodeIfPresent(Value.self, forKey: key) {
+                values[keyPath: field] = value
+            }
+        }
+        read(.followsSystemAppearance, into: \.followsSystemAppearance)
+        read(.textSize, into: \.textSize)
+        read(.edgeStyle, into: \.edgeStyle)
+        read(.background, into: \.background)
+        read(.verticalPosition, into: \.verticalPosition)
+        read(.languageOverrides, into: \.languageOverrides)
+        read(.missingMode, into: \.missingMode)
+        self = values
+    }
+}
+
 struct SubtitleRenderStyle {
     let font: Font
     let foregroundColor: Color
