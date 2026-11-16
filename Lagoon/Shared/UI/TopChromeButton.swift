@@ -74,17 +74,16 @@ final class TopChromeButton: UIButton {
     }
 
     override func shouldUpdateFocus(in context: UIFocusUpdateContext) -> Bool {
-        let sideways: (@MainActor @Sendable () -> Void)? = if context.focusHeading.contains(.left) {
-            moveLeftAction
-        } else if context.focusHeading.contains(.right) {
-            moveRightAction
+        let goesLeft = context.focusHeading.contains(.left)
+        let hasSideways = if goesLeft {
+            moveLeftAction != nil
         } else {
-            nil
+            context.focusHeading.contains(.right) && moveRightAction != nil
         }
-        if isFocused, let sideways {
+        if isFocused, hasSideways {
             DispatchQueue.main.async { [weak self] in
                 guard let self, self.isFocused else { return }
-                sideways()
+                if goesLeft { self.moveLeftAction?() } else { self.moveRightAction?() }
             }
             return false
         }

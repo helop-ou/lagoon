@@ -119,7 +119,7 @@ nonisolated struct LibraryYearsPage: Decodable {
 
         init(from decoder: Decoder) throws {
             let container = try decoder.container(keyedBy: AnyCodingKey.self)
-            year = (try? container.decodeIfPresent(String.self, forKey: "name")).flatMap { Int($0 ?? "") }
+            year = (try? container.decodeIfPresent(String.self, forKey: "name")).flatMap { Int($0) }
         }
     }
 }
