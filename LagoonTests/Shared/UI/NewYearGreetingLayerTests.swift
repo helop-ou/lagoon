@@ -8,7 +8,7 @@ import UIKit
 @Suite("New Year greeting in motion")
 @MainActor
 struct NewYearGreetingLayerTests {
-    private static let page = CGSize(width: 1920, height: 1080)
+    private nonisolated static let page = CGSize(width: 1920, height: 1080)
 
     private func greeting(year: Int = 2027, ago: Double = 0, size: CGSize = page) -> NewYearGreetingLayerView {
         let view = NewYearGreetingLayerView(startedAt: Date.now.addingTimeInterval(-ago), year: year)
