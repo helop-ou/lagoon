@@ -32,6 +32,7 @@ report. One marketing version spans many builds.
 
 - On a partly folded iPhone Duo, titles, buttons and poster grids stay clear of the fold.
 - On a partly folded iPhone Duo, the player shows the picture on one side of the fold and keeps its controls on the other, where they stay on screen.
+- Cards on Home mark what you have watched with a check, and a series you have started with the number of episodes left.
 
 ### Bug fixes
 
