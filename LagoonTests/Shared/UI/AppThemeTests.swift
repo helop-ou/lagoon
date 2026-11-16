@@ -136,18 +136,19 @@ struct AppThemeTests {
         #expect(ThemeStore.storedTheme(for: "a", in: defaults) == .winter)
     }
 
-    /// Posters keep their own colours under the brand, Baby Pink and Winter.
-    @Test func artworkGlowsAreLeftAloneByTheBrandPinkAndWinter() {
+    /// Posters keep their own colours under the brand and Baby Pink.
+    @Test func artworkGlowsAreLeftAloneByTheBrandAndPink() {
         let artwork = ArtworkPalette(colors: [.red, .green, .blue])
         #expect(AppTheme.lagoon.palette.glow(for: artwork) == artwork)
         #expect(AppTheme.babyPink.palette.glow(for: artwork) == artwork)
-        #expect(AppTheme.winter.palette.glow(for: artwork) == artwork)
     }
 
-    @Test func spookyBlushesArtworkGlows() {
+    /// A warm poster would otherwise turn a night page brown or olive.
+    @Test func spookyAndWinterBlushArtworkGlows() {
         let artwork = ArtworkPalette(colors: [.red, .green])
 
         #expect(AppTheme.spooky.palette.glow(for: artwork) != artwork)
+        #expect(AppTheme.winter.palette.glow(for: artwork) != artwork)
     }
 
     @Test func aGhostFitsItsRectAndItsFaceIsCutOut() {
@@ -194,46 +195,111 @@ struct AppThemeTests {
 
     @Test func aFlakeFallsFromAboveThePageToBelowItAndStartsAgain() {
         let page = CGSize(width: 400, height: 800)
-        let radius = 1.0...3.0
         let flake = Snowfall.Flake(lane: 0.5, start: 0, depth: 1, phase: 0)
         let seconds = Snowfall.fall.lowerBound
+        func pose(_ time: Double) -> Snowfall.Pose {
+            Snowfall.pose(of: flake, at: time, in: page, dot: 1...3, crystal: 4...8)
+        }
         // Wholly above the page as it starts, and wholly below as it ends.
-        let entering = Snowfall.pose(of: flake, at: 0, in: page, radius: radius)
+        let entering = pose(0)
         #expect(entering.center.y + entering.radius <= 0)
-        let leaving = Snowfall.pose(of: flake, at: seconds * 0.9999, in: page, radius: radius)
+        let leaving = pose(seconds * 0.9999)
         #expect(leaving.center.y - leaving.radius > page.height - 1)
         // Down all the way, never up.
         var last = entering.center.y
         for step in 1..<100 {
-            let y = Snowfall.pose(of: flake, at: seconds * Double(step) / 100, in: page, radius: radius).center.y
+            let y = pose(seconds * Double(step) / 100).center.y
             #expect(y > last, "step \(step)")
             last = y
         }
         // Then from the top again.
-        let again = Snowfall.pose(of: flake, at: seconds * 1.25, in: page, radius: radius)
-        let before = Snowfall.pose(of: flake, at: seconds * 0.25, in: page, radius: radius)
-        #expect(abs(again.center.y - before.center.y) < 0.001)
+        #expect(abs(pose(seconds * 1.25).center.y - pose(seconds * 0.25).center.y) < 0.001)
         // It sways about its lane without leaving it far behind.
         for step in 0..<100 {
-            let x = Snowfall.pose(of: flake, at: Double(step) * 0.37, in: page, radius: radius).center.x
-            #expect(abs(x - 200) <= 9.001, "step \(step)")
+            #expect(abs(pose(Double(step) * 0.37).center.x - 200) <= 12.001, "step \(step)")
         }
     }
 
     @Test func aNearFlakeIsBiggerBrighterAndFasterThanAFarOne() {
         let page = CGSize(width: 400, height: 800)
-        let radius = 1.0...3.0
+        func pose(_ flake: Snowfall.Flake, _ time: Double) -> Snowfall.Pose {
+            Snowfall.pose(of: flake, at: time, in: page, dot: 1...3, crystal: 4...8)
+        }
         let far = Snowfall.Flake(lane: 0.2, start: 0.3, depth: 0, phase: 0)
         let near = Snowfall.Flake(lane: 0.2, start: 0.3, depth: 1, phase: 0)
-        let farPose = Snowfall.pose(of: far, at: 0, in: page, radius: radius)
-        let nearPose = Snowfall.pose(of: near, at: 0, in: page, radius: radius)
-        #expect(farPose.radius == 1 && nearPose.radius == 3)
-        #expect(farPose.opacity == Snowfall.opacity.lowerBound && nearPose.opacity == Snowfall.opacity.upperBound)
+        #expect(pose(far, 0).radius == 1 && pose(near, 0).radius == 8)
+        #expect(pose(far, 0).opacity == Snowfall.opacity.lowerBound)
+        #expect(pose(near, 0).opacity == Snowfall.opacity.upperBound)
         func fallen(_ flake: Snowfall.Flake) -> Double {
-            Snowfall.pose(of: flake, at: 1, in: page, radius: radius).center.y
-                - Snowfall.pose(of: flake, at: 0, in: page, radius: radius).center.y
+            pose(flake, 1).center.y - pose(flake, 0).center.y
         }
         #expect(fallen(near) > fallen(far) * 1.5)
+    }
+
+    @Test func aFlakeCloseEnoughIsACrystalThatTurnsAndAFarOneIsASoftDot() {
+        let page = CGSize(width: 400, height: 800)
+        func pose(depth: Double, at time: Double = 0) -> Snowfall.Pose {
+            Snowfall.pose(
+                of: Snowfall.Flake(lane: 0.5, start: 0.5, depth: depth, phase: 1),
+                at: time, in: page, dot: 1...3, crystal: 4...8
+            )
+        }
+        let dot = pose(depth: Snowfall.crystalDepth - 0.01)
+        #expect(!dot.isCrystal)
+        #expect(dot.radius > 2.9 && dot.radius < 3)
+        // The smallest crystal is already bigger than the biggest dot.
+        let smallest = pose(depth: Snowfall.crystalDepth)
+        #expect(smallest.isCrystal)
+        #expect(smallest.radius == 4)
+        #expect(pose(depth: 1).radius == 8)
+        // Turning steadily, from where its phase left it.
+        #expect(pose(depth: 1).turn == 1)
+        #expect(abs(pose(depth: 1, at: 10).turn - (1 + 10 * Snowfall.spin)) < 0.0001)
+    }
+
+    @Test func frostGrowsOutOfTheCornerAlongBothEdgesAndThinsAway() throws {
+        let frost = FrostGeometry.frost(size: 100, seed: 3)
+        #expect(frost == FrostGeometry.frost(size: 100, seed: 3))
+        #expect(frost != FrostGeometry.frost(size: 100, seed: 11))
+        // The biggest crystal sits in the corner.
+        let corner = try #require(frost.crystals.first)
+        #expect(corner.radius == 62)
+        #expect(hypot(corner.center.x, corner.center.y) < 10)
+        #expect(frost.crystals.dropFirst().allSatisfy { $0.radius < corner.radius })
+        // The rest sit on an edge, smaller the further along it they are.
+        let top = frost.crystals.dropFirst().filter { $0.center.x > $0.center.y }
+        let side = frost.crystals.dropFirst().filter { $0.center.y > $0.center.x }
+        #expect(top.count >= 2 && side.count >= 2)
+        #expect(top.allSatisfy { abs($0.center.y) <= $0.radius * 0.25 })
+        #expect(side.allSatisfy { abs($0.center.x) <= $0.radius * 0.25 })
+        #expect(zip(top, top.dropFirst()).allSatisfy { $0.center.x < $1.center.x && $0.radius > $1.radius })
+        #expect(zip(side, side.dropFirst()).allSatisfy { $0.center.y < $1.center.y && $0.radius > $1.radius })
+        // Specks stay inside the frost, most of them near the corner.
+        #expect(frost.specks.count == FrostGeometry.speckCount)
+        let distances = frost.specks.map { hypot($0.center.x, $0.center.y) }
+        #expect(distances.allSatisfy { $0 <= 100 * FrostGeometry.reach })
+        #expect(distances.filter { $0 < 60 }.count > distances.filter { $0 >= 60 }.count)
+        #expect(frost.specks.allSatisfy { $0.center.x >= 0 && $0.center.y >= 0 })
+        // Full strength in the corner, none where the frost ends.
+        #expect(FrostGeometry.strength(at: .zero, size: 100) == 1)
+        #expect(abs(FrostGeometry.strength(at: CGPoint(x: 60, y: 0), size: 100) - 0.5) < 0.0001)
+        #expect(FrostGeometry.strength(at: CGPoint(x: 0, y: 120), size: 100) == 0)
+        #expect(FrostGeometry.strength(at: CGPoint(x: 300, y: 300), size: 100) == 0)
+    }
+
+    @Test func aFrostCrystalHasAHeartAndMoreBranchesThanAFallingFlake() {
+        let radius = 40.0
+        let hairline = StrokeStyle(lineWidth: 1)
+        let frost = SnowflakeGeometry.frostPath(radius: radius).strokedPath(hairline)
+        let flake = SnowflakeGeometry.path(radius: radius).strokedPath(hairline)
+        // Both reach the radius on six arms.
+        #expect(abs(SnowflakeGeometry.frostPath(radius: radius).boundingRect.height - 2 * radius) < 0.01)
+        // The middle of one side of the hexagon at its heart.
+        let heart = CGPoint(x: 2.42, y: -4.2)
+        #expect(frost.contains(heart) && !flake.contains(heart))
+        // Halfway along a branch near the tip, where a flake's arm is bare.
+        let tipBranch = CGPoint(x: 2.08, y: -35.6)
+        #expect(frost.contains(tipBranch) && !flake.contains(tipBranch))
     }
 
     @Test func onlyWinterSnows() {
