@@ -539,6 +539,34 @@ shows in the gaps between rails and never over a poster.
 Tried and dropped: plain white discs for every flake read as dots, not
 snow. Frost as feathered spines growing from the corner read as scribble.
 
+**Christmas.** `SantaOverlay` sits over the tabs like the fireworks and
+flies `SantaFlight`: a gold sleigh and three pairs of reindeer on an arc
+across the top of the page, the driver in red with a green sack, the lead's
+nose glowing red, and gold dust that twinkles and falls behind. It takes
+9.5 seconds to cross and the last dust is gone at 12.7. No sound.
+
+- It is due the first time a profile is on screen on each day of
+  `SeasonalCalendar.santa` (`Christmas.day(on:)`), 2.5 seconds after the
+  page appears, so the page arrives first.
+  `ThemeStore.welcomeSantaIfDue()` stores the day under
+  `appearance.santaWelcomed.<accountID>`, so each profile sees it once on
+  each day. A profile with Seasonal Themes off gets none.
+- It never starts over a playing title, by the fireworks' rule: the overlay
+  only asks while the scene is active and `playerCover` says no player is up.
+- **The figures** are drawn in their own units, where a reindeer's body is
+  100 long, and scaled so the team spans 46 % of the page's width, never
+  under 280 points or over 900. Each figure sits on the arc by itself and
+  leans with it. The arc's climb is limited by the page's width: by its
+  height alone, a phone stood the team on end.
+- **Colours** are `ChristmasInk`, not the theme's: gold reads as Christmas
+  over any theme. Every colour is opaque. A see-through far reindeer read as
+  a blur of the near one, so it is a darker gold instead. An all-gold driver
+  read as a snowman, so he wears red.
+- The page dims by 42 % while the sleigh is over it, or the gold is lost on
+  bright artwork.
+- Reduce Motion gets one still moment for four seconds.
+- `-debug.santaFlight YES` flies it on a DEBUG build.
+
 **New Year.** `NewYearOverlay` sits over the tabs and plays `Fireworks` with
 the year in gold for thirteen seconds, in every theme, with no sound. It
 happens once a year, so it is meant to feel like an event.
