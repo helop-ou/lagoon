@@ -36,6 +36,10 @@ nonisolated struct RememberedSubtitleChoice: RememberedTrackChoice {
     static let memoryNamespace = "subtitleTrackMemory"
 
     var isOff: Bool
+    /// The closed captions carried in the video. They are no stream in the
+    /// layout, so nothing below describes them. Absent from choices stored
+    /// before they could be chosen.
+    var isClosedCaptions: Bool?
     var language: String?
     var title: String?
     /// 1-based, in the engine's subtitle ordinal space: embedded tracks first,
@@ -47,6 +51,7 @@ nonisolated struct RememberedSubtitleChoice: RememberedTrackChoice {
 
     init(
         isOff: Bool = false,
+        isClosedCaptions: Bool = false,
         language: String? = nil,
         title: String? = nil,
         ordinal: Int,
@@ -54,6 +59,7 @@ nonisolated struct RememberedSubtitleChoice: RememberedTrackChoice {
         updatedAt: Double = Date.timeIntervalSinceReferenceDate
     ) {
         self.isOff = isOff
+        self.isClosedCaptions = isClosedCaptions ? true : nil
         self.language = language
         self.title = title
         self.ordinal = ordinal
@@ -121,6 +127,8 @@ nonisolated enum SubtitleTrackMemoryPolicy {
         in streams: [SubtitleLayoutStream]
     ) -> Int? {
         if choice.isOff { return offOrdinal }
+        // No track in the layout: they are picked when they turn up.
+        if choice.isClosedCaptions == true { return nil }
         return uniqueDescriptiveOrdinal(
             matchingLanguage: choice.language,
             title: choice.title,
