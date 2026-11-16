@@ -181,7 +181,10 @@ notes](reference/design-system.md#themes).
     name. Collection cards caption below the art and keep it untouched.
   - The `.downloadedBadge(itemID:)` modifier draws the top-trailing corner
     marks (iOS-only `DownloadedMark`, plus an optional `leading` view like
-    `WatchedMark`, or `UnwatchedMark` on a series the viewer has started). `String.appendingDownloadedSuffix(itemID:)` appends the
+    `WatchedMark`, or `UnwatchedMark` on a series the viewer has started).
+    A `LandscapeCard` carries both: the check on a watched title, the count
+    on a started series. A watched title in progress again shows only its
+    progress bar. `String.appendingDownloadedSuffix(itemID:)` appends the
     matching accessibility suffix without an `#if` at each call site.
 - **Chip rows** (Discover's Movies/Shows/Requests, the Requests filters) stay
   one row everywhere. On a phone the row scrolls horizontally, with the gutter
