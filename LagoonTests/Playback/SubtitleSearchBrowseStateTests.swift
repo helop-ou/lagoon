@@ -87,10 +87,6 @@ struct SubtitleSearchBrowseStateTests {
         try await waitUntil { coordinator.phase != .searching }
         #expect(coordinator.results.count == 1)
         #expect(browseRequestPaths().contains("/Items/item-1/RemoteSearch/Subtitles/est"))
-
-        coordinator.cycleLanguage()
-        #expect(coordinator.phase == .searching)
-        try await waitUntil { coordinator.phase != .searching }
     }
 
     @Test @MainActor func changingLanguageOnTheTrackListDoesNotSearch() async throws {

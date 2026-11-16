@@ -8,7 +8,6 @@ nonisolated struct SyncPlayPlayRequest: Identifiable, Equatable, Sendable {
     let id = UUID()
     let media: MediaItem
     let startSeconds: Double
-    let playlistItemId: String
 }
 
 /// Watch Together: SyncPlay group membership (socket, clock, group, queue,
@@ -230,8 +229,7 @@ final class SyncPlayStore {
             )
             pendingPlayRequest = SyncPlayPlayRequest(
                 media: media,
-                startSeconds: position,
-                playlistItemId: item.playlistItemId
+                startSeconds: position
             )
         } catch {
             guard isCurrent(generation, client: client) else { return }
@@ -477,8 +475,7 @@ final class SyncPlayStore {
         } else {
             pendingPlayRequest = SyncPlayPlayRequest(
                 media: media,
-                startSeconds: positionSeconds,
-                playlistItemId: playlistItemId
+                startSeconds: positionSeconds
             )
         }
     }

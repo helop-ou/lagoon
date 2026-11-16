@@ -251,7 +251,7 @@ final class DownloadStore {
     }
 
     func freeSpace() -> Int64? {
-        guard let directory = accountDirectory ?? baseDirectory as URL? else { return nil }
+        let directory = accountDirectory ?? baseDirectory
         let values = try? directory.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
         return values?.volumeAvailableCapacityForImportantUsage
     }

@@ -72,16 +72,14 @@ extension JellyfinClient {
         let isInNetwork: Bool?
     }
 
-    /// Negotiates a stream. `.negotiated` lets the server pick freely. Lower
-    /// rungs withdraw permissions after a failure, forcing a remux, then a
-    /// re-encode. `maxBitrate` overrides the connection's ceiling, for a
-    /// viewer who asked for a lower quality mid-title.
+    /// Negotiates a stream and lets the server pick freely. `maxBitrate`
+    /// overrides the connection's ceiling, for a viewer who asked for a lower
+    /// quality mid-title.
     func playbackInfo(
         itemId: String,
-        delivery: PlaybackDelivery = .negotiated,
         maxBitrate: Int? = nil
     ) async throws -> PlaybackInfoResponse {
-        try await negotiate(itemId: itemId, delivery: delivery, maxBitrate: maxBitrate).info
+        try await negotiate(itemId: itemId, maxBitrate: maxBitrate).info
     }
 
     /// `playbackInfo`, with what this device offered the server and why.

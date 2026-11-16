@@ -28,15 +28,15 @@ struct Swimmer {
     func draw(in context: inout GraphicsContext, size: CGSize, seconds: Double, ink accentColor: Color) {
         let beats = seconds / period + phase
         let beat = beats.truncatingRemainder(dividingBy: 1)
-        let contraction = Self.contraction(of: beat, squeeze: Self.squeeze)
-        let trail = Self.thrust(of: beat - Self.tentacleLag, squeeze: Self.squeeze)
+        let contraction = Self.contraction(of: beat)
+        let trail = Self.thrust(of: beat - Self.tentacleLag)
 
         let side = min(size.width, size.height)
         let drawn = side * 0.115 * scale
 
         // Lift follows the contraction and cancels over a beat, so it treads
         // water. The slow drift is where it actually goes.
-        let lift = drawn * liftShare * Self.contraction(of: beat - liftLag, squeeze: Self.squeeze)
+        let lift = drawn * liftShare * Self.contraction(of: beat - liftLag)
 
         let sway = seconds / wanderPeriod.width * .pi * 2 + phase * .pi * 2
         let rise = seconds / wanderPeriod.height * .pi * 2 + phase * .pi * 2
@@ -64,21 +64,21 @@ struct Swimmer {
     }
 
     /// 0 relaxed, 1 contracted. Two cosine halves, so the loop has no seam.
-    static func contraction(of phase: Double, squeeze: Double) -> Double {
+    static func contraction(of phase: Double) -> Double {
         var phase = phase.truncatingRemainder(dividingBy: 1)
         if phase < 0 { phase += 1 }
-        if phase < squeeze {
-            return 0.5 - 0.5 * cos(.pi * phase / squeeze)
+        if phase < Self.squeeze {
+            return 0.5 - 0.5 * cos(.pi * phase / Self.squeeze)
         }
-        return 0.5 + 0.5 * cos(.pi * (phase - squeeze) / (1 - squeeze))
+        return 0.5 + 0.5 * cos(.pi * (phase - Self.squeeze) / (1 - Self.squeeze))
     }
 
     /// 0...1, non-zero only while contracting.
-    static func thrust(of phase: Double, squeeze: Double) -> Double {
+    static func thrust(of phase: Double) -> Double {
         var phase = phase.truncatingRemainder(dividingBy: 1)
         if phase < 0 { phase += 1 }
-        guard phase < squeeze else { return 0 }
-        return sin(.pi * phase / squeeze)
+        guard phase < Self.squeeze else { return 0 }
+        return sin(.pi * phase / Self.squeeze)
     }
 }
 

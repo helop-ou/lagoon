@@ -48,7 +48,6 @@ nonisolated extension MediaStream {
             width: nil,
             height: nil,
             bitDepth: nil,
-            bitRate: nil,
             realFrameRate: nil
         )
     }

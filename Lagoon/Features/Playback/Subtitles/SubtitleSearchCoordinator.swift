@@ -211,13 +211,6 @@ final class SubtitleSearchCoordinator {
         if isBrowsingResults { startSearch() }
     }
 
-    func cycleLanguage() {
-        let options: [String?] = [nil] + languageChoices.map(Optional.some)
-        let next = (options.firstIndex(where: { $0 == selectedLanguage }).map { $0 + 1 } ?? 0) % options.count
-        selectedLanguage = options[next]
-        if isBrowsingResults { startSearch() }
-    }
-
     func startSearch() {
         guard !phase.isDownloading else { return }
         searchTask?.cancel()

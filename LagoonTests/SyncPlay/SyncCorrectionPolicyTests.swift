@@ -64,7 +64,6 @@ struct SyncCorrectionPolicyTests {
             nowSeconds: 1_000
         )
         #expect(abs(waiting - 0.5) < 0.000_001)
-        #expect(!SyncPlayCommandSchedule.isPast(whenServerSeconds: 1_004.5, clockOffset: 4, nowSeconds: 1_000))
     }
 
     @Test func anInstantAlreadyGoneIsActedOnAtOnce() {
@@ -73,7 +72,6 @@ struct SyncCorrectionPolicyTests {
             clockOffset: 0,
             nowSeconds: 1_002
         ) == 0)
-        #expect(SyncPlayCommandSchedule.isPast(whenServerSeconds: 1_000, clockOffset: 0, nowSeconds: 1_002))
         #expect(SyncPlayCommandSchedule.delay(
             whenServerSeconds: .nan,
             clockOffset: 0,

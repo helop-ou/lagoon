@@ -197,8 +197,4 @@ final class ConnectionMeasurementCache {
         entries[serverKey] = Entry(measurement: measurement, measuredAt: now, pathGeneration: pathGeneration)
         return measurement
     }
-
-    func removeAll() {
-        entries = [:]
-    }
 }
