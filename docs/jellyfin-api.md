@@ -191,6 +191,10 @@ with Show Watched Titles on (Settings › Home Rows,
 - Genre Spotlight, Ready to Binge and Surprise Me drop their `IsUnplayed`
   filter. Great Movies You Haven't Seen and Series You Haven't Started keep
   it, as their names promise.
+- On a series `IsUnplayed` means not finished: one watched episode leaves
+  the series in. Series You Haven't Started drops any series with a
+  `PlayedPercentage` above zero (`HomeCuratedRows.isUnstarted`) and reads on,
+  16 at a time and four pages at most, until the row is full.
 - Home re-fetches just these rows when the choice changes
   (`refreshWatchedRows`), not the whole screen.
 
