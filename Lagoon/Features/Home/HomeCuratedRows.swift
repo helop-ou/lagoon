@@ -32,6 +32,12 @@ nonisolated enum HomeCuratedRows {
     /// Recent titles to try. A real seed can still have no similar items.
     static let seedAttempts = 4
 
+    /// Jellyfin item filters for a row that leaves watched titles out by
+    /// choice, not by its name.
+    static func watchedFilters(showsWatched: Bool) -> [String] {
+        showsWatched ? [] : ["IsUnplayed"]
+    }
+
     /// An unknown runtime passes. Servers do not always report one.
     static func isSubstantialSeed(_ item: MediaItem) -> Bool {
         guard let ticks = item.runTimeTicks else { return true }

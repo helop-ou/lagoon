@@ -43,12 +43,18 @@ nonisolated struct HomeSectionPreferenceValues: Codable, Equatable {
     /// rows are reconciled into it.
     var layout: [HomeSectionPreferenceRow] = []
 
-    init(layout: [HomeSectionPreferenceRow] = []) {
+    /// Keeps watched titles in Recently Added and in the rows that leave
+    /// them out by choice. Off is how Home has always been.
+    var showsWatched = false
+
+    init(layout: [HomeSectionPreferenceRow] = [], showsWatched: Bool = false) {
         self.layout = layout
+        self.showsWatched = showsWatched
     }
 
     private enum CodingKeys: String, CodingKey {
         case layout
+        case showsWatched
     }
 
     /// Legacy shape: ordered plugin rows plus hide-only native overrides.
@@ -60,6 +66,7 @@ nonisolated struct HomeSectionPreferenceValues: Codable, Equatable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
+        showsWatched = (try? container.decodeIfPresent(Bool.self, forKey: .showsWatched)) ?? false
         if let stored = try container.decodeIfPresent([HomeSectionPreferenceRow].self, forKey: .layout) {
             layout = stored
             return
@@ -461,10 +468,21 @@ final class HomeSectionPreferencesStore {
         persist()
     }
 
+    func setShowsWatched(_ showsWatched: Bool) {
+        guard values.showsWatched != showsWatched else { return }
+        values.showsWatched = showsWatched
+        persist()
+    }
+
+    /// Resets the arrangement. Whether watched titles show is its own choice.
     func reset() {
-        values = HomeSectionPreferenceValues()
+        values.layout = []
         guard let accountID else { return }
-        defaults.removeObject(forKey: Self.key(accountID))
+        if values == HomeSectionPreferenceValues() {
+            defaults.removeObject(forKey: Self.key(accountID))
+        } else {
+            persist()
+        }
     }
 
     static func savedValues(
@@ -535,6 +553,20 @@ struct HomeRowsSettingsView: View {
         """
     }
 
+    private var watchedFooter: LocalizedStringKey {
+        """
+        Recently Added and the rows Lagoon picks for you leave out what you \
+        have already watched. Turn this on to keep those titles in.
+        """
+    }
+
+    private var showsWatched: Binding<Bool> {
+        Binding(
+            get: { preferences.values.showsWatched },
+            set: { preferences.setShowsWatched($0) }
+        )
+    }
+
     var body: some View {
         #if os(tvOS)
         tvPage
@@ -546,6 +578,11 @@ struct HomeRowsSettingsView: View {
     #if os(tvOS)
     private var tvPage: some View {
         TVSettingsPage("Home Rows", description: description) {
+            TVSettingsSection("Watched Titles", footer: watchedFooter) {
+                TVSettingsToggle("Show Watched Titles", isOn: showsWatched)
+                    .accessibilityIdentifier("settings.home.showsWatched")
+            }
+
             TVSettingsSection("Rows") {
                 ForEach(Array(preferences.choices.enumerated()), id: \.element.id) { index, choice in
                     tvRow(index: index, choice: choice)
@@ -610,6 +647,13 @@ struct HomeRowsSettingsView: View {
     #else
     private var touchForm: some View {
         ThemedForm {
+            Section {
+                Toggle("Show Watched Titles", isOn: showsWatched)
+                    .accessibilityIdentifier("settings.home.showsWatched")
+            } footer: {
+                Text(watchedFooter)
+            }
+
             Section {
                 ForEach(preferences.choices) { choice in
                     Toggle(isOn: Binding(

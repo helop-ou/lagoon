@@ -77,6 +77,15 @@ struct HomeView: View {
                 seerr: session.seerr.client
             )
         }
+        // Changed in Settings, which this view only sees once it is back.
+        .onChange(of: savedHomePreferences.showsWatched) {
+            Task {
+                await viewModel.refreshWatchedRows(
+                    client: session.client,
+                    homeSectionPreferences: savedHomePreferences
+                )
+            }
+        }
         .restoresFocusAfterPlayer(isPresented: playerItem != nil)
         // Dismissing a `fullScreenCover` does not fire `onAppear`, so refresh
         // here. `settle()` waits for the stop report so the rails read the

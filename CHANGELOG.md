@@ -25,6 +25,7 @@ report. One marketing version spans many builds.
 - A new install asks four short questions after the first sign-in: your theme, the audio and subtitles a title starts with, how subtitles look, and whether to send diagnostic reports. Each already has an answer, and the setup can be skipped.
 - A Winter theme in Settings, Appearance: icy blue over a winter night, with frost in the corners and snow falling behind every page.
 - Seasonal Themes in Settings, Appearance: Spooky through October and Winter from 1 December to 6 January, over the theme you chose, which returns afterwards. Turn it off to keep your own theme all year.
+- Settings, Home Rows has a Show Watched Titles switch, which keeps what you have already watched in Recently Added and the rows Lagoon picks for you. Handy if you like to rewatch.
 
 ### Improvements
 
