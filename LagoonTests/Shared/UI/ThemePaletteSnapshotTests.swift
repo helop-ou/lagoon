@@ -33,9 +33,9 @@ struct ThemePaletteSnapshotTests {
 
     private static var size: CGSize {
         #if os(tvOS)
-        CGSize(width: 1400, height: 400)
+        CGSize(width: 1400, height: 520)
         #else
-        CGSize(width: 402, height: 420)
+        CGSize(width: 402, height: 460)
         #endif
     }
 
