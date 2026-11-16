@@ -400,8 +400,9 @@ toolbar and the tvOS row, shown only while it can start or stop
 
 - A surface tap toggles the transport. Centre play/pause and ±10 s buttons use
   `.glass(.clear)`.
-- While playing, controls fade after four seconds idle. Paused playback and
-  VoiceOver keep them up (with the options sheet closed). Hidden controls
+- While playing, controls fade after four seconds idle. Paused playback,
+  VoiceOver and an active fold keep them up (with the options sheet closed):
+  `PlayerTransportVisibility`. Hidden controls
   disable hit testing and are accessibility-hidden. The layout stays mounted,
   so fading and toolbar safe-area changes cannot shift the centre cluster.
 - Double-tapping either half seeks 10 s without revealing controls. Repeats
@@ -423,6 +424,28 @@ toolbar and the tvOS row, shown only while it can start or stop
 - The player follows device orientation and never forces a rotation. Audio
   uses movie-playback behavior: volume keys control output, and Silent Mode
   does not mute.
+
+**A partly folded iPhone Duo** gives the picture one side of the fold and the
+controls the other (`FoldSplit`, read by `onFoldSplitChange` on the player's
+own stack). The controls then have no picture under them to uncover, so they
+stay up for as long as the fold is active.
+
+- Folded like a laptop, the picture is above the fold with its subtitles,
+  spinner and seek feedback, and the transport and the centre buttons are
+  below. The toolbar's buttons move to the bottom bar, since above the fold
+  they would lie over the picture for good. A skip, Up Next, quality or
+  transcode prompt lies over the picture's corner, clear of the subtitles: the
+  half below has no room for one beside the centre buttons.
+- Folded like a book, the picture is before the fold and everything else is
+  after it, laid out as on a phone held upright.
+- The layout is the player's own and not `ArrangementView`'s. Only insets
+  change with the pose, so the video surface keeps its place in the view tree
+  and the engine never notices a fold, and `foldFramesOverride` can stand in
+  for the fold in `PlayerFoldSnapshotTests`.
+- Loading, a failure and the spinner between episodes take the picture's side
+  (`onFoldSide`).
+- Checked only with a stand-in fold. The poses themselves need DeviceHub or a
+  device, since no simulator command folds one.
 
 **Background (iOS).** Locking the phone or leaving the app keeps playing under
 the `audio` background mode. The picture is dropped until the scene returns,

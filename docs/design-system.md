@@ -360,6 +360,10 @@ coordinates, and `FoldLayout` keeps text and controls on one side of it:
   between the halves over the fold.
 - Content that scrolls through a fold running across (the laptop pose) is
   left alone, as system lists leave it.
+- A screen that does not scroll takes a side whichever way the fold runs.
+  `onFoldSplitChange` reports the two sides as insets and `onFoldSide` lays a
+  view out on one of them. The player is the one such screen: see
+  [Playback](playback.md#controls-and-presentation).
 
 `foldFramesOverride` stands in for the fold in snapshot tests, since no
 simulator API can fold the device.
