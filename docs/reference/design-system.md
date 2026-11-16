@@ -425,17 +425,32 @@ the same profile. An in-app switch waits until the picker has closed
 repainted it in the new theme on its way out, which looked like a clipped
 bloom.
 
-**The season.** `ThemeStore` resolves a profile's theme with
-`ThemeStore.theme(for:in:on:)`: a saved Baby Pink or Spooky wins.
-Otherwise it is `AppTheme.seasonal(on:)` (Spooky when the viewer's calendar says
-October) unless `appearance.seasonDeclined.<accountID>` holds this year,
-which `select(.lagoon)` writes during the season. Nothing is saved when the
-season applies itself, so November finds the default again. `RootView` calls
-`refreshSeason()` on every return to the foreground, so a month boundary
-crossed while the app slept turns the theme without a bloom. The declined key
-is a per-account key like the theme's, removed with the account and by the
-regression reset. The tvOS Appearance UI test expects Spooky as the starting
-value in October.
+**The seasons.** `ThemeSeason.current(on:)` names the season a date falls
+in: Spooky through October, Winter from 1 December to 6 January. A winter is
+one season on both sides of New Year, known by the year it began in.
+`ThemeStore.theme(for:in:on:)` resolves a profile's theme. It is the season's,
+unless the profile turned Seasonal Themes off
+(`appearance.followsSeasons.<accountID>`, on when absent) or chose a theme
+during this season (`appearance.seasonDeclined.<accountID>` holds that
+season's id, which `select` writes). Otherwise it is the saved choice.
+
+- Nothing is saved when a season applies itself, so the profile's own theme
+  is there when it ends. Settings › Appearance names the one that returns
+  (`themeAfterSeason`).
+- The picker shows the theme being worn. Choosing another during a season
+  keeps it for the rest of that season. Choosing the season's own theme
+  while wearing it changes nothing, so the profile's own still returns.
+- Turning the switch on during a season forgets a choice made in it and
+  brings the season's theme at once, with the bloom. Turning it off returns
+  the profile's own the same way.
+- `RootView` calls `refreshSeason()` on every return to the foreground, so a
+  season that began or ended while the app slept turns the theme without a
+  bloom.
+- Both keys are per-account keys like the theme's, removed with the account
+  and by the regression reset. Builds before the switch stored a bare year
+  for a declined October, which matches no season's id.
+- The tvOS Appearance UI test expects the season's theme as the starting
+  value.
 
 **Haunted.** Spooky decorates pages as well as colouring them
 (`AppTheme.isHaunted`). `ThemePageBackground` draws `HauntedDecoration`
