@@ -38,4 +38,47 @@ final class SetupWizardUITests: XCTestCase {
         XCTAssertTrue(home.waitForExistence(timeout: 20), "The setup did not end at Home")
         XCTAssertFalse(title.exists)
     }
+
+    #if os(iOS)
+    /// A choice made in the setup is the setting itself, not a copy of it.
+    func testAChoiceMadeInTheSetupIsWhatSettingsShows() {
+        continueAfterFailure = false
+        let app = XCUIApplication.regression(extra: [
+            "-debug.setupAtLaunch", "YES", "-AppleLanguages", "(en)", "-AppleLocale", "en_US",
+        ])
+        app.launch()
+        defer { app.terminate() }
+
+        let advance = app.buttons["setup.continue"]
+        XCTAssertTrue(advance.waitForExistence(timeout: 25), "The setup did not open")
+        advance.tap()
+        let subtitles = app.descendants(matching: .any)["setup.subtitles.default"]
+        XCTAssertTrue(subtitles.waitForExistence(timeout: 5))
+        subtitles.tap()
+        let always = app.buttons["Always"].firstMatch
+        XCTAssertTrue(always.waitForExistence(timeout: 5))
+        always.tap()
+        let chosen = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@ OR label CONTAINS %@", "Always", "Always"), object: subtitles
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [chosen], timeout: 5), .completed)
+        attachFullScreenshot(named: "setup-chosen")
+        advance.tap()
+        advance.tap()
+        advance.tap()
+
+        let settings = app.buttons.matching(NSPredicate(format: "label == %@", "Settings")).firstMatch
+        XCTAssertTrue(settings.waitForExistence(timeout: 20), "The setup did not end at Home")
+        settings.tap()
+        let category = app.descendants(matching: .any)["settings.category.subtitles"]
+        XCTAssertTrue(category.waitForExistence(timeout: 5))
+        category.tap()
+        let setting = app.descendants(matching: .any)["settings.subtitles.default"]
+        XCTAssertTrue(setting.waitForExistence(timeout: 5))
+        let kept = XCTNSPredicateExpectation(
+            predicate: NSPredicate(format: "value == %@ OR label CONTAINS %@", "Always", "Always"), object: setting
+        )
+        XCTAssertEqual(XCTWaiter.wait(for: [kept], timeout: 5), .completed, "Settings does not show the setup's choice")
+    }
+    #endif
 }
