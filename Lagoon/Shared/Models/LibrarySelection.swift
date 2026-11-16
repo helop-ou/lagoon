@@ -199,3 +199,21 @@ nonisolated struct LibrarySelection: Codable, Equatable, Hashable {
         defaults.set(data, forKey: Self.keyPrefix + accountID)
     }
 }
+
+nonisolated extension LibrarySelection {
+    /// Every key optional, so a selection saved before a filter existed
+    /// keeps the rest instead of resetting.
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        var selection = LibrarySelection()
+        container.read(.kind, into: &selection, at: \.kind)
+        container.read(.sort, into: &selection, at: \.sort)
+        container.read(.libraryID, into: &selection, at: \.libraryID)
+        container.read(.genre, into: &selection, at: \.genre)
+        container.read(.decade, into: &selection, at: \.decade)
+        container.read(.unwatchedOnly, into: &selection, at: \.unwatchedOnly)
+        container.read(.favoritesOnly, into: &selection, at: \.favoritesOnly)
+        container.read(.only4K, into: &selection, at: \.only4K)
+        self = selection
+    }
+}
