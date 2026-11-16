@@ -223,7 +223,7 @@ struct LandscapeCard: View {
         LandscapeArtwork(
             imageURL: thumbURL,
             maxPixelSize: ArtworkSizing.pixels(for: Metrics.landscapeWidth, displayScale: displayScale),
-            showsMetadata: showsMetadata || thumbURL == nil,
+            showsMetadata: showsMetadata || !item.hasTitledArtwork || thumbURL == nil,
             progress: item.playbackProgress
         ) {
             VStack(alignment: .leading, spacing: Metrics.Space.xs) {
@@ -524,6 +524,12 @@ extension MediaItem {
         guard type == .series, let userData, (userData.playedPercentage ?? 0) > 0,
               let count = userData.unplayedItemCount, count > 0 else { return nil }
         return count
+    }
+
+    /// Whether a landscape card's artwork has the title printed in it. Only
+    /// a `Thumb` does. An episode still, a backdrop and a poster do not.
+    var hasTitledArtwork: Bool {
+        type != .episode && imageTags?["Thumb"] != nil
     }
 
     /// Rail label: episodes show their series, everything else its own name.
