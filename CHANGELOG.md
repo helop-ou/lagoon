@@ -40,6 +40,7 @@ report. One marketing version spans many builds.
 - A card whose picture has no title in it now shows the title, so no row is left with unnamed pictures.
 - The Library's Decade filter lists the decades your library has. It used to come up empty unless a single library was chosen.
 - Removing an account also forgets the audio and subtitle choices Lagoon remembered for it.
+- Seasonal themes arrive on the right days on a device that keeps another calendar, such as the Buddhist or Islamic one.
 
 ## 0.9.0 (121)
 

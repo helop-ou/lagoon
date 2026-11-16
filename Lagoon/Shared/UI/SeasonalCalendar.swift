@@ -3,7 +3,19 @@ import Foundation
 /// Every date a seasonal theme or surprise goes by, in one place. Each is a
 /// month and a day with no year, so all of them come round again by
 /// themselves: the year is only ever read from the clock.
+///
+/// The dates are Gregorian whatever calendar the device keeps: October is
+/// the tenth month of no other. The device's calendar only says where the
+/// viewer's midnight falls.
 nonisolated enum SeasonalCalendar {
+    /// The Gregorian calendar on `calendar`'s clock.
+    static func gregorian(on calendar: Calendar) -> Calendar {
+        guard calendar.identifier != .gregorian else { return calendar }
+        var gregorian = Calendar(identifier: .gregorian)
+        gregorian.timeZone = calendar.timeZone
+        return gregorian
+    }
+
     /// A day of the year.
     struct Day: Equatable, Comparable, Sendable {
         let month: Int
@@ -16,7 +28,7 @@ nonisolated enum SeasonalCalendar {
 
         /// The day `date` falls on.
         init?(of date: Date, calendar: Calendar) {
-            let parts = calendar.dateComponents([.month, .day], from: date)
+            let parts = gregorian(on: calendar).dateComponents([.month, .day], from: date)
             guard let month = parts.month, let day = parts.day else { return nil }
             self.init(month: month, day: day)
         }
@@ -48,7 +60,7 @@ nonisolated enum SeasonalCalendar {
         /// outside it.
         func startYear(holding date: Date, calendar: Calendar) -> Int? {
             guard contains(date, calendar: calendar), let day = Day(of: date, calendar: calendar) else { return nil }
-            let year = calendar.component(.year, from: date)
+            let year = gregorian(on: calendar).component(.year, from: date)
             return runsOverNewYear && day <= last ? year - 1 : year
         }
     }
