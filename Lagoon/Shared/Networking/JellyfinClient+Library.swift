@@ -27,18 +27,22 @@ extension JellyfinClient {
         )
     }
 
+    /// Every production year in the scope, for the decade choices. Not
+    /// `Items/Filters`, which returns no years without a `ParentId`, nor
+    /// `Filters2`, which has none at all.
     func libraryYears(_ scope: LibraryYearScope) async throws -> [Int] {
         var query = [
             URLQueryItem(name: "UserId", value: try requireUserId()),
             URLQueryItem(name: "IncludeItemTypes", value: scope.kind.includeTypes.map(\.rawValue).joined(separator: ",")),
+            URLQueryItem(name: "Recursive", value: "true"),
+            URLQueryItem(name: "EnableImages", value: "false"),
+            URLQueryItem(name: "EnableUserData", value: "false"),
         ]
         if let libraryID = scope.libraryID {
             query.append(URLQueryItem(name: "ParentId", value: libraryID))
         }
-        // Filters2 has no Years field. The legacy filters endpoint returns
-        // all production years, recursively scoped to the user and library.
-        let filters: LibraryYearFilters = try await get("Items/Filters", query: query)
-        return filters.years
+        let page: LibraryYearsPage = try await get("Years", query: query)
+        return page.years
     }
 
     /// One browse query for the library screens and Home's rows. Unset
