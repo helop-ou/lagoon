@@ -520,12 +520,21 @@ shows in the gaps between rails and never over a poster.
   14 seconds and the farthest in 30.
 - A flake's place depends only on the clock (`Snowfall.pose`), so every page
   shows the same snow and nothing jumps when one page covers another.
-- The snow is one `Canvas`, redrawn every `Motion.snowFrame` (30 times a
-  second). Unlike the spiders and ghosts it never rests while a page is on
-  screen.
-- The snow stops under Reduce Motion, leaving the flakes where they were, and
-  while the player is up, by the same `playerCover` rule as the haunted
-  decoration. The frost stays.
+- **The moving snow is Core Animation layers** (`SnowfallLayers`,
+  `SnowfallLayerView`): one small layer a flake, a shape layer for a crystal
+  and a stretched soft-dot picture for the rest, each with endless fall, sway
+  and spin animations that start where the wall clock has the flake. The
+  render server moves them, so a snowing page costs the app nothing: on the
+  Apple TV 4K it idles on Home at 0.2 to 0.8 % of a core, the same as the
+  Lagoon theme. The first version drew every flake in one `Canvas` thirty
+  times a second, which looked the same and took 33 % of a core, because the
+  whole 4K layer was drawn again for each frame. Leaving the window or the
+  foreground removes the animations, so the view builds them again when it
+  comes back.
+- Under Reduce Motion, and while the player is up (the `playerCover` rule
+  the haunted decoration follows), the snow stands still: `SnowfallFrame`
+  draws `WinterDecoration.stillMoment` once in a `Canvas`. On the Apple TV
+  nothing of the snow was drawn during playback. The frost stays either way.
 
 Tried and dropped: plain white discs for every flake read as dots, not
 snow. Frost as feathered spines growing from the corner read as scribble.
