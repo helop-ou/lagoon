@@ -20,6 +20,7 @@ nonisolated enum RegressionStateReset {
         "playback.trackPreferences.",
         ThemeStore.keyPrefix,
         ThemeStore.seasonKeyPrefix,
+        ThemeStore.followsSeasonsKeyPrefix,
         "home.sectionPreferences.",
         "search.recents",
         "seerr.",

@@ -16,14 +16,28 @@ struct AppearanceSettingsView: View {
         )
     }
 
+    private var followsSeasons: Binding<Bool> {
+        Binding(
+            get: { ThemeStore.shared.followsSeasons },
+            set: { follows in
+                withAnimation(.easeInOut(duration: Motion.crossfade)) {
+                    ThemeStore.shared.setFollowsSeasons(follows)
+                }
+            }
+        )
+    }
+
+    private static let seasonsFooter: LocalizedStringKey =
+        "Spooky through October and Winter from 1 December to 6 January, over the theme you chose. Your own theme returns afterwards."
+
     private var footer: String {
         let saved = if let name = session.userName {
             String(localized: "Saved for \(name). Every Jellyfin user on this device keeps their own theme.")
         } else {
             String(localized: "Saved for this profile. Every Jellyfin user on this device keeps their own theme.")
         }
-        guard AppTheme.seasonal(on: .now) != nil else { return saved }
-        return saved + " " + String(localized: "Through October, a profile on Lagoon wears Spooky. Choose Lagoon to keep it.")
+        guard let own = ThemeStore.shared.themeAfterSeason else { return saved }
+        return saved + " " + String(localized: "\(Theme.current.title) is on for the season. \(own.title) returns when it ends.")
     }
 
     var body: some View {
@@ -56,6 +70,10 @@ struct AppearanceSettingsView: View {
                     .padding(.horizontal, Metrics.Space.m)
                     .accessibilityIdentifier("settings.appearance.description")
             }
+            TVSettingsSection("Seasons", footer: Self.seasonsFooter) {
+                TVSettingsToggle("Seasonal Themes", isOn: followsSeasons)
+                    .accessibilityIdentifier("settings.appearance.seasonal")
+            }
         }
     }
     #else
@@ -84,6 +102,12 @@ struct AppearanceSettingsView: View {
                 Text("Theme")
             } footer: {
                 Text(footer)
+            }
+            Section {
+                Toggle("Seasonal Themes", isOn: followsSeasons)
+                    .accessibilityIdentifier("settings.appearance.seasonal")
+            } footer: {
+                Text(Self.seasonsFooter)
             }
         }
     }

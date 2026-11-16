@@ -23,6 +23,7 @@ report. One marketing version spans many builds.
 ### New features
 
 - A Winter theme in Settings, Appearance: icy blue over a winter night, with light snow falling behind every page.
+- Seasonal Themes in Settings, Appearance: Spooky through October and Winter from 1 December to 6 January, over the theme you chose, which returns afterwards. Turn it off to keep your own theme all year.
 
 ### Improvements
 

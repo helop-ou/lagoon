@@ -53,12 +53,6 @@ nonisolated enum AppTheme: String, CaseIterable, Identifiable {
         }
     }
 
-    /// What a profile on the default theme wears this month: Spooky in
-    /// October, nothing otherwise.
-    static func seasonal(on date: Date) -> AppTheme? {
-        Calendar.current.component(.month, from: date) == 10 ? .spooky : nil
-    }
-
     /// Cobwebs in the page corners and a ghost in loading and empty states.
     var isHaunted: Bool { self == .spooky }
 
@@ -186,6 +180,8 @@ final class ThemeStore {
     static let shared = ThemeStore()
 
     private(set) var theme: AppTheme = .lagoon
+    /// Whether the profile wears each season's theme over its own.
+    private(set) var followsSeasons = true
     private(set) var accountID: String?
     /// Bumped when the bloom should play: the viewer chose a theme, or
     /// switched from one profile to another, which then arrives in its own
@@ -215,6 +211,7 @@ final class ThemeStore {
         guard self.accountID != accountID else { return }
         self.accountID = accountID
         guard let accountID else { return }
+        followsSeasons = Self.followsSeasons(accountID, in: defaults)
         theme = Self.theme(for: accountID, in: defaults, on: now())
         if let lastAccountID, lastAccountID != accountID { bloomCount &+= 1 }
         lastAccountID = accountID
@@ -226,30 +223,53 @@ final class ThemeStore {
         bloomCount &+= 1
         guard let accountID else { return }
         defaults.set(theme.rawValue, forKey: Self.key(accountID))
-        // Lagoon chosen in October keeps Lagoon until next October.
-        if theme == .lagoon, AppTheme.seasonal(on: now()) != nil {
-            defaults.set(Self.year(of: now()), forKey: Self.seasonKey(accountID))
+        // A choice made during a season outlasts it. The next season comes
+        // as usual.
+        if let season = ThemeSeason.current(on: now()) {
+            defaults.set(season.id, forKey: Self.seasonKey(accountID))
         }
     }
 
-    /// Follows the month turning while the app ran. No bloom.
+    /// Turning the seasons on during one brings its theme at once, whatever
+    /// was chosen earlier in it.
+    func setFollowsSeasons(_ follows: Bool) {
+        guard follows != followsSeasons else { return }
+        followsSeasons = follows
+        guard let accountID else { return }
+        defaults.set(follows, forKey: Self.followsSeasonsKey(accountID))
+        if follows { defaults.removeObject(forKey: Self.seasonKey(accountID)) }
+        let resolved = Self.theme(for: accountID, in: defaults, on: now())
+        guard resolved != theme else { return }
+        theme = resolved
+        bloomCount &+= 1
+    }
+
+    /// Follows a season starting or ending while the app ran. No bloom.
     func refreshSeason() {
         guard let accountID else { return }
         let resolved = Self.theme(for: accountID, in: defaults, on: now())
         if resolved != theme { theme = resolved }
     }
 
-    /// The saved choice, or the seasonal theme for a profile on the default
-    /// that has not declined it this year.
-    static func theme(for accountID: String, in defaults: UserDefaults, on date: Date) -> AppTheme {
-        let saved = storedTheme(for: accountID, in: defaults)
-        guard saved == .lagoon, let seasonal = AppTheme.seasonal(on: date),
-              defaults.integer(forKey: seasonKey(accountID)) != year(of: date) else { return saved }
-        return seasonal
+    /// The profile's own theme while a season's is worn over it.
+    var themeAfterSeason: AppTheme? {
+        guard let accountID else { return nil }
+        let saved = Self.storedTheme(for: accountID, in: defaults)
+        return saved == theme ? nil : saved
     }
 
-    private static func year(of date: Date) -> Int {
-        Calendar.current.component(.year, from: date)
+    /// The season's theme for a profile that follows the seasons and has not
+    /// chosen a theme during this one. Otherwise the saved choice.
+    static func theme(for accountID: String, in defaults: UserDefaults, on date: Date) -> AppTheme {
+        let saved = storedTheme(for: accountID, in: defaults)
+        guard followsSeasons(accountID, in: defaults), let season = ThemeSeason.current(on: date),
+              defaults.string(forKey: seasonKey(accountID)) != season.id else { return saved }
+        return season.theme
+    }
+
+    /// On until the profile turns it off.
+    static func followsSeasons(_ accountID: String, in defaults: UserDefaults) -> Bool {
+        defaults.object(forKey: followsSeasonsKey(accountID)) as? Bool ?? true
     }
 
     /// The saved theme, or `.lagoon` when none or unknown.
@@ -259,8 +279,9 @@ final class ThemeStore {
     }
 
     nonisolated static let keyPrefix = "appearance.theme."
-    /// The year a profile chose the default during the season.
+    /// The season a profile last chose a theme in, as `ThemeSeason.id`.
     nonisolated static let seasonKeyPrefix = "appearance.seasonDeclined."
+    nonisolated static let followsSeasonsKeyPrefix = "appearance.followsSeasons."
 
     static func key(_ accountID: String) -> String {
         keyPrefix + accountID
@@ -268,6 +289,10 @@ final class ThemeStore {
 
     static func seasonKey(_ accountID: String) -> String {
         seasonKeyPrefix + accountID
+    }
+
+    static func followsSeasonsKey(_ accountID: String) -> String {
+        followsSeasonsKeyPrefix + accountID
     }
 }
 
