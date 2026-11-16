@@ -138,7 +138,7 @@ Settings → Playback → Maximum Quality on Auto asks before negotiating
 | Item detail | `Users/{uid}/Items/{id}` | re-fetched after playback for fresh `UserData` |
 | Continue watching | `Users/{uid}/Items/Resume` | `MediaTypes=Video` |
 | Next up | `Shows/NextUp?UserId=` | Home uses `EnableResumable=false&EnableRewatching=false`. **Never** for autoplay, see below |
-| Recently added | `Users/{uid}/Items/Latest` | **returns a bare array**, not an `Items` wrapper |
+| Recently added | `Users/{uid}/Items/Latest` | **returns a bare array**, not an `Items` wrapper. Leaves watched titles out, see below |
 | Seasons/episodes | `Shows/{seriesId}/Seasons` / `…/Episodes?SeasonId=` | seasons ask for `Fields=RemoteTrailers` |
 | The episode after this one | `Shows/{seriesId}/Episodes?startItemId=&Limit=2` | index 1 is the next one |
 | Collections | `Users/{uid}/Items?IncludeItemTypes=BoxSet` | **`EnableUserData=false` or it takes 40 s**, see below |
@@ -174,6 +174,29 @@ old show with a new episode appears at its latest-addition position.
 - Missing parents are dropped, and a failed lookup falls back to Home's last good
   rail.
 - Movie libraries use the Latest response as is.
+
+**Latest hides watched titles, and no parameter keeps them.** With `IsPlayed`
+unset the server applies the user's own `HidePlayedInLatest` setting, which
+is on by default, and `IsPlayed=true` or `false` returns one half only. So
+with Show Watched Titles on (Settings › Home Rows,
+`HomeSectionPreferenceValues.showsWatched`) Home does not ask Latest at all:
+
+- Movies: `Users/{uid}/Items` for the library with `IncludeItemTypes=Movie`
+  and `SortBy=DateCreated,SortName` descending (`recentlyAdded`). On Jellyfin
+  12.4 that is the two halves of Latest interleaved by date.
+- Shows: the library's newest episodes by `DateCreated`, without user data,
+  images or a total, each swapped for its series as above
+  (`recentlyAddedSeries`). Episodes come 200 at a time, five pages at most,
+  until enough series turn up, since one show's new season can fill a page.
+- Genre Spotlight, Ready to Binge and Surprise Me drop their `IsUnplayed`
+  filter. Great Movies You Haven't Seen and Series You Haven't Started keep
+  it, as their names promise.
+- Home re-fetches just these rows when the choice changes
+  (`refreshWatchedRows`), not the whole screen.
+
+Off, the default, is Home as it was before the setting: Latest decides, so a
+user who turned `HidePlayedInLatest` off on the server still sees watched
+titles in Recently Added.
 
 ## Collections are folders, and folders are expensive
 
@@ -606,6 +629,9 @@ Rendering it wholesale would repeat rows: the same server offers
 `RecentlyAddedMovies` and `RecentlyAddedInLibrary` (one per library, like
 Lagoon's own Recently Added rows). So `HomeViewModel.nativelyCoveredSections`
 drops every section Lagoon already draws, and only the rest is appended.
+
+Show Watched Titles is stored with the arrangement, per server and user, but
+is its own choice: Reset to Lagoon Default restores the order and keeps it.
 
 Arrangement (Settings › Home Rows):
 
