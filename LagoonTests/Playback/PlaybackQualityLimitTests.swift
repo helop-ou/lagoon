@@ -239,6 +239,19 @@ struct PlaybackQualityLimitTests {
         #expect(try Self.sentMaxStreamingBitrate(host: host) == DeviceProfile.lagoon.maxStreamingBitrate)
     }
 
+    /// The next episode is negotiated ahead of its hand-off, and must be
+    /// asked for under the ceiling the viewer accepted for this one.
+    @Test @MainActor func theNextEpisodeIsAskedForUnderTheAcceptedLowerQuality() async throws {
+        let host = "quality-successor.test"
+        Self.stubServer(host: host, inNetwork: true)
+        defer { StubURLProtocol.unregister(host: host) }
+        let client = StubURLProtocol.makeJellyfinClient(host: host, deviceId: "quality-tests")
+        _ = try? await PlaybackSuccessorPreparation.negotiate(itemID: "next", client: client, maxBitrate: 8_400_000)
+        #expect(try Self.sentMaxStreamingBitrate(host: host) == 8_400_000)
+        _ = try? await PlaybackSuccessorPreparation.negotiate(itemID: "next", client: client, maxBitrate: nil)
+        #expect(try Self.sentMaxStreamingBitrate(host: host) == DeviceProfile.lagoon.maxStreamingBitrate)
+    }
+
     /// A 4 Mbit/s reading taken far from the router held a whole evening
     /// of 22-minute episodes to a transcode. The next one asks again.
     @Test @MainActor func aLowReadingIsMeasuredAgainSooner() async {
