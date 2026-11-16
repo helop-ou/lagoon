@@ -52,6 +52,8 @@ struct SetupWizardView: View {
             // Continue first, so Select alone walks through the defaults.
             .defaultFocus($focus, .advance)
             .onChange(of: step) { focus = .advance }
+            // tvOS 26 opens on a row above it, whatever `defaultFocus` says.
+            .task { focus = .advance }
             .onExitCommand(perform: exitCommand)
             #endif
         }
