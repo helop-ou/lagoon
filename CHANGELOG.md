@@ -36,6 +36,7 @@ report. One marketing version spans many builds.
 ### Bug fixes
 
 - Series You Haven't Started no longer lists a series you have begun.
+- A card whose picture has no title in it now shows the title, so no row is left with unnamed pictures.
 
 ## 0.9.0 (121)
 
