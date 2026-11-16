@@ -164,6 +164,34 @@ struct SubtitleTrackMemoryTests {
 
     /// The audio and subtitle memories share a mechanism but not a key.
     @MainActor
+    /// Stored whole per account, so one record that fails to decode would
+    /// take every show's choice with it.
+    @Test func choicesStoredBeforeCaptionsStillDecodeAndCaptionsRoundTrip() throws {
+        let old = #"{"show":{"isOff":false,"language":"eng","ordinal":2,"layout":"x","updatedAt":1}}"#
+        let decoded = try JSONDecoder().decode([String: RememberedSubtitleChoice].self, from: Data(old.utf8))
+        #expect(decoded["show"]?.isClosedCaptions == nil)
+        #expect(decoded["show"]?.language == "eng")
+
+        let captions = RememberedSubtitleChoice(isClosedCaptions: true, ordinal: 1_000_000, layout: "x", updatedAt: 2)
+        let stored = try JSONEncoder().encode(["show": captions])
+        #expect(try JSONDecoder().decode([String: RememberedSubtitleChoice].self, from: stored) == ["show": captions])
+        // A choice that is not captions is stored as it always was.
+        let plain = try JSONEncoder().encode(RememberedSubtitleChoice(language: "eng", ordinal: 1, layout: "x"))
+        #expect(!String(decoding: plain, as: UTF8.self).contains("isClosedCaptions"))
+    }
+
+    /// Captions are no track in the layout, even where a position in an
+    /// identical layout would otherwise match.
+    @Test func rememberedCaptionsNameNoTrackInTheLayout() {
+        let captions = RememberedSubtitleChoice(
+            isClosedCaptions: true,
+            ordinal: 1,
+            layout: SubtitleTrackMemoryPolicy.fingerprint(of: englishThreeWays)
+        )
+        #expect(SubtitleTrackMemoryPolicy.ordinal(for: captions, in: englishThreeWays) == nil)
+        #expect(SubtitleTrackMemoryPolicy.ordinal(for: captions, in: []) == nil)
+    }
+
     @Test func subtitlesAndAudioAreStoredApart() throws {
         try withDefaults { defaults in
             let scope = SubtitleTrackMemoryStore.scope(seriesID: "series-1", itemID: "episode-1")
