@@ -66,6 +66,31 @@ struct AccountPrivacyTests {
         #expect(LibrarySelection.restore(accountID: fixture.b.id, defaults: fixture.defaults) == selection)
     }
 
+    /// What the viewer picked for each show is theirs, like any preference.
+    @Test func forgettingAnAccountForgetsItsRememberedTrackChoices() throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        let store = fixture.store()
+        let captions = RememberedSubtitleChoice(isClosedCaptions: true, ordinal: 0, layout: "")
+        for account in [fixture.a, fixture.b] {
+            let memory = SubtitleTrackMemoryStore(defaults: fixture.defaults)
+            memory.configure(accountID: account.id)
+            memory.remember(captions, for: "show")
+        }
+        fixture.defaults.set(Data("audio".utf8), forKey: RememberedAudioChoice.memoryKeyPrefix + fixture.a.id)
+
+        try store.remove(fixture.a)
+
+        func remembered(by account: StoredAccount) -> RememberedSubtitleChoice? {
+            let memory = SubtitleTrackMemoryStore(defaults: fixture.defaults)
+            memory.configure(accountID: account.id)
+            return memory.choice(for: "show")
+        }
+        #expect(remembered(by: fixture.a) == nil)
+        #expect(remembered(by: fixture.b) == captions)
+        #expect(fixture.defaults.object(forKey: RememberedAudioChoice.memoryKeyPrefix + fixture.a.id) == nil)
+    }
+
     /// The regression reset must reach every per-account record too.
     @Test func regressionResetCoversEveryPerAccountKey() {
         for prefix in AccountLocalData.perAccountKeyPrefixes {
