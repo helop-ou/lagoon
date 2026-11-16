@@ -32,23 +32,30 @@ struct FirstRunTests {
         #expect(store.phase == .needsServer)
     }
 
-    @Test func theFirstSignInOffersSeerrBeforeHome() async throws {
+    @Test func theFirstSignInSetsUpThenOffersSeerrBeforeHome() async throws {
         let fixture = Fixture()
         defer { fixture.cleanUp() }
         let store = fixture.store()
         try await fixture.signIn(store)
-        #expect(store.phase == .offeringSeerr)
+        #expect(store.phase == .settingUp)
         #expect(store.activeAccount?.userId == "viewer")
+        // The Seerr offer waits for the setup, and Home for both.
+        store.finishSeerrOffer()
+        #expect(store.phase == .settingUp)
+        store.finishSetup()
+        #expect(store.phase == .offeringSeerr)
         store.finishSeerrOffer()
         #expect(store.phase == .signedIn)
     }
 
-    @Test func aServerThatAlreadyHasSeerrGoesStraightHome() async throws {
+    @Test func aServerThatAlreadyHasSeerrGoesHomeAfterTheSetup() async throws {
         let fixture = Fixture()
         defer { fixture.cleanUp() }
         fixture.defaults.set("https://seerr.first-run.test", forKey: "seerr.server.\(Fixture.server.absoluteString)")
         let store = fixture.store()
         try await fixture.signIn(store)
+        #expect(store.phase == .settingUp)
+        store.finishSetup()
         #expect(store.phase == .signedIn)
     }
 
@@ -64,7 +71,7 @@ struct FirstRunTests {
         #expect(store.phase == .signedIn)
     }
 
-    @Test func addingAnAccountNeverOffersSeerr() async throws {
+    @Test func addingAnAccountNeverSetsUpOrOffersSeerr() async throws {
         let fixture = Fixture()
         defer { fixture.cleanUp() }
         let draft = fixture.store().makeAccountDraft()
@@ -76,10 +83,12 @@ struct FirstRunTests {
         let fixture = Fixture()
         defer { fixture.cleanUp() }
         let store = fixture.store()
+        store.finishSetup()
         store.finishSeerrOffer()
         #expect(store.phase == .welcome)
         store.finishWelcome()
         store.finishWelcome()
+        store.finishSetup()
         store.finishSeerrOffer()
         #expect(store.phase == .needsServer)
     }
