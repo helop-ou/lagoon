@@ -342,6 +342,15 @@ enum Metrics {
     static let frostSize: CGFloat = 150
     static let frostLineWidth: CGFloat = 1
     #endif
+    /// A snowy page's visiting elf: its height from the hand on the rope to
+    /// its heels, and the longest rope it comes down.
+    #if os(tvOS)
+    static let elfSize: CGFloat = 104
+    static let elfDrop: CGFloat = 400
+    #else
+    static let elfSize: CGFloat = 52
+    static let elfDrop: CGFloat = 150
+    #endif
     /// The New Year fireworks: how thick a spark is drawn, the height of the
     /// year's numerals, a display size outside the Dynamic Type scale, and the
     /// space between the letters of the line above them.
