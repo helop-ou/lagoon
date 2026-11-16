@@ -45,6 +45,7 @@ final class LocalNetworkUITests: XCTestCase {
         username.tap()
         username.typeText("Fixture viewer\n")
         app.buttons["signin.submit"].tap()
+        app.skipSetup()
         app.skipSeerrOffer()
         openSeerr(in: app)
         try await control(server, path: "connectivity?drop=1")
