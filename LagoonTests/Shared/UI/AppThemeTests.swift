@@ -289,6 +289,12 @@ struct AppThemeTests {
             let to = try #require(fall.toValue as? Double)
             #expect(from < 0 && to > 800)
             #expect(layer.animation(forKey: SnowfallLayerView.swayKey) != nil)
+            // Drawn thirty times a second, whatever the display's rate.
+            for key in [SnowfallLayerView.fallKey, SnowfallLayerView.swayKey, SnowfallLayerView.spinKey] {
+                guard let animation = layer.animation(forKey: key) else { continue }
+                #expect(animation.preferredFrameRateRange.maximum == Motion.snowFramesPerSecond)
+                #expect(animation.preferredFrameRateRange.preferred == Motion.snowFramesPerSecond)
+            }
             // Only a crystal turns.
             #expect((layer.animation(forKey: SnowfallLayerView.spinKey) != nil) == (layer is CAShapeLayer))
         }
