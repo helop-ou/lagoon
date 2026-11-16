@@ -176,7 +176,9 @@ rows can be told apart and recognised later.
 
 The same ladder, in subtitle ordinals: embedded tracks, then external ones,
 with 0 meaning none. `SubtitleTrackMemoryStore` keeps one choice per series
-per account under its own key. Both stores are `TrackMemoryStore` (re-read,
+per account under its own key. Both keys are in
+`AccountLocalData.perAccountKeyPrefixes`, so forgetting the account forgets
+the choices. Both stores are `TrackMemoryStore` (re-read,
 merge, evict, persist), but the policies stay separate because layout shape
 differs and off is a valid answer.
 
