@@ -30,6 +30,11 @@ final class PlaybackSuccessorPreparation {
     /// The item, the client and the bitrate ceiling the viewer accepted, if any.
     typealias Negotiation = @MainActor (String, JellyfinClient, Int?) async throws -> PreparedPlayback?
 
+    /// The bitrate ceiling the viewer accepted for the session, if any. Asked
+    /// each time, so the next item is negotiated under the one that holds
+    /// when it is prepared.
+    var ceiling: @MainActor () -> Int? = { nil }
+
     private let negotiate: Negotiation
     private var staging = Staging.none
     private var generation = 0
@@ -41,7 +46,10 @@ final class PlaybackSuccessorPreparation {
     private var allowsWarming = false
 
     var isPreparing: Bool { preparationTask != nil }
-    var hasPreparation: Bool { isPreparing || prepared != nil }
+    /// Not one made under another ceiling: that is a stream the viewer has
+    /// since turned down.
+    var hasPreparation: Bool { holdsPreparation && maxBitrate == ceiling() }
+    private var holdsPreparation: Bool { isPreparing || prepared != nil }
 
     init(negotiate: @escaping Negotiation = PlaybackSuccessorPreparation.negotiate) {
         self.negotiate = negotiate
@@ -52,21 +60,19 @@ final class PlaybackSuccessorPreparation {
         if let itemID { staging.discard(itemID) }
     }
 
-    /// `maxBitrate` is the session's ceiling: a lower quality the viewer
-    /// accepted holds for the next item too.
     func prepare(
         itemID: String,
         client: JellyfinClient,
-        maxBitrate: Int?,
         staging: Staging,
         warms: Bool
     ) {
-        // One made under another ceiling is a stream the viewer has since
-        // turned down.
-        if hasPreparation, self.maxBitrate != maxBitrate { cancel() }
         guard !hasPreparation else { return }
+        // What is held was made under another ceiling.
+        if holdsPreparation { cancel() }
         generation &+= 1
         let generation = generation
+        // A lower quality the viewer accepted holds for the next item too.
+        let maxBitrate = ceiling()
         self.itemID = itemID
         self.maxBitrate = maxBitrate
         self.staging = staging
