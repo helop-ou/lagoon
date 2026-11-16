@@ -37,6 +37,10 @@ final class SessionStore {
     /// Owned here because a SyncPlay group belongs to the account that joined it.
     let syncPlay = SyncPlayStore()
     let recentSearches: RecentSearchStore
+    /// The viewer's track and subtitle choices. One store of each for the
+    /// whole app: a screen with its own would save over what another wrote.
+    let trackPreferences: TrackPreferencesStore
+    let subtitlePreferences: SubtitlePreferencesStore
     var cleanupErrorMessage: String?
 
     private let defaults: UserDefaults
@@ -92,6 +96,8 @@ final class SessionStore {
         let localData = AccountLocalData(defaults: defaults, credentials: credentials)
         self.localData = localData
         recentSearches = RecentSearchStore(defaults: defaults)
+        trackPreferences = TrackPreferencesStore(defaults: defaults)
+        subtitlePreferences = SubtitlePreferencesStore(defaults: defaults)
         seerr = SeerrSessionStore(
             client: seerrClient ?? SeerrClient(), defaults: defaults, localData: localData, serverHeaders: serverHeaders
         )
@@ -132,6 +138,8 @@ final class SessionStore {
     private func synchronizeAccountContext() {
         guard !isAccountDraft else { return }
         recentSearches.configure(accountID: activeAccount?.id)
+        trackPreferences.configure(accountID: activeAccount?.id)
+        subtitlePreferences.configure(accountID: activeAccount?.id)
         // Include the re-authenticating account so its sign-in screen keeps its theme.
         stores.themes.configure(accountID: (activeAccount ?? reauthenticationAccount)?.id, owner: ObjectIdentifier(self))
         stores.topShelf?.activate(accountID: activeAccount?.id)
