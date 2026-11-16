@@ -382,8 +382,8 @@ Palettes:
   glow. Signal in berry red `#FF6464`, the one warm colour: a candle gold
   read as Lagoon's sand, and a green aurora glow as Lagoon's aqua. Controls
   in `#8FD0F7`, a step deeper than the accent, because a toggle's white knob
-  was lost on anything paler. No artwork tint, so posters keep their own
-  colours.
+  was lost on anything paler. Its artwork tint is a cold blue `#3F74C9`:
+  untinted, a warm poster's glow turned the whole page olive on the Apple TV.
 
 Where it applies:
 
@@ -499,25 +499,36 @@ Ghosts are pale, never the accent, with faces cut out by an even-odd fill so
 they read over anything. Spooky's bloom motif is `.ghosts`. None of this
 covers text or artwork, and none of it reaches the player or Top Shelf.
 
-**Snow.** Winter decorates pages too (`AppTheme.isSnowy`):
-`ThemePageBackground` draws `WinterDecoration`, light snow falling behind the
-content, so it shows in the gaps between rails and never over a poster.
+**Frost and snow.** Winter decorates pages too (`AppTheme.isSnowy`):
+`ThemePageBackground` draws `WinterDecoration` behind the content, so it
+shows in the gaps between rails and never over a poster.
 
-- `Snowfall` is a fixed, seeded set of flakes (`Metrics.snowflakeCount`, 44
-  on tvOS and 30 on iOS). Each keeps its own lane and depth. A near flake is
-  bigger, brighter and faster: it crosses the page in 14 seconds and the
-  farthest in 30. Depth is squared, so most of the snow is far off and only a
-  few flakes are close.
+- **Frost** (`FrostGeometry`, `FrostCorners`) in both top corners, where
+  Spooky has its cobwebs. Each corner is a haze, a cluster of ice crystals and
+  specks of ice, all fading away from the corner. The biggest crystal sits in
+  the corner and smaller ones follow each edge, a little in or out of it.
+  Seeded, so the corners differ but never change, and drawn once
+  (`Metrics.frostSize` 340 on tvOS, 150 on iOS). A frost crystal is
+  `SnowflakeGeometry.frostPath`: four pairs of branches an arm and a hexagon
+  at its heart.
+- **Snow** (`Snowfall`, `SnowfallFrame`) is a fixed, seeded set of flakes
+  (`Metrics.snowflakeCount`, 56 on tvOS and 40 on iOS). Each keeps its own
+  lane and depth. From `Snowfall.crystalDepth` on, a flake is close enough to
+  be a crystal with six branched arms, turning slowly as it falls. Further
+  off it is a soft dot that fades toward its edge, like something out of
+  focus. A near flake is bigger, brighter and faster: it crosses the page in
+  14 seconds and the farthest in 30.
 - A flake's place depends only on the clock (`Snowfall.pose`), so every page
   shows the same snow and nothing jumps when one page covers another.
-- It is one `Canvas` of plain discs, redrawn every `Motion.snowFrame` (30
-  times a second). Unlike the spiders and ghosts it never rests while a page
-  is on screen.
-- It stops under Reduce Motion, leaving the flakes where they were, and while
-  the player is up, by the same `playerCover` rule as the haunted decoration.
+- The snow is one `Canvas`, redrawn every `Motion.snowFrame` (30 times a
+  second). Unlike the spiders and ghosts it never rests while a page is on
+  screen.
+- The snow stops under Reduce Motion, leaving the flakes where they were, and
+  while the player is up, by the same `playerCover` rule as the haunted
+  decoration. The frost stays.
 
-Frost growing in from the top corners was drawn and left out: as feathered
-spines it read as scribble at corner size.
+Tried and dropped: plain white discs for every flake read as dots, not
+snow. Frost as feathered spines growing from the corner read as scribble.
 
 **New Year.** `NewYearOverlay` sits over the tabs and plays `Fireworks` with
 a "Happy New Year" line for ten seconds, in every theme, with no sound.
