@@ -9,12 +9,12 @@ on:
         type: choice
         options: [prepare, trial, upload, publish]
       bump:
-        description: "Version bump, for prepare only. Major for a significant rework, minor for new features, patch for fixes only."
+        description: "Version bump, for prepare only. Major for a significant rework, minor for new features, patch for fixes only. Build for the same version again, when the fix needs no note."
         type: choice
-        options: [patch, minor, major]
+        options: [patch, minor, major, build]
         default: patch
       headline:
-        description: "The release's one-line headline, for prepare only."
+        description: "The release's one-line headline, for prepare only. Empty for a build."
         required: false
       build:
         description: "Build to publish, for publish only. Empty publishes the build main declares."

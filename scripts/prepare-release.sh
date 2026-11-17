@@ -7,8 +7,11 @@
 #   scripts/prepare-release.sh patch "Up Next shows how long is left."
 #   scripts/prepare-release.sh minor "…" --dry-run   # print the entry only
 #   scripts/prepare-release.sh minor "…" --open-pr   # commit, push, open the PR
+#   scripts/prepare-release.sh build ""                # the same version rebuilt
 #
 # The headline is the one line What's New and the GitHub release lead with.
+# A build takes none: it is the same version again for a fix too small for a
+# note, so the version's entry moves to the new build as it is.
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -16,18 +19,23 @@ project="$root/Lagoon.xcodeproj/project.pbxproj"
 changelog="$root/CHANGELOG.md"
 
 usage() {
-    echo "usage: $(basename "$0") <major|minor|patch> <headline> [--dry-run | --open-pr]" >&2
+    echo "usage: $(basename "$0") <major|minor|patch|build> <headline> [--dry-run | --open-pr]" >&2
+    echo "       a build keeps its version's entry, so its headline is empty" >&2
     exit 2
 }
 
+die() { echo "error: $*" >&2; exit 1; }
+
 bump="${1:-}"
 headline="${2:-}"
-[[ "$bump" =~ ^(major|minor|patch)$ ]] || usage
-[ -n "$headline" ] || usage
+[[ "$bump" =~ ^(major|minor|patch|build)$ ]] || usage
+if [ "$bump" = build ]; then
+    [ -z "$headline" ] || die "a build keeps the headline its version has. Leave the headline empty."
+else
+    [ -n "$headline" ] || usage
+fi
 mode="${3:-}"
 case "$mode" in ""|--dry-run|--open-pr) ;; *) usage ;; esac
-
-die() { echo "error: $*" >&2; exit 1; }
 
 [[ "$headline" != *$'\n'* ]] || die "the headline must be one line"
 [[ "$headline" != *"—"* ]] || die "the headline has an em dash. Use a comma, a colon or a full stop."
@@ -46,6 +54,7 @@ case "$bump" in
     major) next_version="$((major + 1)).0.0" ;;
     minor) next_version="${major}.$((minor + 1)).0" ;;
     patch) next_version="${major}.${minor}.$((patch + 1))" ;;
+    build) next_version="$version" ;;
 esac
 next_build="$((build + 1))"
 released="$(LC_ALL=C date +'%B %Y')"
@@ -77,12 +86,29 @@ stamp() {
     ' "$changelog"
 }
 
+# Writes CHANGELOG.md with the version's entry moved to the next build. A
+# note would need an entry of its own, which is what a patch is for.
+restamp() {
+    OLD="## ${version} (${build})" NEW="## ${version} (${next_build})" awk '
+        function fail(message) { print "error: " message > "/dev/stderr"; failed = 1; exit 1 }
+        !done && $0 == "## Unreleased" { inside = 1; print; next }
+        inside && /^- / { fail("there are unreleased notes, and a build takes none. Prepare a patch.") }
+        inside && /^## / {
+            if ($0 != ENVIRON["OLD"]) fail("the top entry is not " substr(ENVIRON["OLD"], 4))
+            print ENVIRON["NEW"]
+            inside = 0; done = 1; next
+        }
+        { print }
+        END { if (!failed && !done) fail("CHANGELOG.md has no Unreleased section above a build") }
+    ' "$changelog"
+}
+
 echo "Lagoon ${version} (${build}) -> ${next_version} (${next_build})"
 echo
 
 stamped="$(mktemp)"
 trap 'rm -f "$stamped"' EXIT
-stamp >"$stamped"
+if [ "$bump" = build ]; then restamp >"$stamped"; else stamp >"$stamped"; fi
 
 if [ "$mode" = --dry-run ]; then
     awk -v heading="## ${next_version} (${next_build})" \
@@ -104,6 +130,8 @@ if [ "$mode" != --open-pr ]; then
 fi
 
 branch="chore/release-${next_version//./-}"
+# Its version's own release branch may still be there.
+[ "$bump" != build ] || branch="${branch}-${next_build}"
 subject="chore: release ${next_version} (${next_build})"
 git -C "$root" switch --create "$branch"
 git -C "$root" add "$changelog" "$project"
