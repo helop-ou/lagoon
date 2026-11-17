@@ -454,9 +454,10 @@ extension PlayerRegressionUITests {
     /// audio. Forces the remux rung, then checks 40 s of playback stays
     /// inside both bounds with no new dry episode, stall or reprime.
     func testForcedRemuxKeepsAudioFedWithinTheIntakeBound() throws {
-        // Mirrors `DemuxBackpressurePolicy.videoIntakeHardLimit`. The UI
-        // test target cannot import the app, so keep the two in sync.
-        let videoIntakeHardLimit = 600
+        // Mirrors `DemuxBackpressurePolicy.uncachedVideoIntakeHardLimit`: a
+        // remux has no cache, so it reads 30 s ahead under that limit. The UI
+        // test target cannot import the engine, so keep the two in sync.
+        let videoIntakeHardLimit = 1_800
 
         let app = launchPlayer(
             title: "hls-remux-intake-regression",
@@ -508,7 +509,7 @@ extension PlayerRegressionUITests {
             XCTAssertLessThanOrEqual(
                 sample.int("videoIntakeMax"),
                 videoIntakeHardLimit,
-                "Intake queue exceeded DemuxBackpressurePolicy.videoIntakeHardLimit: \(sample.raw)"
+                "Intake queue exceeded DemuxBackpressurePolicy.uncachedVideoIntakeHardLimit: \(sample.raw)"
             )
             if sample.double("audioLead") > 0.25 { observedHealthyLead = true }
         }
