@@ -407,7 +407,12 @@ simulator API can fold the device.
 
 `AdaptiveLayoutRulesTests` fails on a read of the idiom outside diagnostics
 and on a toolbar button without a symbol. `WideLayoutSnapshotTests` pins the
-open-Duo, folded-Duo, portrait and landscape pages. `DuoLayoutUITests` opens Search on a
+open-Duo, folded-Duo, portrait and landscape pages, and a film's page at an
+iPad's size. `LibraryHeaderSnapshotTests` and `ReadableColumnTests` pin the
+Library's header and a form there. The suites run on an iPhone, so an iPad
+is its size and size classes, and a new wide screen needs a picture at
+1376 by 1032 as well as the Duo's: a row that fits an open Duo can still
+stretch across an iPad. `DuoLayoutUITests` opens Search on a
 closed Duo, in CI on every pull request.
 
 ## iPhone accessibility and browsing
