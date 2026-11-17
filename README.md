@@ -19,7 +19,7 @@
 <p align="center">
   <img src=".github/readme/screens/tvos-movie-detail.webp" width="49%" alt="Movie detail page">
   <img src=".github/readme/screens/tvos-library.webp" width="49%" alt="Library">
-  <img src=".github/readme/screens/tvos-player-video-panel.webp" width="49%" alt="Player with the video panel open">
+  <img src=".github/readme/screens/tvos-player.webp" width="49%" alt="Player with its buttons and timeline">
   <img src=".github/readme/screens/tvos-watch-together.webp" width="49%" alt="Watch Together">
 </p>
 
