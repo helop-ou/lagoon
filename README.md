@@ -27,7 +27,7 @@
 
 - **Sign in** by address, without a scheme or port, with a password or Quick Connect, or pick a server found on your network
 - **Profiles** for every Jellyfin user on a shared device, on one server or several, with sessions kept in the keychain
-- **Home and Discover** with featured banners and native rows you can reorder or hide, no Home Screen Sections plugin needed
+- **Home and Discover** with featured banners and native rows you can reorder or hide, no Home Screen Sections plugin needed (although it is supported)
 - **Library** of Movies and Shows with sorting and filters, remembered per account
 - **Detail pages** with seasons, an episode rail, resume points, trailers and a page for everyone in the cast and crew
 - **Collections and playlists** that play straight through, like episodes
@@ -36,7 +36,7 @@
 - **Subtitles** as text, styled ASS, images or closed captions, with a search that runs on your server
 - **Search** across your library and Seerr
 - **Seerr**, if you connect it, to browse and request what is not in your library yet
-- **SyncPlay** to watch together
+- **SyncPlay** to watch together with friends, family, enemies or loved ones
 - **Downloads** for offline playback on iPhone and iPad
 - **Themes**: Lagoon, Baby Pink, Spooky and Winter, with seasonal ones that arrive by themselves
 - **iPhone Duo** layouts that keep clear of the fold
