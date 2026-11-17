@@ -35,8 +35,12 @@ struct LibraryView: View {
         ScrollView(showsIndicators: false) {
             VStack(alignment: .leading, spacing: Metrics.Space.xxl) {
                 #if os(iOS)
-                downloadsEntry
-                playlistsEntry
+                if showsDownloadsEntry || playlistCount > 0 {
+                    LibraryEntryStack {
+                        downloadsEntry
+                        playlistsEntry
+                    }
+                }
                 #endif
                 controls
                 results
@@ -85,11 +89,15 @@ struct LibraryView: View {
     }
 
     #if os(iOS)
-    /// Opens Downloads. Shown when something is downloaded or the server is
-    /// unreachable, never as an entry into an empty list.
+    /// Something is downloaded or the server is unreachable. Downloads is
+    /// never an entry into an empty list.
+    private var showsDownloadsEntry: Bool {
+        !DownloadStore.shared.entries.isEmpty || serverSync.serverUnreachable
+    }
+
     @ViewBuilder
     private var downloadsEntry: some View {
-        if !DownloadStore.shared.entries.isEmpty || serverSync.serverUnreachable {
+        if showsDownloadsEntry {
             LibraryEntryLink(
                 route: .downloads,
                 title: "Downloads",
@@ -170,8 +178,9 @@ struct LibraryView: View {
                 filterMenu
             }
             #else
-            kindPicker
-            AdaptiveActionStack {
+            LibraryControlsLayout {
+                kindPicker
+            } actions: {
                 sortMenu
                 filterMenu
             }
@@ -403,7 +412,61 @@ struct LibraryView: View {
 }
 
 #if os(iOS)
-/// A full-width glass row above the controls that opens another list.
+/// The entries above the controls: stacked on a phone, side by side in the
+/// wide layout.
+struct LibraryEntryStack<Content: View>: View {
+    @ViewBuilder let content: Content
+
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+
+    var body: some View {
+        if DetailLayout.usesLeadingColumn(horizontalSizeClass, verticalSizeClass) {
+            HStack(spacing: Metrics.Space.l) { content }
+        } else {
+            VStack(spacing: Metrics.Space.xxl) { content }
+        }
+    }
+}
+
+/// The kind picker over Sort and Filters on a phone. In the wide layout they
+/// share a row, as on the TV, while the row fits.
+struct LibraryControlsLayout<Kind: View, Actions: View>: View {
+    @ViewBuilder let kind: Kind
+    @ViewBuilder let actions: Actions
+
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+
+    var body: some View {
+        if DetailLayout.usesLeadingColumn(horizontalSizeClass, verticalSizeClass) {
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: Metrics.Space.xl) {
+                    boundedKind
+                    Spacer(minLength: 0)
+                    HStack(spacing: Metrics.Space.m) { actions }
+                        .fixedSize()
+                }
+                VStack(alignment: .leading, spacing: Metrics.Space.xl) {
+                    boundedKind
+                    AdaptiveActionStack { actions }
+                }
+            }
+        } else {
+            VStack(alignment: .leading, spacing: Metrics.Space.xl) {
+                kind
+                AdaptiveActionStack { actions }
+            }
+        }
+    }
+
+    private var boundedKind: some View {
+        kind.frame(maxWidth: Metrics.libraryControlWidth, alignment: .leading)
+    }
+}
+
+/// A glass row above the controls that opens another list. Full width on a
+/// phone, `libraryControlWidth` at most in the wide layout.
 struct LibraryEntryLink: View {
     let route: ContentNavigationRoute
     let title: LocalizedStringKey
@@ -411,6 +474,12 @@ struct LibraryEntryLink: View {
     let systemImage: String
 
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+
+    private var maxWidth: CGFloat {
+        DetailLayout.usesLeadingColumn(horizontalSizeClass, verticalSizeClass) ? Metrics.libraryControlWidth : .infinity
+    }
 
     var body: some View {
         NavigationLink(value: route) {
@@ -434,7 +503,7 @@ struct LibraryEntryLink: View {
                     .foregroundStyle(.tertiary)
             }
             .padding(Metrics.Space.l)
-            .frame(maxWidth: .infinity, alignment: .leading)
+            .frame(maxWidth: maxWidth, alignment: .leading)
         }
         .buttonStyle(.glass)
         .buttonBorderShape(.roundedRectangle(radius: Metrics.cardCornerRadius))
