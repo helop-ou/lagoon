@@ -1,9 +1,8 @@
 import SwiftUI
 
 /// The greeting in motion, as Core Animation layers: a picture for the line,
-/// one for each numeral and one for each star, moved by the render server.
-/// Drawn again every frame, the greeting alone took a quarter of a processor
-/// core on the Apple TV and lost one frame in fourteen.
+/// one for each numeral and one for each star, moved by the render server,
+/// so the page keeps its frame rate.
 struct NewYearGreetingLayers: UIViewRepresentable {
     let startedAt: Date
     let year: Int
