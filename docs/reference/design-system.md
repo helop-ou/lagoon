@@ -619,6 +619,13 @@ nose glowing red, and gold dust that twinkles and falls behind. It takes
   the figures every frame, not the canvas or any one effect.
 - `-debug.santaFlight YES` flies it on a DEBUG build.
 
+**Dated surprises share `SurpriseOverlay`.** It sits over the tabs out of
+the way of touches, focus and VoiceOver, asks whether the surprise is due
+once a profile is on screen with no title playing, plays it when the theme
+store's count moves, and shows its still picture under Reduce Motion.
+`NewYearOverlay` and `SantaOverlay` hand it their pictures, their lengths
+and how they ask. A new dated surprise starts there.
+
 **New Year.** `NewYearOverlay` sits over the tabs and plays `Fireworks` with
 the year in gold for thirteen seconds, in every theme, with no sound. It
 happens once a year, so it is meant to feel like an event.
