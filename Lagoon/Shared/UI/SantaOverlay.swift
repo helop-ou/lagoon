@@ -6,68 +6,20 @@ import SwiftUI
 ///
 /// Reduce Motion gets one still moment of the flight.
 struct SantaOverlay: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.playerCover) private var playerCover
-    @State private var startedAt: Date?
-    #if DEBUG
-    @State private var playedOnRequest = false
-    #endif
-
-    private struct Watch: Equatable {
-        let isOnScreen: Bool
-        let accountID: String?
-    }
-
-    private var watch: Watch {
-        Watch(
-            isOnScreen: scenePhase == .active && playerCover?.isPlayerUp != true,
-            accountID: ThemeStore.shared.accountID
-        )
-    }
-
     var body: some View {
-        ZStack {
-            if let startedAt {
-                Group {
-                    if reduceMotion {
-                        SantaFlightFrame(time: 0, isStill: true)
-                    } else {
-                        SantaFlightLayers(startedAt: startedAt)
-                    }
-                }
-                .transition(.opacity)
-            }
-        }
-        .ignoresSafeArea()
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-        .task(id: watch) { await watchForChristmas() }
-        .onChange(of: ThemeStore.shared.santaCount) { play() }
-    }
-
-    private func watchForChristmas() async {
-        guard watch.isOnScreen else { return }
-        // The page arrives first.
-        try? await Task.sleep(for: .seconds(SantaFlight.wait))
-        guard !Task.isCancelled else { return }
-        #if DEBUG
-        if UserDefaults.standard.bool(forKey: "debug.santaFlight"), !playedOnRequest {
-            playedOnRequest = true
-            play()
-        }
-        #endif
-        ThemeStore.shared.welcomeSantaIfDue()
-    }
-
-    private func play() {
-        let start = Date.now
-        withAnimation(.easeIn(duration: Motion.standard)) { startedAt = start }
-        Task {
-            try? await Task.sleep(for: .seconds(reduceMotion ? SantaFlight.stillDuration : SantaFlight.duration))
-            if startedAt == start {
-                withAnimation(.easeOut(duration: Motion.standard)) { startedAt = nil }
-            }
+        SurpriseOverlay(
+            count: ThemeStore.shared.santaCount,
+            duration: SantaFlight.duration,
+            stillDuration: SantaFlight.stillDuration,
+            // The page arrives first.
+            lead: SantaFlight.wait,
+            debugKey: "debug.santaFlight"
+        ) {
+            ThemeStore.shared.welcomeSantaIfDue()
+        } still: { _ in
+            SantaFlightFrame(time: 0, isStill: true)
+        } moving: { startedAt in
+            SantaFlightLayers(startedAt: startedAt)
         }
     }
 }

@@ -6,73 +6,27 @@ import SwiftUI
 ///
 /// Reduce Motion gets one still moment of the show.
 struct NewYearOverlay: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.playerCover) private var playerCover
-    @State private var startedAt: Date?
-    #if DEBUG
-    @State private var playedOnRequest = false
-    #endif
-
-    private struct Watch: Equatable {
-        let isOnScreen: Bool
-        let accountID: String?
-    }
-
-    private var watch: Watch {
-        Watch(
-            isOnScreen: scenePhase == .active && playerCover?.isPlayerUp != true,
-            accountID: ThemeStore.shared.accountID
-        )
-    }
-
     var body: some View {
-        ZStack {
-            if let startedAt {
-                let year = NewYear.upcomingYear(on: startedAt)
-                ZStack {
-                    if reduceMotion {
-                        FireworksFrame(time: 0, palette: Theme.palette, year: year, isStill: true)
-                    } else {
-                        FireworksLayers(startedAt: startedAt, palette: Theme.palette)
-                        NewYearGreetingLayers(startedAt: startedAt, year: year)
-                    }
-                }
-                .transition(.opacity)
-            }
-        }
-        .ignoresSafeArea()
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-        .task(id: watch) { await watchForNewYear() }
-        .onChange(of: ThemeStore.shared.newYearCount) { play() }
-    }
-
-    private func watchForNewYear() async {
-        guard watch.isOnScreen else { return }
-        #if DEBUG
-        if UserDefaults.standard.bool(forKey: "debug.newYearFireworks"), !playedOnRequest {
-            playedOnRequest = true
-            play()
-        }
-        #endif
-        ThemeStore.shared.welcomeNewYearIfDue()
-        // Still open as the year turns.
-        guard let wait = NewYear.secondsUntilMidnight(from: .now) else { return }
-        try? await Task.sleep(for: .seconds(wait + 1))
-        guard !Task.isCancelled else { return }
-        ThemeStore.shared.welcomeNewYearIfDue()
-    }
-
-    private func play() {
-        let start = Date.now
-        withAnimation(.easeIn(duration: Motion.standard)) { startedAt = start }
-        AccessibilityNotification.Announcement(String(localized: "Happy New Year")).post()
-        Task {
-            try? await Task.sleep(for: .seconds(reduceMotion ? Fireworks.stillDuration : Fireworks.duration))
-            if startedAt == start {
-                withAnimation(.easeOut(duration: Motion.standard)) { startedAt = nil }
-            }
+        SurpriseOverlay(
+            count: ThemeStore.shared.newYearCount,
+            duration: Fireworks.duration,
+            stillDuration: Fireworks.stillDuration,
+            debugKey: "debug.newYearFireworks",
+            announcement: String(localized: "Happy New Year")
+        ) {
+            ThemeStore.shared.welcomeNewYearIfDue()
+            // Still open as the year turns.
+            guard let wait = NewYear.secondsUntilMidnight(from: .now) else { return }
+            try? await Task.sleep(for: .seconds(wait + 1))
+            guard !Task.isCancelled else { return }
+            ThemeStore.shared.welcomeNewYearIfDue()
+        } still: { startedAt in
+            FireworksFrame(
+                time: 0, palette: Theme.palette, year: NewYear.upcomingYear(on: startedAt), isStill: true
+            )
+        } moving: { startedAt in
+            FireworksLayers(startedAt: startedAt, palette: Theme.palette)
+            NewYearGreetingLayers(startedAt: startedAt, year: NewYear.upcomingYear(on: startedAt))
         }
     }
 }
