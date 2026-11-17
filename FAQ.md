@@ -62,7 +62,7 @@ I do try to have as wide as a support for most stuff as possible.
 ### Which Jellyfin versions does it work with?
 
 Uses Jellyfin's user-scoped HTTP API, which Jellyfin 10.8 and later expose, so
-Lagoon works against 10.8 through current. Jellyfin 10.11.11, 12.0.0 and 12.1 have been tested thoroughly.
+Lagoon works against 10.8 through current. Jellyfin 10.11.11, 12.0.0 and 12.4 have been tested thoroughly.
 
 ### Does it work offline?
 
