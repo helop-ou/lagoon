@@ -109,6 +109,9 @@ Keep the list short, because each theme is checked over every screen.
   for it is a design decision, not a styling one.
 - **A grouped form on iOS is a `ThemedForm`**, never a bare `Form` or `List`.
   It themes page, rows and bars, so a new settings page needs nothing else.
+  In the wide layout it keeps its rows in a centred column of `readableWidth`
+  (`ReadableColumn`), under the centred title: a row stretched across an iPad
+  puts its label a screen away from its value. The margins still scroll.
 - **A page's backdrop is `.themedPageBackground()`**, not a bare
   `Theme.background`, so Spooky's cobwebs and Winter's frost and snow reach it.
   Decoration sits behind content or beside a state's glyph, never over text

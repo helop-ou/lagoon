@@ -404,15 +404,36 @@ extension View {
 struct ThemedForm<Content: View>: View {
     let content: Content
 
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
+    @State private var width: CGFloat = 0
+
     init(@ViewBuilder content: () -> Content) {
         self.content = content()
     }
 
     var body: some View {
         Form { content.listRowBackground(Theme.surface) }
+            .contentMargins(
+                .horizontal,
+                ReadableColumn.margin(in: width, isWide: DetailLayout.usesLeadingColumn(horizontalSizeClass, verticalSizeClass)),
+                for: .scrollContent
+            )
+            .onGeometryChange(for: CGFloat.self) { $0.size.width } action: { width = $0 }
             .scrollContentBackground(.hidden)
             .themedPageBackground()
             .themedChrome()
+    }
+}
+
+/// A form's rows in a centred column of `readableWidth` on a wide page, so
+/// a row's label and its value stay within reach of each other.
+nonisolated enum ReadableColumn {
+    /// The margin each side of the column. Nil keeps the system's, on a
+    /// phone and on a page no wider than the column.
+    static func margin(in width: CGFloat, isWide: Bool) -> CGFloat? {
+        guard isWide, width > Metrics.readableWidth else { return nil }
+        return ((width - Metrics.readableWidth) / 2).rounded(.down)
     }
 }
 #endif
