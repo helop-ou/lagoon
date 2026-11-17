@@ -273,7 +273,8 @@ struct AppThemeTests {
 
     @Test func theMovingSnowIsOneLayerAFlakeSetFallingFromWhereTheClockHasIt() throws {
         let view = SnowfallLayerView(frame: CGRect(x: 0, y: 0, width: 400, height: 800))
-        view.rebuild(now: 100)
+        view.now = { 100 }
+        view.rebuild()
         let flakes = SnowfallFrame.flakes
         #expect(view.flakeLayers.count == flakes.count)
         let crystals = view.flakeLayers.filter { $0 is CAShapeLayer }
@@ -299,7 +300,8 @@ struct AppThemeTests {
             #expect((layer.animation(forKey: SnowfallLayerView.spinKey) != nil) == (layer is CAShapeLayer))
         }
         // Building again replaces the layers. It does not pile them up.
-        view.rebuild(now: 200)
+        view.now = { 200 }
+        view.rebuild()
         #expect(view.flakeLayers.count == flakes.count)
         #expect(view.layer.sublayers?.count == flakes.count)
     }

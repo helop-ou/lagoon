@@ -147,7 +147,7 @@ struct SnowfallLayers: UIViewRepresentable {
     let color: Color
 
     func makeUIView(context: Context) -> SnowfallLayerView {
-        SnowfallLayerView()
+        SnowfallLayerView(frame: .zero)
     }
 
     func updateUIView(_ view: SnowfallLayerView, context: Context) {
@@ -155,53 +155,22 @@ struct SnowfallLayers: UIViewRepresentable {
     }
 }
 
-final class SnowfallLayerView: UIView {
+final class SnowfallLayerView: MovingLayerView {
     var ink: UIColor = .white {
         didSet { if ink != oldValue { rebuild() } }
     }
+    /// The wall's clock, so every page shows the same snow.
+    var now: () -> TimeInterval = { Date.now.timeIntervalSinceReferenceDate }
 
     private(set) var flakeLayers: [CALayer] = []
-    private var builtSize: CGSize = .zero
 
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        isUserInteractionEnabled = false
-        backgroundColor = .clear
-        // Going to the background removes every animation.
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(resume), name: UIApplication.didBecomeActiveNotification, object: nil
-        )
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) is not used")
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        if bounds.size != builtSize { rebuild() }
-    }
-
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
-        // Leaving a window removes them too.
-        if window != nil { rebuild() }
-    }
-
-    @objc private func resume() {
-        rebuild()
-    }
-
-    /// Lays every flake out where the clock has it and sets it falling. The
-    /// clock is the wall's, so every page shows the same snow.
-    func rebuild(now: TimeInterval = Date.now.timeIntervalSinceReferenceDate) {
-        flakeLayers.forEach { $0.removeFromSuperlayer() }
+    override func forgetLayers() {
         flakeLayers = []
-        builtSize = bounds.size
-        guard bounds.width > 0, bounds.height > 0 else { return }
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
+    }
+
+    /// Every flake where the clock has it, set falling.
+    override func addLayers() {
+        let now = now()
         for flake in SnowfallFrame.flakes {
             let pose = Snowfall.pose(
                 of: flake, at: now, in: bounds.size,
@@ -214,7 +183,6 @@ final class SnowfallLayerView: UIView {
             flakeLayers.append(flakeLayer)
             animate(flakeLayer, flake: flake, pose: pose, now: now)
         }
-        CATransaction.commit()
     }
 
     private func crystalLayer(_ pose: Snowfall.Pose) -> CALayer {

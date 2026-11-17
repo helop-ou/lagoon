@@ -18,11 +18,9 @@ struct ElfVisitLayers: UIViewRepresentable {
     func updateUIView(_ view: ElfVisitLayerView, context: Context) {}
 }
 
-final class ElfVisitLayerView: UIView {
+final class ElfVisitLayerView: TimedLayerView {
     let depth: Double
     let isMirrored: Bool
-    /// When the elf set out, on the layers' own clock.
-    let began: CFTimeInterval
 
     /// The rope from its knot, which leans, and the elf on it, which slides.
     private(set) var ropeLayer: CALayer?
@@ -30,7 +28,6 @@ final class ElfVisitLayerView: UIView {
     private(set) var legLayers: [CALayer] = []
     private(set) var armLayer: CAShapeLayer?
     private(set) var handLayer: CALayer?
-    private var builtSize: CGSize = .zero
 
     /// How often the visit is sampled. The render server draws the frames
     /// between.
@@ -41,37 +38,10 @@ final class ElfVisitLayerView: UIView {
     static let kickKey = "kick"
     static let waveKey = "wave"
 
-    init(depth: Double, isMirrored: Bool, arrived: Date, now: CFTimeInterval = CACurrentMediaTime()) {
+    init(depth: Double, isMirrored: Bool, arrived: Date) {
         self.depth = depth
         self.isMirrored = isMirrored
-        began = now - Date.now.timeIntervalSince(arrived)
-        super.init(frame: .zero)
-        isUserInteractionEnabled = false
-        backgroundColor = .clear
-        // Going to the background removes every animation.
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(resume), name: UIApplication.didBecomeActiveNotification, object: nil
-        )
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) is not used")
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        if bounds.size != builtSize { rebuild() }
-    }
-
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
-        // Leaving a window removes them too.
-        if window != nil { rebuild() }
-    }
-
-    @objc private func resume() {
-        rebuild()
+        super.init(startedAt: arrived)
     }
 
     /// Every moment the visit is worked out for, and the elf at each.
@@ -84,24 +54,21 @@ final class ElfVisitLayerView: UIView {
         }
     }
 
-    /// Lays the visit out and sets it going from `began`, so one rebuilt
-    /// partway carries on from where the clock has it. Outside the visit
-    /// the elf rests out of sight above the page.
-    func rebuild() {
-        layer.sublayers?.forEach { $0.removeFromSuperlayer() }
+    override func forgetLayers() {
         ropeLayer = nil
         elfLayer = nil
         legLayers = []
         armLayer = nil
         handLayer = nil
-        builtSize = bounds.size
-        guard bounds.width > 0, bounds.height > 0 else { return }
+    }
+
+    /// The visit, set going from `began`. Outside it the elf rests out of
+    /// sight above the page.
+    override func addLayers() {
         let unit = ElfVisit.unit
         let scale = max(1, traitCollection.displayScale)
         let samples = Self.samples
         guard let rest = ElfVisit.pose(at: 0) else { return }
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
 
         // The rope hangs from its knot and leans to carry the elf's sway.
         let rope = CALayer()
@@ -177,7 +144,6 @@ final class ElfVisitLayerView: UIView {
 
         rope.addSublayer(elf)
         layer.addSublayer(rope)
-        CATransaction.commit()
         ropeLayer = rope
         elfLayer = elf
         armLayer = arm
@@ -185,12 +151,7 @@ final class ElfVisitLayerView: UIView {
     }
 
     private func animate(_ target: CALayer, _ keyPath: String, _ values: [Any], _ key: String) {
-        let animation = CAKeyframeAnimation(keyPath: keyPath)
-        animation.values = values
-        animation.calculationMode = .linear
-        animation.duration = ElfVisit.duration
-        animation.beginTime = layer.convertTime(began, from: nil)
-        target.add(animation, forKey: key)
+        animate(target, keyPath, values, over: ElfVisit.duration, key: key)
     }
 
     /// A layer carrying a picture of part of the elf, placed in its own space.

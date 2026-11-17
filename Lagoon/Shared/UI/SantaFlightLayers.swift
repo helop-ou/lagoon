@@ -14,100 +14,40 @@ struct SantaFlightLayers: UIViewRepresentable {
     func updateUIView(_ view: SantaFlightLayerView, context: Context) {}
 }
 
-final class SantaFlightLayerView: UIView {
-    /// When the flight set out, on the layers' own clock.
-    let began: CFTimeInterval
-
-    private(set) var scrimLayer: CALayer?
+final class SantaFlightLayerView: TimedLayerView {
     private(set) var memberLayers: [CALayer] = []
     private(set) var legLayers: [CAShapeLayer] = []
     private(set) var reinsLayer: CAShapeLayer?
     private(set) var moteLayers: [CALayer] = []
-    private var builtSize: CGSize = .zero
 
     /// How often the team's path is sampled. The render server draws the
     /// frames between.
     static let samplesPerSecond: Double = 30
 
-    static let dimKey = "dim"
     static let moveKey = "move"
     static let leanKey = "lean"
     static let gallopKey = "gallop"
     static let reinsKey = "reins"
     static let driftKey = "drift"
 
-    init(startedAt: Date, now: CFTimeInterval = CACurrentMediaTime()) {
-        began = now - Date.now.timeIntervalSince(startedAt)
-        super.init(frame: .zero)
-        isUserInteractionEnabled = false
-        backgroundColor = .clear
-        // Going to the background removes every animation.
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(resume), name: UIApplication.didBecomeActiveNotification, object: nil
-        )
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) is not used")
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        if bounds.size != builtSize { rebuild() }
-    }
-
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
-        // Leaving a window removes them too.
-        if window != nil { rebuild() }
-    }
-
-    @objc private func resume() {
-        rebuild()
-    }
-
-    /// Lays the whole flight out and sets it going from `began`, so a flight
-    /// rebuilt partway carries on from where the clock has it.
-    func rebuild() {
-        layer.sublayers?.forEach { $0.removeFromSuperlayer() }
-        scrimLayer = nil
+    override func forgetLayers() {
         memberLayers = []
         legLayers = []
         reinsLayer = nil
         moteLayers = []
-        builtSize = bounds.size
-        guard bounds.width > 0, bounds.height > 0 else { return }
-        let size = bounds.size
-        let unit = SantaFlight.scale(in: size)
-        let start = layer.convertTime(began, from: nil)
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        addScrim(start: start)
-        addDust(size: size, unit: unit, start: start)
-        addTeam(size: size, unit: unit, start: start)
-        CATransaction.commit()
     }
 
-    // MARK: - Scrim
-
-    private func addScrim(start: CFTimeInterval) {
-        let scrim = CALayer()
-        scrim.frame = bounds
-        scrim.backgroundColor = UIColor.black.cgColor
-        scrim.opacity = 0
-        let dim = CAKeyframeAnimation(keyPath: "opacity")
-        let strengths: [Double] = [0, SantaFlight.scrim, SantaFlight.scrim, 0]
-        dim.values = strengths
-        dim.keyTimes = [
-            0, NSNumber(value: SantaFlight.dimIn / SantaFlight.duration),
-            NSNumber(value: 1 - SantaFlight.dimOut / SantaFlight.duration), 1,
-        ]
-        dim.duration = SantaFlight.duration
-        dim.beginTime = start
-        scrim.add(dim, forKey: Self.dimKey)
-        layer.addSublayer(scrim)
-        scrimLayer = scrim
+    /// The whole flight, set going from `began`.
+    override func addLayers() {
+        let size = bounds.size
+        let unit = SantaFlight.scale(in: size)
+        let start = start
+        addScrim(
+            strength: SantaFlight.scrim, fadeIn: SantaFlight.dimIn, fadeOut: SantaFlight.dimOut,
+            over: SantaFlight.duration
+        )
+        addDust(size: size, unit: unit, start: start)
+        addTeam(size: size, unit: unit, start: start)
     }
 
     // MARK: - Team
