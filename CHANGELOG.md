@@ -20,6 +20,12 @@ report. One marketing version spans many builds.
 
 ## Unreleased
 
+## 1.0.0 (122)
+
+November 2026
+
+**New themes, easter eggs and bug fixes that improve your experience.**
+
 ### New features
 
 - Closed captions carried inside the video, as TV recordings often have, appear in the Subtitles list once the first one arrives. Lagoon remembers the choice for the show, and turns them on by itself when you always want subtitles and the title has no other track.
