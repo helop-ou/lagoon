@@ -1,9 +1,10 @@
 import UIKit
 
 /// A picture made of Core Animation layers that the render server moves, so
-/// the app only lays them out. It lays them out again whenever they were
-/// lost or no longer fit: on a new size, in a new window and when the app
-/// comes back to the front.
+/// the app only lays them out. A picture the app draws again every frame
+/// drops frames on an Apple TV, however little it draws. The layers are
+/// laid out again whenever they were lost or no longer fit: on a new size,
+/// in a new window and when the app comes back to the front.
 class MovingLayerView: UIView {
     private var builtSize: CGSize = .zero
 

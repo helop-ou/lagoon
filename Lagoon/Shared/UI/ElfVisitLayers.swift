@@ -2,8 +2,7 @@ import SwiftUI
 
 /// The elf's visit in motion, as Core Animation layers: a picture for its
 /// body, one for each leg and one for the rope, moved by the render server,
-/// so the app does nothing while it is on the page. Drawn in a canvas thirty
-/// times a second it took 15 % of a processor core on the Apple TV.
+/// so the app does nothing while it is on the page.
 struct ElfVisitLayers: UIViewRepresentable {
     /// How far down it comes, as a share of the longest rope.
     let depth: Double

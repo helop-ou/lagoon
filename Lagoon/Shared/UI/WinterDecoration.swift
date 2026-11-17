@@ -141,8 +141,7 @@ struct SnowfallFrame: View {
 
 /// The moving snow, as Core Animation layers: one small layer a flake, moved
 /// by the render server thirty times a second, so the app does nothing to
-/// keep a page snowing. One canvas redrawn thirty times a second took a
-/// third of a processor core on the Apple TV.
+/// keep a page snowing.
 struct SnowfallLayers: UIViewRepresentable {
     let color: Color
 
@@ -242,8 +241,7 @@ final class SnowfallLayerView: MovingLayerView {
 
     /// Holds an animation to the snow's own frame rate. While anything on
     /// the page moves, the system draws the whole screen again for every
-    /// frame, so snow at the display's rate cost the Apple TV twice what
-    /// snow this slow needs.
+    /// frame, so slower snow costs the whole device less.
     private static func pace(_ animation: CAAnimation) {
         let rate = Motion.snowFramesPerSecond
         animation.preferredFrameRateRange = CAFrameRateRange(minimum: rate, maximum: rate, preferred: rate)

@@ -2,8 +2,7 @@ import SwiftUI
 
 /// The flight in motion, as Core Animation layers: a picture a figure and a
 /// small layer a mote, moved by the render server, so the page keeps its
-/// frame rate. One canvas redrawn every frame lost a fifth of its frames on
-/// the Apple TV, however little it drew.
+/// frame rate.
 struct SantaFlightLayers: UIViewRepresentable {
     let startedAt: Date
 
