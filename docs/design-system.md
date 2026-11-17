@@ -41,6 +41,7 @@ screen-specific copies.
 | Rail top / bottom padding | 48 / 96 | 12 / 40, 16 / 52 in the wide layout |
 | `gridRowSpacing` | 72 | 40, 52 in the wide layout (`wideGridRowSpacing`) |
 | `readableWidth` | 700 | 700: a column of text or controls that should not stretch across a wide screen |
+| `libraryControlWidth` | Not used | 340 at most in the wide layout: a Library entry card, and its kind picker |
 | `detailOverviewWidth` | 1000 | 1000: the detail page synopsis |
 | `settingsRowMinHeight` / `settingsRowCornerRadius` | 66 / 18 | 66 / 18: the tvOS settings list row, and the subtitle preview's corner |
 | `heroDotSize` / `heroActiveDotWidth` | 8 / 24 | 8 / 24: the hero's page dots |
@@ -319,6 +320,11 @@ notes](reference/design-system.md#themes).
     `EpisodeCard`, sized by `cardMarkSize`.
   - `DownloadsView` lists every download and works with no server. Library
     links to it and shows an offline banner when the server is unreachable.
+    Its entry and the Playlists entry are `LibraryEntryLink`s in a
+    `LibraryEntryStack`: full width and stacked on a phone, side by side at
+    `libraryControlWidth` in the wide layout. `LibraryControlsLayout` does
+    the same for the controls, where the kind picker shares a row with Sort
+    and Filters while the row fits.
     Settings › Downloads shows the count, and its Show Downloads button opens
     the Library list through the `showDownloadsList` environment action. The
     Settings stack is destination-owned and the list's rows are route values,

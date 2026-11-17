@@ -147,6 +147,8 @@ enum Metrics {
     /// The detail header's info column in a regular-width iPad window,
     /// laid out beside the artwork as on the TV.
     static let expandedDetailColumnWidth: CGFloat = 640
+    /// An entry card or the kind picker on the wide Library page.
+    static let libraryControlWidth: CGFloat = 340
     static let heroTextInset: CGFloat = 20
     static let lockupSymbolHeight: CGFloat = 78
     static let lockupHeaderSymbolHeight: CGFloat = 34
