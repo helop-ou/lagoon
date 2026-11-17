@@ -163,7 +163,7 @@ struct FireworksFrame: View {
         if let brightest = pieces.last {
             context.stroke(
                 brightest, with: .color(tint.opacity(strength * 0.15)),
-                style: StrokeStyle(lineWidth: line * 3.8, lineCap: .round)
+                style: StrokeStyle(lineWidth: line * Fireworks.glowWidth, lineCap: .round)
             )
         }
         context.stroke(
@@ -180,9 +180,10 @@ struct NewYearGreeting: View {
     let time: TimeInterval?
     let year: Int
 
-    static let gold = Color(red: 1, green: 0xD7 / 255, blue: 0x78 / 255)
-    static let paleGold = Color(red: 1, green: 0xF6 / 255, blue: 0xD6 / 255)
-    private static let deepGold = Color(red: 0xF0 / 255, green: 0xA6 / 255, blue: 0x30 / 255)
+    /// The sleigh's golds, so the winter's two surprises match.
+    static let gold = ChristmasInk.gold
+    static let paleGold = ChristmasInk.paleGold
+    private static let deepGold = ChristmasInk.deepGold
     /// It arrives with the opening burst and leaves before the last sparks.
     static let arrives: Double = 1.5
     static let leaves: Double = Fireworks.duration - 1.6
@@ -360,17 +361,8 @@ struct NewYearGreeting: View {
 
     /// A four-pointed star: two thin diamonds crossed.
     static func star(at center: CGPoint, radius: Double) -> Path {
-        var path = Path()
-        let waist = radius * 0.16
-        path.move(to: CGPoint(x: center.x, y: center.y - radius))
-        path.addLine(to: CGPoint(x: center.x + waist, y: center.y - waist))
-        path.addLine(to: CGPoint(x: center.x + radius, y: center.y))
-        path.addLine(to: CGPoint(x: center.x + waist, y: center.y + waist))
-        path.addLine(to: CGPoint(x: center.x, y: center.y + radius))
-        path.addLine(to: CGPoint(x: center.x - waist, y: center.y + waist))
-        path.addLine(to: CGPoint(x: center.x - radius, y: center.y))
-        path.addLine(to: CGPoint(x: center.x - waist, y: center.y - waist))
-        path.closeSubpath()
-        return path
+        SantaGeometry.star.applying(
+            CGAffineTransform(translationX: center.x, y: center.y).scaledBy(x: radius, y: radius)
+        )
     }
 }

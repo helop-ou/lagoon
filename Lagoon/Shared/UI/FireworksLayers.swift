@@ -2,8 +2,7 @@ import SwiftUI
 
 /// The show in motion, as Core Animation layers: one small picture a spark,
 /// a rocket or a flash, moved by the render server, so the page keeps its
-/// frame rate. One canvas redrawn every frame held 44 frames a second on
-/// the Apple TV.
+/// frame rate.
 struct FireworksLayers: UIViewRepresentable {
     let startedAt: Date
     let palette: ThemePalette
@@ -36,9 +35,9 @@ final class FireworksLayerView: TimedLayerView {
     /// How often a spark's path is sampled. The render server draws the
     /// frames between.
     static let samplesPerSecond: Double = 20
-    /// A glittering spark blinks about fourteen times a second, so its
-    /// brightness is sampled at twice that.
-    static let blinksPerSecond: Double = 28
+    /// A glittering spark's brightness is sampled at twice the rate it
+    /// blinks.
+    static let blinksPerSecond: Double = Fireworks.glitterRate * 2
     /// A shell's layers are made this long before it leaves the ground, and
     /// dropped this long after it burns out.
     static let lead: Double = 0.3
@@ -251,7 +250,7 @@ final class FireworksLayerView: TimedLayerView {
     /// A streak's picture is this long from its tail's end to its head, and
     /// tall enough for the glow about it.
     static let streakLength: Double = 96
-    static var streakHeight: Double { Metrics.fireworkLineWidth * 3.8 }
+    static var streakHeight: Double { Metrics.fireworkLineWidth * Fireworks.glowWidth }
     /// Where the tail's end and the head sit along the picture.
     static var streakTail: Double { Metrics.fireworkLineWidth }
     private static var streakHead: Double { streakLength - streakHeight / 2 }
@@ -292,7 +291,7 @@ final class FireworksLayerView: TimedLayerView {
                 pen.strokePath()
             }
             pen.setStrokeColor(tint.withAlphaComponent(0.15).cgColor)
-            pen.setLineWidth(line * 3.8)
+            pen.setLineWidth(line * Fireworks.glowWidth)
             pen.move(to: CGPoint(x: tail + (head - tail) * 2 / 3 + line * 1.4, y: middle))
             pen.addLine(to: CGPoint(x: head, y: middle))
             pen.strokePath()
