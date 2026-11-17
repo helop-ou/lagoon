@@ -24,6 +24,8 @@ struct MetadataFlowLayout: Layout {
     var spacing: CGFloat = Metrics.Space.m
     /// Where each row sits in its unused width.
     var alignment: HorizontalAlignment = .leading
+    /// Centres each item in its row's height, for a row of unequal controls.
+    var centersRows = false
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         arrange(subviews, width: proposal.width).size
@@ -36,6 +38,10 @@ struct MetadataFlowLayout: Layout {
         for frame in arrangement.frames {
             rowWidths[frame.minY] = max(rowWidths[frame.minY] ?? 0, frame.maxX)
         }
+        var rowHeights: [CGFloat: CGFloat] = [:]
+        for frame in arrangement.frames {
+            rowHeights[frame.minY] = max(rowHeights[frame.minY] ?? 0, frame.height)
+        }
         for (index, frame) in arrangement.frames.enumerated() {
             let slack = max(0, bounds.width - (rowWidths[frame.minY] ?? 0))
             let shift: CGFloat = switch alignment {
@@ -43,8 +49,9 @@ struct MetadataFlowLayout: Layout {
             case .trailing: slack
             default: 0
             }
+            let drop = centersRows ? ((rowHeights[frame.minY] ?? frame.height) - frame.height) / 2 : 0
             subviews[index].place(
-                at: CGPoint(x: bounds.minX + frame.minX + shift, y: bounds.minY + frame.minY),
+                at: CGPoint(x: bounds.minX + frame.minX + shift, y: bounds.minY + frame.minY + drop),
                 anchor: .topLeading,
                 proposal: ProposedViewSize(frame.size)
             )

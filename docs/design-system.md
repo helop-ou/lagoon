@@ -258,6 +258,10 @@ notes](reference/design-system.md#themes).
   page.
   - `DetailActionLayout` owns all four action compositions (primary pill,
     secondary controls, optional accessory). No page keeps its own copy.
+  - In the wide layout the actions are one row that wraps onto a second,
+    never a column. The row may run past the text column, which stops at
+    `expandedDetailColumnWidth`, as far as the page or a fold allows: a
+    started film has seven controls and they do not fit the column.
   - On a phone every secondary control is a glass circle, so the row never
     folds. Use `DetailCircleButton` and `DetailCircleMenu`, not
     `.buttonStyle(.glass)` with a circle: its pressed highlight is a

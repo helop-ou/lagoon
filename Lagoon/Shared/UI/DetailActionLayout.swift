@@ -44,8 +44,9 @@ enum DetailLayout {
 
 /// A detail page's actions, shared by film, series and Seerr pages.
 ///
-/// - tvOS and regular-width iPad: one row, primary first so it takes first
-///   focus, accessory beneath.
+/// - tvOS: one row, primary first so it takes first focus, accessory beneath.
+/// - Wide (an iPad, an open Duo): the same row, wrapping onto a second when
+///   the page is too narrow for it.
 /// - Landscape phone: secondary, accessory, then primary on one line,
 ///   aligned on `detailPillCenter`.
 /// - Portrait phone: primary alone and wide, secondary in a centred row
@@ -83,8 +84,9 @@ struct DetailActionLayout<Primary: View, Secondary: View, Accessory: View>: View
         }
         #else
         if DetailLayout.usesLeadingColumn(horizontalSizeClass, verticalSizeClass) {
+            // A film's seven controls wrap onto a second row, never into a column.
             VStack(alignment: .leading, spacing: Metrics.Space.l) {
-                AdaptiveActionStack(spacing: Metrics.detailActionSpacing) {
+                MetadataFlowLayout(spacing: Metrics.detailActionSpacing, centersRows: true) {
                     primary
                     secondary
                 }

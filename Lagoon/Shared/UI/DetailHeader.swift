@@ -117,9 +117,14 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
 
     @State private var fold: FoldCrossing?
 
+    /// The text column. The actions may run past it, up to the fold.
     private var columnWidth: CGFloat {
         guard usesLeadingColumn else { return .infinity }
-        return min(Metrics.expandedDetailColumnWidth, FoldLayout.leadingWidth(before: fold, inset: 0) ?? .infinity)
+        return min(Metrics.expandedDetailColumnWidth, widthBeforeFold)
+    }
+
+    private var widthBeforeFold: CGFloat {
+        FoldLayout.leadingWidth(before: fold, inset: 0) ?? .infinity
     }
 
     private var compactAlignment: Alignment {
@@ -162,25 +167,28 @@ struct DetailMetadataHeader<Title: View, Buttons: View>: View {
                 facts
                 supportingFacts
             } else {
-                title
-                    .frame(maxWidth: .infinity, alignment: compactAlignment)
-                subtitleView
-                    .multilineTextAlignment(usesLeadingColumn ? .leading : .center)
-                facts
-                supportingFacts
+                VStack(alignment: stackAlignment, spacing: Metrics.detailHeaderSpacing) {
+                    title
+                        .frame(maxWidth: .infinity, alignment: compactAlignment)
+                    subtitleView
+                        .multilineTextAlignment(usesLeadingColumn ? .leading : .center)
+                    facts
+                    supportingFacts
+                }
+                .frame(maxWidth: columnWidth, alignment: .leading)
                 buttons
                     .frame(maxWidth: .infinity, alignment: compactAlignment)
                     .padding(.top, Metrics.Space.s)
             }
             overviewView
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: columnWidth, alignment: .leading)
                 .padding(.top, Metrics.Space.s)
             #endif
         }
         #if os(iOS)
         // Sizes the glass labels, circles and hit areas together.
         .controlSize(.large)
-        .frame(maxWidth: columnWidth, alignment: .leading)
+        .frame(maxWidth: widthBeforeFold, alignment: .leading)
         .frame(maxWidth: .infinity, alignment: .leading)
         .onFoldCrossingChange { fold = $0 }
         #endif
