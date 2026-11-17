@@ -39,7 +39,9 @@ final class SessionExpiryUITests: XCTestCase {
         try await control(server, path: "revoke")
         let notice = app.staticTexts["signin.sessionExpired"]
         XCTAssertTrue(notice.waitForExistence(timeout: 20), "Revocation should dismiss playback and show account-specific sign-in")
-        XCTAssertFalse(probe.exists)
+        // The sign-in screen can be in the tree while the player's cover is
+        // still animating away above it.
+        XCTAssertTrue(probe.waitForNonExistence(timeout: 5), "The player stayed up over the sign-in screen")
         XCTAssertEqual(app.textFields["signin.username"].value as? String, "Fixture viewer")
         attachScreenshot(of: app, named: "\(mode)-expired")
 
