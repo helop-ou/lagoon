@@ -655,11 +655,14 @@ happens once a year, so it is meant to feel like an event.
   a band of light masked to the numerals for the shine, and a picture a
   star. `FireworksFrame` and `NewYearGreeting`, drawn once, are the still
   moment and the snapshots.
-- **Both are a `TimedLayerView`.** It holds the moment the show began on
-  the layers' clock, begins every animation there, and lays the layers out
-  again on a new size, a new window and the app coming back to the front,
-  since each of those loses them. One rebuilt partway carries on from where
-  the clock has it. A new moving surprise starts from this class.
+- **Every moving surprise is a `TimedLayerView`.** It holds the moment the
+  show began on the layers' clock, begins every animation there, and dims
+  the page behind it. Under it, `MovingLayerView` lays the layers out again
+  on a new size, a new window and the app coming back to the front, since
+  each of those loses them. One laid out again partway carries on from
+  where the clock has it. The snow is a `MovingLayerView` too, on the
+  wall's clock, because it has no beginning. A new moving surprise starts
+  from these two.
 - **Why:** measured on the Apple TV 4K (3rd generation), Release, three
   runs each. The show as one canvas redrawn every frame held 43 to 45
   frames a second on the main thread, about 150 frames late in its
