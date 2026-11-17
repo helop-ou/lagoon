@@ -278,8 +278,9 @@ extension PlayerRegressionUITests {
         let nativeContinueWatching = app.descendants(matching: .any)[
             "settings.home.row.lagoon.continueWatching"
         ]
+        // Right lands on Show Watched Titles, above the rows.
         remote.press(.right)
-        moveFocus(to: nativeContinueWatching, maxPresses: 3) { remote.press(.up) }
+        moveFocus(to: nativeContinueWatching, maxPresses: 3) { remote.press(.down) }
         XCTAssertTrue(nativeContinueWatching.hasFocus)
         let previousNativeVisibility = nativeContinueWatching.valueDescription
         remote.press(.select)
