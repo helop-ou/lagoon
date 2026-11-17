@@ -20,7 +20,7 @@ report. One marketing version spans many builds.
 
 ## Unreleased
 
-## 1.0.0 (122)
+## 1.0.0 (123)
 
 November 2026
 
