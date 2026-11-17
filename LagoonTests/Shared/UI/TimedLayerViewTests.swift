@@ -15,8 +15,11 @@ struct TimedLayerViewTests {
             dot = nil
         }
 
+        var dims = false
+
         override func addLayers() {
             builds += 1
+            if dims { addScrim(strength: 0.6, fadeIn: 1, fadeOut: 2, over: 8) }
             let dot = CALayer()
             animate(dot, "opacity", [0.0, 1.0, 0.0], over: 6, key: "fade")
             layer.addSublayer(dot)
@@ -83,5 +86,28 @@ struct TimedLayerViewTests {
         view.rebuild()
         let again = try #require(view.dot?.animation(forKey: "fade") as? CAKeyframeAnimation)
         #expect(again.beginTime == fade.beginTime)
+    }
+
+    /// The page dims as the picture arrives and clears as it leaves.
+    @Test func itsScrimDimsOverTheFadeInAndClearsOverTheFadeOut() throws {
+        let view = probe(ago: 3)
+        #expect(view.scrimLayer == nil)
+        view.dims = true
+        view.rebuild()
+        let scrim = try #require(view.scrimLayer)
+        #expect(scrim.frame == view.bounds)
+        #expect(scrim.opacity == 0)
+        let dim = try #require(scrim.animation(forKey: TimedLayerView.dimKey) as? CAKeyframeAnimation)
+        #expect(dim.keyPath == "opacity")
+        #expect(dim.values as? [Double] == [0, 0.6, 0.6, 0])
+        #expect(dim.keyTimes == [0, 0.125, 0.75, 1])
+        #expect(dim.duration == 8)
+        #expect(dim.beginTime == view.layer.convertTime(view.began, from: nil))
+        // Laid out again, there is still one.
+        view.rebuild()
+        #expect(view.layer.sublayers?.filter { $0.backgroundColor != nil }.count == 1)
+        view.frame.size = .zero
+        view.layoutIfNeeded()
+        #expect(view.scrimLayer == nil)
     }
 }
