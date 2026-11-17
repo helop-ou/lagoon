@@ -15,6 +15,8 @@ struct WideLayoutSnapshotTests {
     private static let duoOpen = CGSize(width: 669, height: 951)
     private static let phonePortrait = CGSize(width: 402, height: 874)
     private static let proMaxLandscape = CGSize(width: 956, height: 440)
+    /// A 13-inch iPad on its side.
+    private static let padLandscape = CGSize(width: 1376, height: 1032)
     /// Partly folded like a book: a fold down the middle of the open Duo,
     /// in the coordinates of a view inset by the screen gutter.
     private static let bookFold = CGRect(x: duoOpen.width / 2 - 6 - Metrics.screenGutter, y: 0, width: 12, height: 2000)
@@ -78,6 +80,24 @@ struct WideLayoutSnapshotTests {
             detailPage(.regular, .compact),
             named: "detail-pro-max-landscape",
             size: Self.proMaxLandscape
+        )
+    }
+
+    /// A film has seven controls. A column of them is what an iPad drew
+    /// when the row had to fit the text column.
+    @Test func anIPadKeepsAFilmsActionsInOneRow() async throws {
+        try await Snapshot.verify(
+            try await filmPage(),
+            named: "detail-film-ipad",
+            size: Self.padLandscape
+        )
+    }
+
+    @Test func anOpenDuoWrapsAFilmsActionsOntoASecondRow() async throws {
+        try await Snapshot.verify(
+            try await filmPage(),
+            named: "detail-film-duo-open",
+            size: Self.duoOpen
         )
     }
 
@@ -196,7 +216,31 @@ struct WideLayoutSnapshotTests {
         return store
     }
 
+    /// The wide film page with everything a started film shows: watched,
+    /// favourite, trailer, download and Watch Together.
+    private func filmPage() async throws -> some View {
+        let syncPlay = try await joinableSyncPlay()
+        let item = try JellyfinClient.decoder.decode(MediaItem.self, from: Data(#"{"Id":"arrival","Name":"Arrival","Type":"Movie"}"#.utf8))
+        return detailPage(.regular, .regular) {
+            DetailCircleButton(action: {}) { Image(systemName: "checkmark") }
+            DetailCircleButton(action: {}) { Image(systemName: "heart") }
+        } trailing: {
+            DetailCircleButton(action: {}) { Image(systemName: "arrow.down") }
+            WatchTogetherControl(item: item, startPositionTicks: 0)
+        }
+        .environment(syncPlay)
+    }
+
     private func detailPage(_ horizontal: UserInterfaceSizeClass, _ vertical: UserInterfaceSizeClass) -> some View {
+        detailPage(horizontal, vertical) { EmptyView() } trailing: { EmptyView() }
+    }
+
+    private func detailPage(
+        _ horizontal: UserInterfaceSizeClass,
+        _ vertical: UserInterfaceSizeClass,
+        @ViewBuilder leading: () -> some View,
+        @ViewBuilder trailing: () -> some View
+    ) -> some View {
         DetailPageScaffold(backdropURL: Self.backdropURL, posterURL: Self.posterURL) {
             DetailMetadataHeader(
                 factTokens: ["1 h 56 min", "2016"],
@@ -218,9 +262,11 @@ struct WideLayoutSnapshotTests {
                     play: {},
                     playFromBeginning: {}
                 ) {
+                    leading()
                     TrailerButton(trailers: [
                         RemoteTrailer(url: URL(string: "https://www.youtube.com/watch?v=tFMo3UJ4B4g")!, name: "Official Trailer"),
                     ])
+                    trailing()
                 }
             }
         }
