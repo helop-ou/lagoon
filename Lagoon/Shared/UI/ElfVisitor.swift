@@ -27,11 +27,10 @@ struct ElfVisitor: View {
             var random = SystemRandomNumberGenerator()
             var isFirst = true
             while !Task.isCancelled {
-                guard var next = Self.nextVisit(isFirst: isFirst, using: &random) else { return }
+                guard let next = Self.nextVisit(isFirst: isFirst, using: &random) else { return }
                 do {
                     try await Task.sleep(for: .seconds(next.wait))
                     arrived = .now
-                    next = ElfVisit.Plan(wait: 0, onLeading: next.onLeading, lane: next.lane, depth: next.depth)
                     plan = next
                     try await Task.sleep(for: .seconds(ElfVisit.duration))
                     plan = nil

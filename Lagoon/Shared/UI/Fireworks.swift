@@ -261,10 +261,14 @@ nonisolated enum Fireworks {
         )
     }
 
-    /// A glittering spark blinks about fourteen times a second, each on its
-    /// own beat.
+    /// How many times a second a glittering spark blinks.
+    static let glitterRate: Double = 14
+    /// How wide the glow about a spark's brightest piece is, in its lines.
+    static let glowWidth: Double = 3.8
+
+    /// A glittering spark blinks on its own beat.
     static func isLit(_ spark: Spark, at time: Double) -> Bool {
-        let beat = (time * 14 + spark.flicker * 7).rounded(.down)
+        let beat = (time * glitterRate + spark.flicker * glitterRate / 2).rounded(.down)
         let noise = sin((beat + spark.flicker) * 12.9898) * 43758.5453
         return noise - noise.rounded(.down) > 0.45
     }

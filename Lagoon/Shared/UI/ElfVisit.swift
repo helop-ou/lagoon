@@ -123,8 +123,7 @@ nonisolated enum ElfVisit {
 nonisolated enum ElfGeometry {
     /// From the grip to the rope's loose end.
     static let ropeTail: Double = 126
-    /// The whole figure's reach above and below the grip, for hiding it.
-    static let top: Double = -8
+    /// The whole figure's reach below the grip, for hiding it.
     static let bottom: Double = 132
     /// Half its width, the waving arm included.
     static let halfWidth: Double = 40
@@ -289,22 +288,6 @@ nonisolated enum ElfGeometry {
     /// other, apart and together.
     static func legTurn(side: Double, kick: Double) -> Double {
         -side * kick * legSwing
-    }
-
-    /// The legs, swinging against each other. Trailing leg last.
-    static func legs(kick: Double) -> [Leg] {
-        [-1.0, 1.0].map { side in
-            let rest = restingLeg(side: side)
-            let turn = legTurn(side: side, kick: kick)
-            func turned(_ point: CGPoint) -> CGPoint {
-                let offset = CGPoint(x: point.x - rest.hip.x, y: point.y - rest.hip.y)
-                return CGPoint(
-                    x: rest.hip.x + offset.x * cos(turn) - offset.y * sin(turn),
-                    y: rest.hip.y + offset.x * sin(turn) + offset.y * cos(turn)
-                )
-            }
-            return Leg(hip: rest.hip, knee: turned(rest.knee), ankle: turned(rest.ankle), toe: turned(rest.toe))
-        }
     }
 
     /// A shoe: a pointed slipper whose toe curls up, pointing away from the rope.

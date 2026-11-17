@@ -133,13 +133,25 @@ struct ElfVisitTests {
         #expect(ElfGeometry.freeHand(raise: 1, wave: 1).x + ElfGeometry.handRadius <= ElfGeometry.halfWidth)
     }
 
+    /// Where each ankle is once its leg has turned about its hip for `kick`.
+    private func ankles(kick: Double) -> [CGPoint] {
+        [-1.0, 1.0].map { side in
+            let rest = ElfGeometry.restingLeg(side: side)
+            let turn = ElfGeometry.legTurn(side: side, kick: kick)
+            let offset = CGPoint(x: rest.ankle.x - rest.hip.x, y: rest.ankle.y - rest.hip.y)
+            return CGPoint(
+                x: rest.hip.x + offset.x * cos(turn) - offset.y * sin(turn),
+                y: rest.hip.y + offset.x * sin(turn) + offset.y * cos(turn)
+            )
+        }
+    }
+
     @Test func theLegsSwingAgainstEachOther() {
-        let resting = ElfGeometry.legs(kick: 0)
-        #expect(resting.count == 2)
-        #expect(resting[0].ankle.x == -resting[1].ankle.x)
-        let kicking = ElfGeometry.legs(kick: 1)
-        #expect(kicking[0].ankle.x < resting[0].ankle.x)
-        #expect(kicking[1].ankle.x > resting[1].ankle.x)
-        #expect(kicking.allSatisfy { $0.ankle.y < ElfGeometry.ropeTail })
+        let resting = ankles(kick: 0)
+        #expect(resting[0].x == -resting[1].x)
+        let kicking = ankles(kick: 1)
+        #expect(kicking[0].x < resting[0].x)
+        #expect(kicking[1].x > resting[1].x)
+        #expect(kicking.allSatisfy { $0.y < ElfGeometry.ropeTail })
     }
 }
