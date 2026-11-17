@@ -25,7 +25,8 @@ The whole sequence. Read the linked sections before doing it the first time.
 2. **[Prepare](#releasing-from-ci).** Choose patch for fixes only, minor for
    new features, major for a significant rework, and write the headline. The
    action opens a pull request that turns the unreleased notes into the new
-   entry and advances the build and version.
+   entry and advances the build and version. Choose build, with no headline,
+   for [the same version again](#the-same-version-again).
 3. **Merge it.** Its checks build both platforms and run both unit suites.
    Once merged, `main` declares the build that will ship.
 4. **[Update the website's facts](#website)** from `main` and
@@ -71,7 +72,8 @@ from before the changelog are not reconstructed.
 
 Prepare refuses while the build `main` declares has never been uploaded,
 since that build is still the next release. It also refuses when there are no
-unreleased notes.
+unreleased notes, unless it is preparing [the same version
+again](#the-same-version-again).
 
 - One line per noticeable improvement, most useful first. Describe the fixed
   symptom and any setup needed.
@@ -89,6 +91,21 @@ unreleased notes.
   update, never after a patch or on a fresh install. Builds before the one
   that added it recorded no version, so an install with accounts and no
   record presents only on a minor or major version.
+
+### The same version again
+
+A fix too small for a note, found before a version is released, does not
+need a version of its own. Prepare with the **build** bump and no headline:
+the build number advances, the version stays, and the version's entry moves
+to the new build as it is, `## 1.0.0 (122)` becoming `## 1.0.0 (123)`. The
+notes then belong to the build people will have, About lists it, and What's
+New presents once for anyone arriving from an older version. Someone already
+on the earlier build is shown nothing, since the version has not changed.
+
+The earlier build keeps its tag and its GitHub release, and loses its entry
+here. That is the one change to a shipped entry, and only prepare makes it.
+Prepare refuses a build bump while there are unreleased notes: a note needs
+an entry of its own, which is a patch.
 
 ### The published changelog
 
@@ -271,7 +288,8 @@ four actions:
 
 - **prepare** runs `scripts/prepare-release.sh` with the chosen bump and
   headline, which stamps the release as [above](#version-and-changelog),
-  then pushes `chore/release-<version>` and opens its pull request. It acts
+  then pushes `chore/release-<version>` (with the build number after it for
+  a build bump) and opens its pull request. It acts
   through a token minted from the release GitHub App, because a pull request
   opened with the workflow's own token never starts the checks `main`
   requires.
@@ -404,7 +422,8 @@ the exact build that will be submitted, not an earlier one.
 a version select a build whose `CFBundleShortVersionString` matches it, so a
 0.x build can never be submitted as 1.0. Prepare the candidate with a major
 bump, and it reaches external testers as 1.0.0. A fix found after that is a
-patch, and the App Store version follows whichever build is submitted.
+patch, or [the same version again](#the-same-version-again) when it needs no
+note. The App Store version follows whichever build is submitted.
 
 1. **Prepare and merge** as for any build ([Cutting a
    build](#cutting-a-build-start-to-finish)). The release pull request's
