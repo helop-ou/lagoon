@@ -26,7 +26,6 @@ final class FireworksLayerView: TimedLayerView {
         didSet { if tints != oldValue { rebuild() } }
     }
 
-    private(set) var scrimLayer: CALayer?
     /// One layer a shell that is on the page or about to be, by its place in
     /// the show.
     private(set) var shellLayers: [Int: CALayer] = [:]
@@ -44,7 +43,6 @@ final class FireworksLayerView: TimedLayerView {
     /// dropped this long after it burns out.
     static let lead: Double = 0.3
 
-    static let dimKey = "dim"
     static let flyKey = "fly"
 
     init(startedAt: Date, tints: [UIColor]) {
@@ -54,7 +52,6 @@ final class FireworksLayerView: TimedLayerView {
 
     override func forgetLayers() {
         build &+= 1
-        scrimLayer = nil
         shellLayers = [:]
     }
 
@@ -62,7 +59,9 @@ final class FireworksLayerView: TimedLayerView {
     /// it has burnt out, so only a few shells' worth are ever alive.
     override func addLayers() {
         let elapsed = CACurrentMediaTime() - began
-        addScrim()
+        addScrim(
+            strength: Fireworks.scrim, fadeIn: Fireworks.fadeIn, fadeOut: Fireworks.fadeOut, over: Fireworks.duration
+        )
         let build = build
         for (index, shell) in FireworksFrame.shells.enumerated() {
             let ends = shell.launch + Fireworks.climb + shell.kind.burn
@@ -81,27 +80,6 @@ final class FireworksLayerView: TimedLayerView {
                 self.shellLayers.removeValue(forKey: index)?.removeFromSuperlayer()
             }
         }
-    }
-
-    // MARK: - Scrim
-
-    private func addScrim() {
-        let scrim = CALayer()
-        scrim.frame = bounds
-        scrim.backgroundColor = UIColor.black.cgColor
-        scrim.opacity = 0
-        let dim = CAKeyframeAnimation(keyPath: "opacity")
-        let strengths: [Double] = [0, Fireworks.scrim, Fireworks.scrim, 0]
-        dim.values = strengths
-        dim.keyTimes = [
-            0, NSNumber(value: Fireworks.fadeIn / Fireworks.duration),
-            NSNumber(value: 1 - Fireworks.fadeOut / Fireworks.duration), 1,
-        ]
-        dim.duration = Fireworks.duration
-        dim.beginTime = start
-        scrim.add(dim, forKey: Self.dimKey)
-        layer.addSublayer(scrim)
-        scrimLayer = scrim
     }
 
     // MARK: - Shells

@@ -1,63 +1,18 @@
 import UIKit
 
-/// A picture made of Core Animation layers that play from a moment on the
-/// layers' own clock. The render server moves them, so the app only lays
-/// them out, and lays them out again whenever they were lost or no longer
-/// fit.
-class TimedLayerView: UIView {
+/// A moving picture that plays once, from a moment on the layers' own clock.
+/// One laid out again partway carries on from where that clock has it.
+class TimedLayerView: MovingLayerView {
     /// When its animations began, on the layers' own clock.
     let began: CFTimeInterval
-    private var builtSize: CGSize = .zero
+
+    static let dimKey = "dim"
+    private static let scrimName = "scrim"
 
     init(startedAt: Date) {
         began = CACurrentMediaTime() - Date.now.timeIntervalSince(startedAt)
         super.init(frame: .zero)
-        isUserInteractionEnabled = false
-        backgroundColor = .clear
-        // Going to the background removes every animation.
-        NotificationCenter.default.addObserver(
-            self, selector: #selector(resume), name: UIApplication.didBecomeActiveNotification, object: nil
-        )
     }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) is not used")
-    }
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        if bounds.size != builtSize { rebuild() }
-    }
-
-    override func didMoveToWindow() {
-        super.didMoveToWindow()
-        // Leaving a window removes them too.
-        if window != nil { rebuild() }
-    }
-
-    @objc private func resume() {
-        rebuild()
-    }
-
-    /// Clears the layers and lays them out again from `began`, so a view
-    /// rebuilt partway carries on from where the clock has it.
-    final func rebuild() {
-        layer.sublayers?.forEach { $0.removeFromSuperlayer() }
-        builtSize = bounds.size
-        forgetLayers()
-        guard bounds.width > 0, bounds.height > 0 else { return }
-        CATransaction.begin()
-        CATransaction.setDisableActions(true)
-        addLayers()
-        CATransaction.commit()
-    }
-
-    /// Lets go of what the last build kept hold of. Runs with no room too.
-    func forgetLayers() {}
-
-    /// Adds the layers for the view's size. Implicit animations are off.
-    func addLayers() {}
 
     /// `began` in this view's own layer time.
     var start: CFTimeInterval { layer.convertTime(began, from: nil) }
@@ -70,5 +25,28 @@ class TimedLayerView: UIView {
         animation.duration = duration
         animation.beginTime = start
         target.add(animation, forKey: key)
+    }
+
+    /// The layer dimming the page behind the picture, where it has one.
+    var scrimLayer: CALayer? {
+        layer.sublayers?.first { $0.name == Self.scrimName }
+    }
+
+    /// Dims the page to `strength` over `fadeIn`, holds it, and lets it go
+    /// over the last `fadeOut` of `duration`.
+    func addScrim(strength: Double, fadeIn: Double, fadeOut: Double, over duration: Double) {
+        let scrim = CALayer()
+        scrim.name = Self.scrimName
+        scrim.frame = bounds
+        scrim.backgroundColor = UIColor.black.cgColor
+        scrim.opacity = 0
+        let dim = CAKeyframeAnimation(keyPath: "opacity")
+        let strengths: [Double] = [0, strength, strength, 0]
+        dim.values = strengths
+        dim.keyTimes = [0, NSNumber(value: fadeIn / duration), NSNumber(value: 1 - fadeOut / duration), 1]
+        dim.duration = duration
+        dim.beginTime = start
+        scrim.add(dim, forKey: Self.dimKey)
+        layer.addSublayer(scrim)
     }
 }
