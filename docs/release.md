@@ -328,10 +328,12 @@ certificates, so the key must also create the development certificate the
 archive signs with and use the cloud-managed distribution certificate. Each
 empty runner creates another "Created via API" development certificate, and
 once the account reaches its limit the archive fails with "Choose a
-certificate to revoke". So trial and upload first revoke every development
-certificate with that name, and the run then creates its own. Only CI may
-sign with an API key on this team, or its certificates go too. Revoking a
-development certificate never touches a build that went out. The workflow runs on the same `xcode-27` image and Xcode as the
+certificate to revoke". The limit is the team's, shared by every app. So trial
+and upload first revoke each development certificate with that name that is
+over three hours old, and the run then creates its own. The age keeps the
+certificate of a run still signing in another repository, as no run lasts that
+long. A new app's release workflow takes the same step. Revoking a development
+certificate never touches a build that went out. The workflow runs on the same `xcode-27` image and Xcode as the
 [tests](standards.md#continuous-integration), so move both together.
 
 ## Project declarations and native inputs
