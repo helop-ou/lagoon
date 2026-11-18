@@ -92,6 +92,34 @@ jobs:
           printf '%s\n' "$ASC_KEY_P8" > "$key"
           echo "ASC_KEY_PATH=$key" >> "$GITHUB_ENV"
 
+      # Each empty runner makes a new one, and the account's limit stops the archive.
+      - name: Revoke earlier CI development certificates
+        run: |
+          set -uo pipefail
+          b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
+          now="$(date +%s)"
+          header="$(printf '{"alg":"ES256","kid":"%s","typ":"JWT"}' "$ASC_KEY_ID" | b64url)"
+          claims="$(printf '{"iss":"%s","iat":%d,"exp":%d,"aud":"appstoreconnect-v1"}' "$ASC_ISSUER_ID" "$now" $((now + 600)) | b64url)"
+          # ES256 wants r and s as 32 bytes each, and openssl signs in DER.
+          signature="$(printf '%s.%s' "$header" "$claims" \
+            | openssl dgst -sha256 -sign "$ASC_KEY_PATH" \
+            | openssl asn1parse -inform DER \
+            | awk -F: '/INTEGER/ { v = $NF; while (length(v) < 64) v = "0" v; printf "%s", substr(v, length(v) - 63) }' \
+            | xxd -r -p | b64url)"
+          token="$header.$claims.$signature"
+          api=https://api.appstoreconnect.apple.com/v1/certificates
+          if ! list="$(curl -fsS -H "Authorization: Bearer $token" "$api?filter%5BcertificateType%5D=DEVELOPMENT&limit=200")"; then
+            echo "::warning::Could not list the certificates, so none were revoked"
+            exit 0
+          fi
+          ids="$(jq -r '.data[] | select(((.attributes.displayName // "") + " " + (.attributes.name // "")) | contains("Created via API")) | .id' <<< "$list")"
+          for id in $ids; do
+            curl -fsS -X DELETE -H "Authorization: Bearer $token" "$api/$id" \
+              && echo "Revoked $id" \
+              || echo "::warning::Could not revoke certificate $id"
+          done
+          echo "Revoked $(wc -w <<< "$ids" | tr -d ' ') certificate(s)"
+
       - name: Archive and sign
         run: |
           if [ "$ACTION" = trial ]; then
