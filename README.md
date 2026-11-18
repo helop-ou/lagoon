@@ -13,7 +13,7 @@
 
 <p align="center">
   <a href="https://apps.apple.com/app/lagoon-for-jellyfin/id6801882873"><img src="https://img.shields.io/badge/Download_on_the-App_Store-2ED4C7?style=for-the-badge&logo=apple&logoColor=0B1D28&labelColor=E9F1F2" alt="Download on the App Store"></a>
-  <a href="https://testflight.apple.com/join/PwjnXuAt"><img src="https://img.shields.io/badge/Apple_TV_beta-TestFlight-0B1D28?style=for-the-badge&logo=apple&logoColor=2ED4C7" alt="Apple TV beta on TestFlight"></a>
+  <a href="https://testflight.apple.com/join/PwjnXuAt"><img src="https://img.shields.io/badge/Public_beta-TestFlight-0B1D28?style=for-the-badge&logo=apple&logoColor=2ED4C7" alt="Join the public beta on TestFlight"></a>
   <a href="https://lagoon.helop.dev"><img src="https://img.shields.io/badge/lagoon.helop.dev-0B1D28?style=for-the-badge&logo=safari&logoColor=2ED4C7" alt="lagoon.helop.dev"></a>
 </p>
 
