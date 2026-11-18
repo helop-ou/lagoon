@@ -325,9 +325,13 @@ app is still installed on this repository.
 
 The key needs the Admin role. App Manager can upload, but the runner has no
 certificates, so the key must also create the development certificate the
-archive signs with and use the cloud-managed distribution certificate. Each run
-may leave another "Created via API" development certificate in the account, so
-check the Certificates list now and then. The workflow runs on the same `xcode-27` image and Xcode as the
+archive signs with and use the cloud-managed distribution certificate. Each
+empty runner creates another "Created via API" development certificate, and
+once the account reaches its limit the archive fails with "Choose a
+certificate to revoke". So trial and upload first revoke every development
+certificate with that name, and the run then creates its own. Only CI may
+sign with an API key on this team, or its certificates go too. Revoking a
+development certificate never touches a build that went out. The workflow runs on the same `xcode-27` image and Xcode as the
 [tests](standards.md#continuous-integration), so move both together.
 
 ## Project declarations and native inputs
