@@ -74,6 +74,7 @@ nonisolated struct PlaybackTrackPlan {
         settings: TrackSelectionSettings,
         originalLanguage: String?,
         captionDisplay: SystemCaptionDisplay,
+        prefersAudioDescriptions: Bool,
         memoryScope: String,
         carry: Carry?,
         rememberedAudio: RememberedAudioChoice?,
@@ -97,7 +98,8 @@ nonisolated struct PlaybackTrackPlan {
             candidates: audio.map(Self.selectionCandidate),
             serverDefault: serverDefaultAudio,
             preferredLanguages: settings.preferredAudioLanguages,
-            originalLanguage: originalLanguage
+            originalLanguage: originalLanguage,
+            prefersAudioDescriptions: prefersAudioDescriptions
         )
         automaticAudioOrdinal = audioOrdinal
         if let carry,
@@ -307,7 +309,9 @@ nonisolated struct PlaybackTrackPlan {
             isOriginal: stream.isOriginal == true,
             isForced: stream.isForced == true,
             isHearingImpaired: stream.isHearingImpaired == true,
-            isTitledForced: TrackSelectionPolicy.titleNamesForcedTrack(stream.title)
+            isTitledForced: TrackSelectionPolicy.titleNamesForcedTrack(stream.title),
+            isCommentary: TrackSelectionPolicy.titleNamesCommentary(stream.title),
+            isAudioDescription: TrackSelectionPolicy.titleNamesAudioDescription(stream.title)
         )
     }
 

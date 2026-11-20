@@ -142,6 +142,14 @@ preferred languages, then Jellyfin's default. Some releases defeat all three
 DTS 5.1, and the default is the first, Russian). There, the viewer's
 correction decides.
 
+Within the language the mode picks, the main track comes first, a described
+track second and commentary last, and Jellyfin's default moves to the main
+track in its own language when it names one of the others. Jellyfin passes no
+flag for either kind, so both are read from `MediaStream.title`. When the
+system's Audio Descriptions setting is on, the described track comes first
+instead, but never from another language. Carry and memory still apply on
+top, so a viewer who picks the commentary keeps it.
+
 `AudioTrackMemoryStore` keeps one audio choice per series (per item for a
 film) per account, written through to `UserDefaults` so it survives closing
 the player.

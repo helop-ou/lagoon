@@ -44,6 +44,7 @@ struct PlaybackTrackPlanTests {
             preferredSubtitleLanguages: ["en"]
         ),
         captionDisplay: SystemCaptionDisplay = .automatic,
+        audioDescriptions: Bool = false,
         carry: PlaybackTrackPlan.Carry? = nil,
         rememberedAudio: RememberedAudioChoice? = nil,
         rememberedSubtitle: RememberedSubtitleChoice? = nil,
@@ -58,6 +59,7 @@ struct PlaybackTrackPlanTests {
             settings: settings,
             originalLanguage: nil,
             captionDisplay: captionDisplay,
+            prefersAudioDescriptions: audioDescriptions,
             memoryScope: "series",
             carry: carry,
             rememberedAudio: rememberedAudio,
@@ -74,6 +76,48 @@ struct PlaybackTrackPlanTests {
             try stream("Audio", index: 2, language: "jpn", title: "Main"),
             try stream("Audio", index: 3, language: "eng", title: "Commentary"),
         ]
+    }
+
+    // MARK: - Commentary and audio description
+
+    @Test func jellyfinsDefaultCommentaryStartsOnTheMainTrack() throws {
+        let plan = plan(audio: try threeAudio(), defaultAudio: 3)
+        #expect(plan.automaticAudioOrdinal == 1)
+        #expect(plan.initialAudioOrdinal == 1)
+    }
+
+    @Test func theAudioDescriptionsSettingPicksTheDescribedTrack() throws {
+        let audio = [
+            try stream("Audio", index: 1, language: "eng"),
+            try stream("Audio", index: 2, language: "eng", title: "Audio Description"),
+        ]
+        #expect(plan(audio: audio, defaultAudio: 1).initialAudioOrdinal == 1)
+        #expect(plan(audio: audio, defaultAudio: 1, audioDescriptions: true).initialAudioOrdinal == 2)
+    }
+
+    @Test func aRememberedCommentaryStillWins() throws {
+        let plan = plan(
+            audio: try threeAudio(),
+            defaultAudio: 1,
+            rememberedAudio: RememberedAudioChoice(language: "eng", title: "Commentary", ordinal: 3, layout: "")
+        )
+        #expect(plan.automaticAudioOrdinal == 1)
+        #expect(plan.initialAudioOrdinal == 3)
+    }
+
+    @Test func aRememberedMainTrackOutranksTheAudioDescriptionsSetting() throws {
+        let audio = [
+            try stream("Audio", index: 1, language: "eng", title: "Main"),
+            try stream("Audio", index: 2, language: "eng", title: "Audio Description"),
+        ]
+        let plan = plan(
+            audio: audio,
+            defaultAudio: 1,
+            audioDescriptions: true,
+            rememberedAudio: RememberedAudioChoice(language: "eng", title: "Main", ordinal: 1, layout: "")
+        )
+        #expect(plan.automaticAudioOrdinal == 2)
+        #expect(plan.initialAudioOrdinal == 1)
     }
 
     // MARK: - Precedence

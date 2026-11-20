@@ -221,8 +221,8 @@ nonisolated enum SystemCaptionDisplay {
 }
 
 /// A stream reduced to the facts that may influence automatic selection.
-/// "Original" is metadata, not a naming convention, so the only thing read
-/// from a title is the signs-and-songs convention.
+/// "Original" is metadata, not a naming convention. Titles are read only for
+/// signs and songs, commentary and audio description, which carry no flag.
 nonisolated struct TrackSelectionCandidate: Equatable {
     let language: String?
     let isDefault: Bool
@@ -232,6 +232,9 @@ nonisolated struct TrackSelectionCandidate: Equatable {
     /// Titled "Signs & Songs", "S&S", "Forced" and the like. Counts as forced
     /// only through `resolvingTitledForced`.
     var isTitledForced = false
+    /// Read from the title: Jellyfin passes no flag for either.
+    var isCommentary = false
+    var isAudioDescription = false
 }
 
 nonisolated enum TrackSelectionPolicy {
@@ -249,6 +252,30 @@ nonisolated enum TrackSelectionPolicy {
         }
         return lowered.split { !$0.isLetter && !$0.isNumber && $0 != "&" }.contains("s&s")
     }
+
+    static func titleNamesCommentary(_ title: String?) -> Bool {
+        guard let title else { return false }
+        return title.lowercased()
+            .split { !$0.isLetter && !$0.isNumber }
+            .contains { $0 == "commentary" || $0 == "commentaries" }
+    }
+
+    /// "AD" counts only in capitals and as a whole word.
+    static func titleNamesAudioDescription(_ title: String?) -> Bool {
+        guard let title else { return false }
+        if title.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).contains("AD") {
+            return true
+        }
+        let words = title.lowercased().split { !$0.isLetter && !$0.isNumber }
+        let phrase = " " + words.joined(separator: " ") + " "
+        return audioDescriptionPhrases.contains { phrase.contains(" \($0) ") }
+    }
+
+    private static let audioDescriptionPhrases = [
+        "audio description", "audio described", "audiodescription",
+        "described video", "descriptive audio", "descriptive video",
+        "video description", "visually impaired", "dvs",
+    ]
 
     /// Words that mark a titled track as the full dialogue, whatever else
     /// its title names.
@@ -281,35 +308,77 @@ nonisolated enum TrackSelectionPolicy {
                 isOriginal: candidate.isOriginal,
                 isForced: true,
                 isHearingImpaired: candidate.isHearingImpaired,
-                isTitledForced: true
+                isTitledForced: true,
+                isCommentary: candidate.isCommentary,
+                isAudioDescription: candidate.isAudioDescription
             )
         }
     }
 
+    /// The mode picks a language, then the best track in it: the main one,
+    /// or the described one when the system's Audio Descriptions setting asks
+    /// for it. That holds for Jellyfin's default too, which can name a
+    /// commentary.
     static func audioOrdinal(
         mode: AudioDefaultMode,
         candidates: [TrackSelectionCandidate],
         serverDefault: Int?,
         preferredLanguages: [String],
-        originalLanguage: String?
+        originalLanguage: String?,
+        prefersAudioDescriptions: Bool
     ) -> Int? {
+        let ranking = AudioRanking(prefersDescriptions: prefersAudioDescriptions)
+        let chosen: Int?
         switch mode {
         case .serverDefault:
-            return serverDefault
+            chosen = serverDefault
         case .preferredLanguage:
-            return bestLanguage(in: candidates, preferredLanguages: preferredLanguages)
+            chosen = bestLanguage(in: candidates, preferredLanguages: preferredLanguages, ranking: ranking)
                 ?? serverDefault
         case .original:
-            if let original = best(in: candidates, where: { $0.isOriginal }) {
-                return original
+            if let original = best(in: candidates, ranking: ranking, where: { $0.isOriginal }) {
+                chosen = original
+            } else if let originalLanguage,
+                      let match = bestLanguage(
+                          in: candidates,
+                          preferredLanguages: [originalLanguage],
+                          ranking: ranking
+                      ) {
+                chosen = match
+            } else {
+                chosen = bestLanguage(in: candidates, preferredLanguages: preferredLanguages, ranking: ranking)
+                    ?? serverDefault
             }
-            if let originalLanguage,
-               let match = bestLanguage(in: candidates, preferredLanguages: [originalLanguage]) {
-                return match
-            }
-            return bestLanguage(in: candidates, preferredLanguages: preferredLanguages)
-                ?? serverDefault
         }
+        return chosen.map { bestInLanguage(of: $0, in: candidates, ranking: ranking) }
+    }
+
+    /// Main audio above a described track, and commentary last. A viewer who
+    /// asks for audio descriptions gets the described track first.
+    private struct AudioRanking {
+        let prefersDescriptions: Bool
+
+        func rank(_ candidate: TrackSelectionCandidate) -> Int {
+            if candidate.isCommentary { return 0 }
+            if candidate.isAudioDescription { return prefersDescriptions ? 3 : 1 }
+            return 2
+        }
+    }
+
+    /// The best track in the chosen one's language, or the chosen one when
+    /// none ranks higher.
+    private static func bestInLanguage(
+        of ordinal: Int,
+        in candidates: [TrackSelectionCandidate],
+        ranking: AudioRanking
+    ) -> Int {
+        guard candidates.indices.contains(ordinal - 1) else { return ordinal }
+        let chosen = candidates[ordinal - 1]
+        let language = chosen.language.flatMap(SubtitlePreferencesStore.normalizedLanguage)
+        guard let best = best(in: candidates, ranking: ranking, where: {
+            $0.language.flatMap(SubtitlePreferencesStore.normalizedLanguage) == language
+        }), ranking.rank(candidates[best - 1]) > ranking.rank(chosen) else { return ordinal }
+        return best
     }
 
     static func subtitleOrdinal(
@@ -434,10 +503,11 @@ nonisolated enum TrackSelectionPolicy {
 
     private static func bestLanguage(
         in candidates: [TrackSelectionCandidate],
-        preferredLanguages: [String]
+        preferredLanguages: [String],
+        ranking: AudioRanking
     ) -> Int? {
         for language in SubtitlePreferencesStore.deduplicated(preferredLanguages) {
-            if let match = best(in: candidates, where: {
+            if let match = best(in: candidates, ranking: ranking, where: {
                 $0.language.flatMap(SubtitlePreferencesStore.normalizedLanguage) == language
             }) {
                 return match
@@ -481,11 +551,15 @@ nonisolated enum TrackSelectionPolicy {
         }.map { $0.offset + 1 }
     }
 
+    /// The highest-ranked match, then the default, then the first.
     private static func best(
         in candidates: [TrackSelectionCandidate],
+        ranking: AudioRanking,
         where predicate: (TrackSelectionCandidate) -> Bool
     ) -> Int? {
-        let matches = candidates.enumerated().filter { predicate($0.element) }
+        let filtered = candidates.enumerated().filter { predicate($0.element) }
+        guard let top = filtered.map({ ranking.rank($0.element) }).max() else { return nil }
+        let matches = filtered.filter { ranking.rank($0.element) == top }
         return matches.first(where: { $0.element.isDefault }).map { $0.offset + 1 }
             ?? matches.first.map { $0.offset + 1 }
     }
