@@ -49,7 +49,8 @@ struct PlaybackLanguagePreferenceTests {
             candidates: streams,
             serverDefault: 1,
             preferredLanguages: ["en"],
-            originalLanguage: "eng"
+            originalLanguage: "eng",
+            prefersAudioDescriptions: false
         ) == 2)
     }
 
@@ -61,7 +62,8 @@ struct PlaybackLanguagePreferenceTests {
             candidates: streams,
             serverDefault: 1,
             preferredLanguages: ["en"],
-            originalLanguage: "jpn"
+            originalLanguage: "jpn",
+            prefersAudioDescriptions: false
         ) == 2)
     }
 
@@ -73,7 +75,8 @@ struct PlaybackLanguagePreferenceTests {
             candidates: streams,
             serverDefault: 1,
             preferredLanguages: ["et-EE", "de-DE"],
-            originalLanguage: nil
+            originalLanguage: nil,
+            prefersAudioDescriptions: false
         ) == 2)
     }
 

@@ -565,6 +565,7 @@ final class PlaybackController {
             settings: selection,
             originalLanguage: extras.originalLanguage ?? media.originalLanguage,
             captionDisplay: Self.systemCaptionDisplay,
+            prefersAudioDescriptions: Self.prefersAudioDescriptions,
             memoryScope: memoryScope,
             carry: trackCarry,
             rememberedAudio: audioTrackMemory?.choice(for: memoryScope),
@@ -958,6 +959,12 @@ final class PlaybackController {
         case .alwaysOn: return .alwaysOn
         @unknown default: return .unrecognized
         }
+    }
+
+    /// The Audio Descriptions switch in Accessibility.
+    private static var prefersAudioDescriptions: Bool {
+        let preferred = MAAudibleMediaCopyPreferredCharacteristics().takeRetainedValue() as? [String] ?? []
+        return preferred.contains(MAMediaCharacteristicDescribesVideoForAccessibility as String)
     }
 
     private func configureSystemMediaCallbacks() {
