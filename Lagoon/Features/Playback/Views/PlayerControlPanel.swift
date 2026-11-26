@@ -98,7 +98,7 @@ struct PlayerControlPanel: View {
         if isBrowsing {
             target = id == Self.subtitleSearchID ? .track(Self.subtitleSearchCloseID) : nil
         } else if id == Self.subtitleSearchCloseID || id.hasPrefix(Self.subtitleResultPrefix) {
-            if subtitleSearch?.phase == .downloaded,
+            if subtitleSearch?.phase.hasDownloaded == true,
                let selected = subtitleTracks.first(where: \.isSelected) {
                 target = .track(selected.id)
             } else {
@@ -726,6 +726,12 @@ struct PlayerControlPanel: View {
         case .downloaded:
             Label("Downloaded and selected", systemImage: "checkmark.circle")
                 .foregroundStyle(.secondary)
+        case .downloadedButNotSaved:
+            Label(
+                "Showing for now. Your server could not save this subtitle.",
+                systemImage: "exclamationmark.triangle"
+            )
+            .foregroundStyle(.secondary)
         }
     }
 
