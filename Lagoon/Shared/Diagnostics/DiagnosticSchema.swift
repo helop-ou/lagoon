@@ -165,6 +165,9 @@ nonisolated enum DiagnosticSchema {
         "to": .choice(deliveryChoices),
         "errorDomain": .token,
         "errorCode": .int,
+        /// The error under a generic one, such as AVFoundation's `-11800`.
+        "underlyingDomain": .token,
+        "underlyingCode": .int,
         "httpStatus": .int,
         "httpMethod": .choice(httpMethodChoices),
         "route": .route,

@@ -12,6 +12,8 @@ nonisolated struct SentryEnvelope: Equatable, Sendable {
     static let tagFields: [String] = [
         "delivery", "method", "container", "videoCodec", "audioCodec", "videoRange",
         "videoPath", "audioPath", "stage", "cause", "errorDomain", "client", "route",
+        // Outside the fingerprint, so tags are the only way to search them.
+        "underlyingDomain", "underlyingCode",
         "httpStatus", "degradation", "thermal", "recovery", "outcome", "track",
         "cap", "transcodeReasons",
     ]

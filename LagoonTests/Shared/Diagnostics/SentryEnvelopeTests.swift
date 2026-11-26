@@ -71,6 +71,22 @@ struct SentryEnvelopeTests {
         #expect(extra["occurrences"] as? Int == 3)
     }
 
+    /// The error underneath is not in the fingerprint, so a report is only
+    /// found by it through its tags.
+    @Test func theErrorUnderneathIsSearchableAsTags() throws {
+        let incident = Self.incident(fields: [
+            "stage": .string("audioRenderer"),
+            "errorDomain": .string("AVFoundationErrorDomain"),
+            "errorCode": .int(-11800),
+            "underlyingDomain": .string("NSOSStatusErrorDomain"),
+            "underlyingCode": .int(-12860),
+        ])
+        let event = SentryEnvelope.eventJSONObject(incident: incident, context: Self.context, eventID: "e1")
+        let tags = try #require(event["tags"] as? [String: String])
+        #expect(tags["underlyingDomain"] == "NSOSStatusErrorDomain")
+        #expect(tags["underlyingCode"] == "-12860")
+    }
+
     @Test func envelopeIsFramedWithExactLengthsAndAnAttachment() throws {
         let history = [DiagnosticEvent(code: .playbackSeek, uptime: 498, fields: ["position": .double(12)])]
         let envelope = try #require(SentryEnvelope.make(incident: Self.incident(history: history), context: Self.context))
