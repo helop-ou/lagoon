@@ -19,8 +19,7 @@ final class AccountPrivacyUITests: XCTestCase {
             XCTAssertTrue(app.tabBars.buttons["Home"].waitForExistence(timeout: 20))
         }
         app.terminate()
-        // Start at the picker without re-running the bootstrap. The lane's
-        // flag stays on, so What's New does not open over Home.
+        // Start at the picker without re-running the bootstrap.
         app.launchArguments = ["-debug.playerRegression", "YES", "-debug.regressionBootstrapPublicDemo", "NO",
                                "-session.activeAccountId", ""]
         app.launchEnvironment = [:]
