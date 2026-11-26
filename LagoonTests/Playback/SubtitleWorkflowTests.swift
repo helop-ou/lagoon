@@ -320,6 +320,44 @@ struct SubtitleWorkflowTests {
             $0.method == "POST" && $0.path.contains("RemoteSearch/Subtitles")
         })
         #expect(requests.allSatisfy { $0.authorization?.contains(#"Token="test-token""#) == true })
+        #expect(coordinator.phase == .downloaded)
+    }
+
+    /// A server that cannot write beside its media answers the upload with 500.
+    @Test @MainActor func aSubtitleTheServerCannotSaveStillPlaysAndSaysSo() async throws {
+        SubtitleDownloadFixture.reset(uploadStatus: 500)
+        StubURLProtocol.register(host: "subtitle.test", handler: SubtitleDownloadFixture.respond)
+        let client = StubURLProtocol.makeJellyfinClient(
+            host: "subtitle.test", deviceId: "subtitle-not-saved-test", token: "test-token", userId: "user-1"
+        )
+        let engine = SampleBufferPlayerEngine()
+        let coordinator = SubtitleSearchCoordinator(
+            downloadedSubtitlePoller: DownloadedSubtitlePoller(refreshDelays: [.zero])
+        )
+        coordinator.configure(
+            client: client,
+            engine: engine,
+            itemID: "item-1",
+            mediaSourceID: "source-1",
+            streams: [],
+            preferredLanguages: ["en"],
+            missingMode: .ask,
+            hasSuitableLocalTrack: false,
+            onTrackAdded: { _ in }
+        )
+
+        coordinator.startSearch()
+        try await waitUntil { !coordinator.results.isEmpty }
+        coordinator.startDownload(try #require(coordinator.results.first))
+
+        try await waitUntil { coordinator.phase == .downloadedButNotSaved }
+        #expect(coordinator.phase.hasDownloaded)
+        try await waitUntil { engine.subtitleTracks.first?.isSelected == true }
+        #expect(engine.subtitleTracks.first?.source == .downloaded)
+        // The server's own save would ask the provider for the file again.
+        #expect(!SubtitleDownloadFixture.requests.contains {
+            $0.method == "POST" && $0.path.contains("RemoteSearch/Subtitles")
+        })
     }
 
     @Test @MainActor func remoteSubtitleSearchKeepsResultsWhenAnotherLanguageFails() async throws {
@@ -499,6 +537,7 @@ private nonisolated struct RecordedSubtitleRequest: Sendable {
 private nonisolated enum SubtitleDownloadFixture {
     private static let lock = NSLock()
     private nonisolated(unsafe) static var recordedRequests: [RecordedSubtitleRequest] = []
+    private nonisolated(unsafe) static var uploadStatus = 204
     private nonisolated(unsafe) static var userPolicyPayload = #"{ "Id": "user-1", "Name": "Tester", "Policy": { "IsAdministrator": false, "EnableSubtitleManagement": true } }"#
 
     static var requests: [RecordedSubtitleRequest] {
@@ -507,9 +546,10 @@ private nonisolated enum SubtitleDownloadFixture {
         return recordedRequests
     }
 
-    static func reset(subtitleManagement: Bool = true) {
+    static func reset(subtitleManagement: Bool = true, uploadStatus: Int = 204) {
         lock.lock()
         recordedRequests = []
+        self.uploadStatus = uploadStatus
         userPolicyPayload = #"{ "Id": "user-1", "Name": "Tester", "Policy": { "IsAdministrator": false, "EnableSubtitleManagement": \#(subtitleManagement) } }"#
         lock.unlock()
     }
@@ -531,6 +571,7 @@ private nonisolated enum SubtitleDownloadFixture {
             body: bodyString(from: request)
         ))
         let policyPayload = userPolicyPayload
+        let uploadStatus = uploadStatus
         lock.unlock()
 
         let payload: Data
@@ -584,7 +625,7 @@ private nonisolated enum SubtitleDownloadFixture {
             status = 204
         case ("POST", "/Videos/item-1/Subtitles"):
             payload = Data()
-            status = 204
+            status = uploadStatus
         default:
             payload = Data()
             status = 404

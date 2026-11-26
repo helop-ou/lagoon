@@ -14,6 +14,9 @@ nonisolated enum SubtitleSearchPhase: Equatable {
     case downloading(String)
     case downloadFailed(String)
     case downloaded
+    /// Playing from the bytes already here, but the server refused the copy,
+    /// so the subtitle is gone the next time the title opens.
+    case downloadedButNotSaved
 
     var isBusy: Bool {
         switch self {
@@ -26,6 +29,10 @@ nonisolated enum SubtitleSearchPhase: Equatable {
 
     var isDownloading: Bool {
         if case .downloading = self { true } else { false }
+    }
+
+    var hasDownloaded: Bool {
+        self == .downloaded || self == .downloadedButNotSaved
     }
 }
 
@@ -241,7 +248,7 @@ final class SubtitleSearchCoordinator {
         results = []
         isBrowsingResults = false
         switch phase {
-        case .downloading, .downloaded, .downloadFailed:
+        case .downloading, .downloaded, .downloadedButNotSaved, .downloadFailed:
             break
         default:
             phase = .idle
@@ -467,14 +474,20 @@ final class SubtitleSearchCoordinator {
         persistenceTask?.cancel()
         persistenceTask = Task { [weak self] in
             guard let self else { return }
-            try? await client.uploadSubtitle(
-                itemId: itemID,
-                data: file.data,
-                language: candidate.language,
-                format: candidate.format ?? "srt",
-                isForced: candidate.isForced,
-                isHearingImpaired: candidate.isHearingImpaired
-            )
+            do {
+                try await client.uploadSubtitle(
+                    itemId: itemID,
+                    data: file.data,
+                    language: candidate.language,
+                    format: candidate.format ?? "srt",
+                    isForced: candidate.isForced,
+                    isHearingImpaired: candidate.isHearingImpaired
+                )
+            } catch {
+                // A server that cannot write beside its media answers 500.
+                guard !Task.isCancelled, generation == downloadGeneration, phase == .downloaded else { return }
+                phase = .downloadedButNotSaved
+            }
         }
     }
 
@@ -582,6 +595,14 @@ final class SubtitleSearchCoordinator {
     }
 
     #if DEBUG
+    /// Fixture for snapshots of the status line.
+    static func previewing(_ phase: SubtitleSearchPhase) -> SubtitleSearchCoordinator {
+        let coordinator = SubtitleSearchCoordinator()
+        coordinator.languageChoices = ["eng", "est"]
+        coordinator.phase = phase
+        return coordinator
+    }
+
     /// Fixture for the Debug component gallery.
     static func previewingResults(_ results: [SubtitleCandidate]) -> SubtitleSearchCoordinator {
         let coordinator = SubtitleSearchCoordinator()
