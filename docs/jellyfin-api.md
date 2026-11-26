@@ -391,6 +391,8 @@ its provider/save exception and still returns 204. So Lagoon fetches the
 provider file itself, checks it has readable cues, inserts and selects it in
 the running engine, and uploads the same bytes to Jellyfin for later
 sessions. That is one provider download, and it works on a read-only library.
+There the upload answers 500, since the server cannot write the file. The
+subtitle keeps playing and the panel says the server could not save it.
 Formats Lagoon cannot parse use the native endpoint plus a PlaybackInfo poll.
 Position, renderers, selected audio and Now Playing are not rebuilt. Forced
 and hearing-impaired flags are preserved.
