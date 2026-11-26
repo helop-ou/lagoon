@@ -136,4 +136,11 @@ struct AcknowledgementsTests {
         #expect(url.scheme == "https")
         #expect(LegalDestinations.displayAddress(url) == "github.com/helop-ou/lagoon")
     }
+
+    /// The website's page can follow a changed TestFlight link. A shipped build cannot.
+    @Test func betaLinkIsTheWebsitesPage() throws {
+        let url = try #require(LegalDestinations.beta)
+        #expect(url.scheme == "https")
+        #expect(LegalDestinations.displayAddress(url) == "lagoon.helop.dev/beta")
+    }
 }

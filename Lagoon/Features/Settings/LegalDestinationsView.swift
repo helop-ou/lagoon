@@ -39,6 +39,9 @@ struct LegalSettingsSection: View {
             if let url = LegalDestinations.sourceCode {
                 addressButton("Source Code", url: url, identifier: "settings.about.source")
             }
+            if let url = LegalDestinations.beta {
+                addressButton("Join the Beta", url: url, identifier: "settings.about.beta")
+            }
         }
         .sheet(isPresented: $showingAcknowledgements) {
             AcknowledgementsView()
@@ -93,6 +96,10 @@ struct LegalSettingsSection: View {
             if let url = LegalDestinations.sourceCode {
                 Link("Source Code", destination: url)
                     .accessibilityIdentifier("settings.about.source")
+            }
+            if let url = LegalDestinations.beta {
+                Link("Join the Beta", destination: url)
+                    .accessibilityIdentifier("settings.about.beta")
             }
         }
     }
