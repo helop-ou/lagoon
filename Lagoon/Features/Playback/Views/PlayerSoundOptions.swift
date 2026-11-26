@@ -58,7 +58,7 @@ struct PlayerTVControlRow: View, Equatable {
         HStack(spacing: Metrics.Space.l) {
             if episodes?.hasPrevious == true {
                 // Outline, like the rest of the row's symbols.
-                Button("Previous", systemImage: "backward.end", action: onPrevious)
+                rowButton("Previous", systemImage: "backward.end", action: onPrevious)
                     .focused(focus, equals: .control(Self.previousID))
                     .accessibilityIdentifier("player.previous")
             }
@@ -87,12 +87,12 @@ struct PlayerTVControlRow: View, Equatable {
             )
             .frame(width: RowMetrics.menuButton, height: RowMetrics.menuButton)
             if let pictureInPicture {
-                Button(pictureInPicture.title, systemImage: pictureInPicture.systemImage, action: onTogglePictureInPicture)
+                rowButton(pictureInPicture.title, systemImage: pictureInPicture.systemImage, action: onTogglePictureInPicture)
                     .focused(focus, equals: .control(Self.pictureInPictureID))
                     .accessibilityIdentifier("player.pictureInPicture")
             }
             if episodes?.hasNext == true {
-                Button("Next", systemImage: "forward.end", action: onNext)
+                rowButton("Next", systemImage: "forward.end", action: onNext)
                     .focused(focus, equals: .control(Self.nextID))
                     .accessibilityIdentifier("player.next")
             }
@@ -103,9 +103,19 @@ struct PlayerTVControlRow: View, Equatable {
         .focusSection()
     }
 
+    /// One box for every symbol: the glass circle grows with its label, so
+    /// a wide symbol drew a wider button than a narrow one.
+    private func rowButton(_ title: LocalizedStringKey, systemImage: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .frame(width: RowMetrics.symbolBox, height: RowMetrics.symbolBox)
+        }
+    }
+
     private enum RowMetrics {
-        /// The glass circle of the row's SwiftUI buttons, which UIKit's
-        /// glass configuration does not size by itself.
+        static let symbolBox: CGFloat = 36
+        /// The glass circle the SwiftUI buttons draw around `symbolBox`,
+        /// which UIKit's glass configuration does not size by itself.
         static let menuButton: CGFloat = 66
     }
 }

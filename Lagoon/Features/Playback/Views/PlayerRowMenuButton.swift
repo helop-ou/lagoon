@@ -74,6 +74,9 @@ struct PlayerRowMenuButton: UIViewRepresentable {
         #if os(tvOS)
         var configuration = UIButton.Configuration.glass()
         configuration.cornerStyle = .capsule
+        // The row's SwiftUI buttons draw body-sized symbols at medium
+        // scale, and glass alone draws them a size larger.
+        configuration.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(textStyle: .body, scale: .medium)
         #else
         // The toolbar draws the glass around its items, and its own
         // buttons' symbols are body-sized, large scale.
@@ -102,9 +105,14 @@ struct PlayerRowMenuButton: UIViewRepresentable {
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
-    /// Its own size: without it a toolbar stretched it across the free space.
+    /// Its own size on iOS: without it a toolbar stretched it across the
+    /// free space. The tvOS row gives it the circle of its neighbours.
     func sizeThatFits(_ proposal: ProposedViewSize, uiView: RowMenuUIButton, context: Context) -> CGSize? {
+        #if os(tvOS)
+        proposal.replacingUnspecifiedDimensions(by: uiView.intrinsicContentSize)
+        #else
         uiView.intrinsicContentSize
+        #endif
     }
 
     final class Coordinator {
