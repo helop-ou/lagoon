@@ -33,10 +33,12 @@ The whole sequence. Read the linked sections before doing it the first time.
    commit them in `lagoon-website`. The site serves the old version until its
    own, separate deploy.
 5. **[Upload](#releasing-from-ci)** from `main`. It records the revision it
-   archived.
+   archived, and writes the build's notes as its What to Test once Apple has
+   processed it.
 6. **Add the build to the external group** in App Store Connect and wait for
    [Beta App Review](#external-testflight).
-7. **[Publish the release](#release-tags)**, after acceptance.
+7. **[Publish the release](#release-tags)**, after acceptance. It also writes
+   the notes as the [store version's What's New](#notes-in-app-store-connect).
 
 Without the workflow, `scripts/prepare-release.sh <bump> "<headline>"` stamps
 the same files locally for you to commit through a pull request, and
@@ -95,9 +97,8 @@ A fix too small for a note, found before a version is released, does not
 need a version of its own. Prepare with the **build** bump and no headline:
 the build number advances, the version stays, and the version's entry moves
 to the new build as it is, `## 1.0.0 (122)` becoming `## 1.0.0 (123)`. The
-notes then belong to the build people will have, About lists it, and What's
-New presents once for anyone arriving from an older version. Someone already
-on the earlier build is shown nothing, since the version has not changed.
+notes then belong to the build people will have, and About and What's New
+show them under that build.
 
 The earlier build keeps its tag and its GitHub release, and loses its entry
 here. That is the one change to a shipped entry, and only prepare makes it.
@@ -107,12 +108,39 @@ an entry of its own, which is a patch.
 ### The published changelog
 
 [`CHANGELOG.md`](../CHANGELOG.md) is the one source of the notes. The app
-bundles it and `Changelog.swift` reads it, and a GitHub release's body is its
-build's section, so the three cannot disagree. Each build is a `## <version>
-(<build>)` heading, the month, the bold headline, then `###` categories of
-`- ` notes, one line each. `ChangelogTests` checks what it can: every line
-reads, the declared build has an entry, categories are in order, no em
-dashes.
+bundles it and `Changelog.swift` reads it, a GitHub release's body is its
+build's section, and [App Store Connect](#notes-in-app-store-connect) gets the
+same section as plain text, so none of them can disagree. Each build is a `##
+<version> (<build>)` heading, the month, the bold headline, then `###`
+categories of `- ` notes, one line each. `ChangelogTests` checks what it can:
+every line reads, the declared build has an entry, categories are in order, no
+em dashes.
+
+### Notes in App Store Connect
+
+`scripts/store-notes.sh` sends a build's entry to App Store Connect, for iOS
+and tvOS, so nobody pastes it. Neither field shows Markdown, so the text is
+the headline, then each category with its lines, without the month.
+
+```sh
+scripts/store-notes.sh 124 testflight            # What to Test, on the build
+scripts/store-notes.sh 124 appstore              # What's New, on the store version
+scripts/store-notes.sh 124 appstore --dry-run    # look and print, write nothing
+```
+
+- **testflight** runs after the upload. It waits up to half an hour for
+  Apple to process the build, then writes the build's What to Test, so the
+  text is there when the build is added to the external group.
+- **appstore** runs after the publish. It creates the store version when
+  there is none and writes its What's New. A version in review or on sale is
+  left alone. Selecting the build and submitting stay manual, and so does
+  checking how the version is set to be released. Apple keeps one unsubmitted
+  version per platform, so when a draft of another version is open, rename
+  it to this one and run the script again.
+
+A refusal from Apple is a warning on the run, never a failure, since the
+build has already gone out. The run's summary carries the text, to paste by
+hand when that happens. An entry over Apple's 4,000 characters is not sent.
 
 ### Release tags
 
@@ -295,10 +323,13 @@ four actions:
   it after a signing or Xcode change.
 - **upload** runs `scripts/upload-testflight.sh both --external`, then pushes
   `refs/archived/<build>` to record the revision it archived. The upload
-  script's checks all apply, including the [release guard](#release-tags).
+  script's checks all apply, including the [release guard](#release-tags). A
+  second job, on Linux so the wait holds no Mac, then writes the build's
+  [What to Test](#notes-in-app-store-connect).
 - **publish** runs `scripts/publish-release.sh`, which tags the recorded
-  revision. Run it once the build is accepted. Leave the build empty for the
-  build `main` declares, or give an earlier one.
+  revision, then writes the store version's [What's
+  New](#notes-in-app-store-connect). Run it once the build is accepted. Leave
+  the build empty for the build `main` declares, or give an earlier one.
 
 Signing goes through the App Store Connect API key, so the runner needs no
 certificates. The secrets belong to the `release` environment (Settings,
@@ -446,10 +477,12 @@ note. The App Store version follows whichever build is submitted.
    The tag is how a recipient finds the corresponding source, which the
    native licences require, so the build is published before it is
    submitted and needs no second tag.
-5. **Submit.** In App Store Connect, create the version for iOS and for tvOS,
-   select the uploaded build on each, complete the [review
-   package](#review-package) and submit. Check the build number and platform
-   on each before submitting. Beta App Review and App Store review are
+5. **Submit.** The publish action has created the version for iOS and for
+   tvOS in App Store Connect, with its [What's
+   New](#notes-in-app-store-connect). Select the uploaded build on each,
+   complete the [review package](#review-package) and submit. Check the build
+   number, the platform and the What's New text on each before submitting.
+   Beta App Review and App Store review are
    separate, so passing one says nothing about the other.
 
 Keep per-slice dependency hashes and build records with the submitted build,
