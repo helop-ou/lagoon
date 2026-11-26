@@ -1,7 +1,6 @@
 import SwiftUI
 
-/// The installed build's notes, from Settings → About and once after a minor
-/// or major update.
+/// The installed build's notes, from Settings → About.
 struct WhatsNewView: View {
     @Environment(\.dismiss) private var dismiss
     var entry: ChangelogEntry? = WhatsNew.entry
