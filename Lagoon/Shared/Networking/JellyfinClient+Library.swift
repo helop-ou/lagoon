@@ -498,11 +498,17 @@ extension JellyfinClient {
         return page.items.first
     }
 
+    /// Episodes the server has a file for. With "Display missing episodes"
+    /// on, Jellyfin also lists the ones it only has metadata for, and those
+    /// cannot play.
+    private static let withAFile = URLQueryItem(name: "IsMissing", value: "false")
+
     func episodes(seriesId: String, seasonId: String?) async throws -> [MediaItem] {
         let userId = try requireUserId()
         var query = [
             URLQueryItem(name: "UserId", value: userId),
             URLQueryItem(name: "Fields", value: "Overview"),
+            Self.withAFile,
         ]
         if let seasonId {
             query.append(URLQueryItem(name: "SeasonId", value: seasonId))
@@ -525,6 +531,7 @@ extension JellyfinClient {
             URLQueryItem(name: "startItemId", value: episode.id),
             URLQueryItem(name: "Limit", value: "2"),
             URLQueryItem(name: "Fields", value: Self.defaultFields),
+            Self.withAFile,
         ])
         // If the anchor is not first, the server started from episode 1.
         // Doing nothing beats rolling into it.
@@ -542,6 +549,7 @@ extension JellyfinClient {
             URLQueryItem(name: "UserId", value: userId),
             URLQueryItem(name: "AdjacentTo", value: episode.id),
             URLQueryItem(name: "Fields", value: Self.defaultFields),
+            Self.withAFile,
         ])
         return Self.item(before: episode.id, in: page.items)
     }

@@ -29,6 +29,10 @@ report. One marketing version spans many builds.
 - A title no longer starts on a commentary or audio description track when the main audio is in the same language. Turn on Audio Descriptions in Accessibility settings to start on the described track instead.
 - What's New no longer opens by itself after an update. It stays in Settings, About.
 
+### Bug fixes
+
+- Autoplay and the episode lists skip episodes your server has no file for, which could not start.
+
 ## 1.0.0 (123)
 
 November 2026
