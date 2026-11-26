@@ -87,10 +87,7 @@ again](#the-same-version-again).
   **Bug fixes**. Keep related notes under the category a viewer would
   notice, in that order.
 - The app shows only the installed build's notes, as What's New in
-  Settings, About. The sheet presents itself once after a minor or major
-  update, never after a patch or on a fresh install. Builds before the one
-  that added it recorded no version, so an install with accounts and no
-  record presents only on a minor or major version.
+  Settings, About. It never opens by itself.
 
 ### The same version again
 
