@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: "prepare: open the release pull request for the unreleased notes. trial: sign both apps, upload nothing. upload: send an external-eligible build to App Store Connect. publish: create the GitHub release of a build that went out."
+        description: "prepare: open the release pull request for the unreleased notes. trial: sign both apps, upload nothing. upload: send an external-eligible build to App Store Connect, with its notes as What to Test. publish: create the GitHub release of a build that went out, and write its notes as the store's What's New."
         type: choice
         options: [prepare, trial, upload, publish]
       bump:
@@ -148,6 +148,36 @@ jobs:
           build="$(grep -m1 -o 'CURRENT_PROJECT_VERSION = [0-9]*' Lagoon.xcodeproj/project.pbxproj | grep -o '[0-9]*$')"
           git push origin "HEAD:refs/archived/${build}"
 
+  # Its own job, on Linux: the build's What to Test can be written only once
+  # Apple has processed the upload, and that wait should not hold a Mac.
+  what-to-test:
+    name: what to test
+    needs: archive
+    if: inputs.action == 'upload'
+    environment: release
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+    env:
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Write the API key
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          key="$RUNNER_TEMP/AuthKey.p8"
+          printf '%s\n' "$ASC_KEY_P8" > "$key"
+          echo "ASC_KEY_PATH=$key" >> "$GITHUB_ENV"
+
+      - name: Write What to Test
+        run: |
+          build="$(grep -m1 -o 'CURRENT_PROJECT_VERSION = [0-9]*' Lagoon.xcodeproj/project.pbxproj | grep -o '[0-9]*$')"
+          scripts/store-notes.sh "$build" testflight
+
   publish:
     name: publish
     if: inputs.action == 'publish'
@@ -159,6 +189,8 @@ jobs:
     env:
       BUILD: ${{ inputs.build }}
       GH_TOKEN: ${{ github.token }}
+      ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+      ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -167,4 +199,16 @@ jobs:
       - name: Publish
         run: |
           build="${BUILD:-$(grep -m1 -o 'CURRENT_PROJECT_VERSION = [0-9]*' Lagoon.xcodeproj/project.pbxproj | grep -o '[0-9]*$')}"
+          echo "PUBLISHED_BUILD=$build" >> "$GITHUB_ENV"
           scripts/publish-release.sh "$build"
+
+      - name: Write the API key
+        env:
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          key="$RUNNER_TEMP/AuthKey.p8"
+          printf '%s\n' "$ASC_KEY_P8" > "$key"
+          echo "ASC_KEY_PATH=$key" >> "$GITHUB_ENV"
+
+      - name: Write the store's What's New
+        run: scripts/store-notes.sh "$PUBLISHED_BUILD" appstore
