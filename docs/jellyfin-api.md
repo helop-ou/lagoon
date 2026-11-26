@@ -139,7 +139,7 @@ Settings → Playback → Maximum Quality on Auto asks before negotiating
 | Continue watching | `Users/{uid}/Items/Resume` | `MediaTypes=Video` |
 | Next up | `Shows/NextUp?UserId=` | Home uses `EnableResumable=false&EnableRewatching=false`. **Never** for autoplay, see below |
 | Recently added | `Users/{uid}/Items/Latest` | **returns a bare array**, not an `Items` wrapper. Leaves watched titles out, see below |
-| Seasons/episodes | `Shows/{seriesId}/Seasons` / `…/Episodes?SeasonId=` | seasons ask for `Fields=RemoteTrailers` |
+| Seasons/episodes | `Shows/{seriesId}/Seasons` / `…/Episodes?SeasonId=` | seasons ask for `Fields=RemoteTrailers`. Episodes always with `IsMissing=false`, see below |
 | The episode after this one | `Shows/{seriesId}/Episodes?startItemId=&Limit=2` | index 1 is the next one |
 | Collections | `Users/{uid}/Items?IncludeItemTypes=BoxSet` | **`EnableUserData=false` or it takes 40 s**, see below |
 | What is in a collection | `Users/{uid}/Items?ParentId={boxSetId}&Recursive=false` | `SortBy` from the collection's `DisplayOrder`, see below |
@@ -282,6 +282,13 @@ For the next episode, use `Shows/{seriesId}/Episodes` with
 **`startItemId=<current>&Limit=2`**, which returns `[current, next]`
 regardless of watch state. With no `SeasonId` it walks the whole series, so a
 binge crosses season boundaries. (`adjacentTo` returns siblings instead.)
+
+**Every episode lookup sends `IsMissing=false`.** With "Display missing
+episodes" on in a user's settings, the server also lists episodes it has
+metadata for and no file. `PlaybackInfo` answers those with no source and
+`NoCompatibleStream`, so autoplay rolled into a title that could not start.
+With the filter the lists and the next and previous episode skip them, as
+they already do for everyone who has the setting off.
 
 **Specials and double episodes.** With "display specials within seasons" on,
 the server lists a special inside the season it aired in, by

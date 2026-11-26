@@ -135,6 +135,13 @@ failed. The engine also reports the error at the bottom of its chain, as
 Both stay out of the fingerprint, so an issue keeps its group, and both are
 tags, so `underlyingCode:-12860` finds the reports with one cause.
 
+An answer from the server that cannot play is the domain
+`JellyfinError.unplayable.<reason>`, where `UnplayableReason` is a closed
+choice: `noSource` (no file, as for a missing episode), `notAllowed`,
+`rateLimited`, `refused` (any other server code) or `noRoute` (a source with
+no direct play, direct stream or transcode address). Each reason is its own
+issue.
+
 A stage is a string in the fingerprint, so renaming one splits its issue in
 two. The engine names the stages it fails at: `open`, `seek`, `read`,
 `decode`, `videoRenderer`, `audioRenderer` and `subtitle`. The app adds its
