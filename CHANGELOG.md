@@ -27,6 +27,7 @@ report. One marketing version spans many builds.
 ### Improvements
 
 - A title no longer starts on a commentary or audio description track when the main audio is in the same language. Turn on Audio Descriptions in Accessibility settings to start on the described track instead.
+- The buttons above the scrubber in the Apple TV player are now one size, with symbols to match.
 - What's New no longer opens by itself after an update. It stays in Settings, About.
 - The subtitle panel says when your server could not save a subtitle you downloaded, so you know it will not be there next time.
 
