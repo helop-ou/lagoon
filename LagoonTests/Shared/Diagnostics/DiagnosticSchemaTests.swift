@@ -21,6 +21,25 @@ struct DiagnosticSchemaTests {
         #expect(event.fields["schemaRejected"] == .int(4))
     }
 
+    @Test func theErrorUnderneathIsAcceptedInCodesOnly() {
+        let named = DiagnosticSchema.validated([
+            "underlyingDomain": .string("NSOSStatusErrorDomain"),
+            "underlyingCode": .int(-12860),
+        ])
+        #expect(named.rejected == 0)
+        #expect(named.accepted == [
+            "underlyingDomain": .string("NSOSStatusErrorDomain"),
+            "underlyingCode": .int(-12860),
+        ])
+
+        let refused = DiagnosticSchema.validated([
+            "underlyingDomain": .string("lagoonfix.example.eu"),
+            "underlyingCode": .string("Could not read The Film.mkv"),
+        ])
+        #expect(refused.accepted.isEmpty)
+        #expect(refused.rejected == 2)
+    }
+
     @Test func tokensRejectAnythingThatCouldCarryContent() {
         #expect(DiagnosticSchema.isToken("hevc"))
         #expect(DiagnosticSchema.isToken("AVFoundationErrorDomain"))
