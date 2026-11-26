@@ -20,6 +20,12 @@ report. One marketing version spans many builds.
 
 ## Unreleased
 
+## 1.1.0 (124)
+
+November 2026
+
+**Say yes to better error messages and improved icon placement.**
+
 ### New features
 
 - Settings, About links to Lagoon's public beta. On Apple TV it shows a code to scan.
