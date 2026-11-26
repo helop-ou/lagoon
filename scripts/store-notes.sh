@@ -45,7 +45,7 @@ ok() { printf '  \xe2\x9c\x93 %s\n' "$1"; }
 note() { printf '  - %s\n' "$1"; }
 die() { printf '\n  error: %s\n' "$1" >&2; exit 1; }
 warn() {
-    if [ -n "${GITHUB_ACTIONS:-}" ]; then
+    if [[ -n "${GITHUB_ACTIONS:-}" ]]; then
         echo "::warning title=Store notes::$1"
     else
         printf '  ! %s\n' "$1"
@@ -56,7 +56,7 @@ warn() {
 entry="$(awk -v build="$build" '
     /^## / { inside = ($0 ~ ("^## [0-9.]+ \\(" build "\\)$")) }
     inside { print }' "$changelog")"
-[ -n "$entry" ] || die "no CHANGELOG.md entry for build ${build}"
+[[ -n "$entry" ]] || die "no CHANGELOG.md entry for build ${build}"
 version="$(printf '%s\n' "$entry" | sed -n -E '1s/^## ([0-9.]+) .*/\1/p')"
 
 # 2. As plain text, since neither field shows Markdown: the headline, then each
@@ -72,22 +72,22 @@ printf '%s\n' "$text" | sed 's/^/    /'
 echo
 
 # The run's summary keeps a copy to paste from, whatever Apple answers.
-if [ -n "${GITHUB_STEP_SUMMARY:-}" ]; then
+if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
     printf '### Notes for %s (%s)\n\n```\n%s\n```\n' "$version" "$build" "$text" >> "$GITHUB_STEP_SUMMARY"
 fi
 
-if [ "${#text}" -gt "$limit" ]; then
+if [[ "${#text}" -gt "$limit" ]]; then
     warn "The notes are ${#text} characters and Apple takes ${limit}, so nothing was sent. Paste a shorter text by hand."
     exit 0
 fi
 
 # The key from .env, when there is one. Exported values win.
-if [ -f "$root/.env" ]; then
-    while IFS='=' read -r name value || [ -n "$name" ]; do
+if [[ -f "$root/.env" ]]; then
+    while IFS='=' read -r name value || [[ -n "$name" ]]; do
         case "$name" in
             ASC_KEY_ID|ASC_ISSUER_ID|ASC_KEY_PATH)
                 value="${value%\"}"
-                [ -n "${!name:-}" ] || export "$name=${value#\"}" ;;
+                [[ -n "${!name:-}" ]] || export "$name=${value#\"}" ;;
         esac
     done < "$root/.env"
 fi
@@ -95,7 +95,7 @@ fi
 : "${ASC_ISSUER_ID:?set ASC_ISSUER_ID}"
 : "${ASC_KEY_PATH:?set ASC_KEY_PATH}"
 key="${ASC_KEY_PATH/#\~/$HOME}"
-[ -f "$key" ] || die "no key at ${ASC_KEY_PATH}"
+[[ -f "$key" ]] || die "no key at ${ASC_KEY_PATH}"
 
 base64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
 
@@ -118,7 +118,7 @@ call() {
 
     set -- -sS --max-time 60 --retry 2 -X "$method" -w '\n%{http_code}' \
         -H "Authorization: Bearer $header.$claims.$signature"
-    [ -n "$body" ] && set -- "$@" -H 'Content-Type: application/json' --data "$body"
+    [[ -n "$body" ]] && set -- "$@" -H 'Content-Type: application/json' --data "$body"
     if ! answer="$(curl "$@" "$api$path")"; then
         warn "Could not reach App Store Connect for ${method} ${path%%\?*}" >&2
         return 1
@@ -138,9 +138,9 @@ write_each() {
     local type="$1" where="$2" list="$3" id locale same count=0
     while IFS=$'\t' read -r id locale same; do
         count=$((count + 1))
-        if [ "$same" = true ]; then
+        if [[ "$same" = true ]]; then
             ok "${where} (${locale}) already has it" >&2
-        elif [ "$dry_run" = true ]; then
+        elif [[ "$dry_run" = true ]]; then
             note "would write ${where} (${locale})" >&2
         elif call PATCH "/${type}/${id}" "$(jq -n --arg type "$type" --arg id "$id" --arg text "$text" \
             '{data: {type: $type, id: $id, attributes: {whatsNew: $text}}}')" > /dev/null; then
@@ -165,7 +165,7 @@ what_to_test() {
                 warn "Apple marked the ${name} build ${state}, so it has no What to Test"
                 return 0 ;;
         esac
-        if [ "$dry_run" = true ] || [ "$(date +%s)" -ge "$deadline" ]; then
+        if [[ "$dry_run" = true ]] || [[ "$(date +%s)" -ge "$deadline" ]]; then
             warn "Apple has not finished processing the ${name} build, so its What to Test was not written. Paste it by hand, or run this again."
             return 0
         fi
@@ -173,8 +173,8 @@ what_to_test() {
     done
 
     list="$(call GET "/builds/${id}/betaBuildLocalizations?fields[betaBuildLocalizations]=locale,whatsNew&limit=50")" || return 0
-    [ "$(write_each betaBuildLocalizations "${name} What to Test" "$list")" = 0 ] || return 0
-    if [ "$dry_run" = true ]; then
+    [[ "$(write_each betaBuildLocalizations "${name} What to Test" "$list")" = 0 ]] || return 0
+    if [[ "$dry_run" = true ]]; then
         note "would write ${name} What to Test (${locale})"
     elif call POST /betaBuildLocalizations "$(jq -n --arg locale "$locale" --arg text "$text" --arg id "$id" \
         '{data: {type: "betaBuildLocalizations", attributes: {locale: $locale, whatsNew: $text},
@@ -190,8 +190,8 @@ whats_new() {
     found="$(call GET "/apps/${app_id}/appStoreVersions?filter[platform]=${platform}&filter[versionString]=${version}&fields[appStoreVersions]=appVersionState&limit=1")" || return 0
     id="$(jq -r '.data[0].id // empty' <<< "$found")"
     state="$(jq -r '.data[0].attributes.appVersionState // empty' <<< "$found")"
-    if [ -z "$id" ]; then
-        if [ "$dry_run" = true ]; then
+    if [[ -z "$id" ]]; then
+        if [[ "$dry_run" = true ]]; then
             note "would create the ${name} version ${version} and write its What's New"
             return 0
         fi
@@ -212,14 +212,14 @@ whats_new() {
     esac
 
     list="$(call GET "/appStoreVersions/${id}/appStoreVersionLocalizations?fields[appStoreVersionLocalizations]=locale,whatsNew&limit=50")" || return 0
-    [ "$(write_each appStoreVersionLocalizations "${name} What's New" "$list")" != 0 ] \
+    [[ "$(write_each appStoreVersionLocalizations "${name} What's New" "$list")" != 0 ]] \
         || warn "The ${name} version ${version} has no language to write What's New in"
 }
 
 apps="$(call GET "/apps?filter[bundleId]=${bundle_id}&fields[apps]=bundleId,primaryLocale")" || exit 0
 app_id="$(jq -r --arg bundle "$bundle_id" '[.data[] | select(.attributes.bundleId == $bundle)][0].id // empty' <<< "$apps")"
 locale="$(jq -r --arg bundle "$bundle_id" '[.data[] | select(.attributes.bundleId == $bundle)][0].attributes.primaryLocale // "en-US"' <<< "$apps")"
-if [ -z "$app_id" ]; then
+if [[ -z "$app_id" ]]; then
     warn "App Store Connect lists no app with the bundle id ${bundle_id}"
     exit 0
 fi
@@ -227,11 +227,11 @@ fi
 deadline=$(($(date +%s) + 1800))
 for platform in IOS TV_OS; do
     case "$platform" in IOS) name=iOS ;; *) name=tvOS ;; esac
-    if [ "$target" = testflight ]; then
+    if [[ "$target" = testflight ]]; then
         what_to_test "$platform" "$name"
     else
         whats_new "$platform" "$name"
     fi
 done
 
-[ "$dry_run" = false ] || { echo; echo "  (dry run, nothing was written)"; }
+[[ "$dry_run" = false ]] || { echo; echo "  (dry run, nothing was written)"; }
