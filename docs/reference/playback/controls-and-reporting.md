@@ -97,6 +97,11 @@ toggles. Up was the one free direction, and it now moves focus to the row of
 previous, Episodes, Sound, Picture in Picture and next (`PlayerTVControlRow`, `.glass` circles, a
 `focusSection`). (A speed control was built there once and reverted.)
 
+The row's circles are one size and its symbols one font, which neither kind
+of button does unasked: SwiftUI's glass circle grows with its symbol, and
+UIKit's glass draws a smaller circle around a larger symbol. A button added
+there goes through `rowButton` or takes the `menuButton` frame.
+
 The row follows every rule below: the overlay hit-tests only while the
 transport is up, the row is disabled while it is hidden, the auto-hide skips
 while a `.control` focus or a row menu holds, and Down from the row or Back
