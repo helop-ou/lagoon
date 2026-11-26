@@ -207,6 +207,11 @@ reports after the push.
   a pin move refetches it once.
 - A failed run keeps its `.xcresult` and full log for 14 days, under the
   run's artifacts.
+- A pull request that changes only Markdown skips the tests and the journey,
+  and a stand-in job reports the two required checks as passed. Two files
+  are the exception, because tests read them: `CHANGELOG.md`, which the app
+  bundles, and `docs/codec-support.md`. A test that reads another Markdown
+  file adds it to `READ_BY_TESTS` in the workflow.
 - UI journeys do not run in CI: they need a server and minutes per test. See
   the [regression lane](reference/regression-lane.md). The exception is
   `DuoLayoutUITests`, because a closed iPhone Duo is the only place its bug
