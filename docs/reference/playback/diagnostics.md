@@ -131,7 +131,7 @@ vary per occurrence (positions, durations) never enter a fingerprint.
 
 A system error is often generic: AVFoundation's `-11800` only says something
 failed. The engine also reports the error at the bottom of its chain, as
-`underlyingDomain` and `underlyingCode`, from the engine version after 2.0.0.
+`underlyingDomain` and `underlyingCode`, from engine 2.1.0 on.
 Both stay out of the fingerprint, so an issue keeps its group, and both are
 tags, so `underlyingCode:-12860` finds the reports with one cause.
 
