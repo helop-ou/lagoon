@@ -20,6 +20,10 @@ report. One marketing version spans many builds.
 
 ## Unreleased
 
+### New features
+
+- Settings, About links to Lagoon's public beta. On Apple TV it shows a code to scan.
+
 ### Improvements
 
 - A title no longer starts on a commentary or audio description track when the main audio is in the same language. Turn on Audio Descriptions in Accessibility settings to start on the described track instead.
