@@ -213,14 +213,14 @@ extension JellyfinClient {
         }
         if let transcodingUrl = source.transcodingUrl, serverURL != nil {
             guard let resolvedURL = serverRelativeURL(transcodingUrl) else {
-                throw JellyfinError.unplayable
+                throw JellyfinError.unplayable(.noRoute)
             }
             // Strip a server-stamped api_key/ApiKey. The header carries the
             // credential. Cross-origin URLs are left alone.
             let url = mediaRequestAuthorization()?.sanitizedURL(resolvedURL) ?? resolvedURL
             return (url, .transcode)
         }
-        throw JellyfinError.unplayable
+        throw JellyfinError.unplayable(.noRoute)
     }
 
     /// An external subtitle's DeliveryUrl as a fetchable absolute URL.

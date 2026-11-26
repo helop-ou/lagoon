@@ -496,10 +496,7 @@ final class PlaybackController {
             maxBitrate: qualityCap,
             playsOriginal: transcodeNotice.playsOriginal
         )
-        guard info.errorCode == nil, let source = info.mediaSources.first else {
-            throw JellyfinError.unplayable
-        }
-        return (info, source, offer)
+        return (info, try info.playableSource(), offer)
     }
 
     private func adopt(_ resolved: ResolvedSource) {

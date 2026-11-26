@@ -4,6 +4,27 @@ import LagoonEngine
 import UIKit
 #endif
 
+/// Why the server's answer cannot be played. Diagnostics report the name.
+nonisolated enum UnplayableReason: String, Equatable, Sendable {
+    /// The server lists no source: an episode it has no file for, say.
+    case noSource
+    case notAllowed
+    case rateLimited
+    /// The server refused with a code this does not name.
+    case refused
+    /// A source with no direct play, direct stream or transcode address.
+    case noRoute
+
+    /// From `PlaybackInfo`'s `ErrorCode`.
+    init(serverCode: String) {
+        switch serverCode {
+        case "NotAllowed": self = .notAllowed
+        case "RateLimitExceeded": self = .rateLimited
+        default: self = .refused
+        }
+    }
+}
+
 nonisolated enum JellyfinError: LocalizedError {
     case notConfigured
     case invalidServerURL
@@ -12,7 +33,7 @@ nonisolated enum JellyfinError: LocalizedError {
     /// `message` is the server's body text, which often holds the real
     /// reason behind a 500 (an exhausted provider quota, say).
     case server(status: Int, message: String? = nil)
-    case unplayable
+    case unplayable(UnplayableReason)
 
     var errorDescription: String? {
         switch self {
@@ -26,6 +47,7 @@ nonisolated enum JellyfinError: LocalizedError {
             } else {
                 "The server returned an error (\(status))."
             }
+        case .unplayable(.noSource): "The server has no file for this item."
         case .unplayable: "This item can't be played on this device."
         }
     }
