@@ -78,7 +78,8 @@ it (`none`, `auto`, `setting`, `metered`, `lowered`), Auto's measured link
 rate, Jellyfin's transcode reason names, output paths, position and rate, queue depths, audio
 lead, stall and starvation counters, dropped and corrupted frame counts,
 memory footprint and headroom, thermal state, app state, error domain and
-code, HTTP status and method, route template, stage, cause, recovery reason,
+code, the domain and code of the error underneath it, HTTP status and method,
+route template, stage, cause, recovery reason,
 outcome, relative timings, and for an audio route change its reason and the
 kind of output it left and reached (`hdmi`, `airPlay`, `bluetooth`,
 `headphones`, `speaker`, `other`, `none`).
@@ -127,6 +128,12 @@ event this build has no code for yet), `audio.interruption`, `audio.route`, `api
 Sentry groups on the fingerprint verbatim: `[code] + variant`. The build is a
 tag and part of the release, but the fingerprint excludes it. Values that
 vary per occurrence (positions, durations) never enter a fingerprint.
+
+A system error is often generic: AVFoundation's `-11800` only says something
+failed. The engine also reports the error at the bottom of its chain, as
+`underlyingDomain` and `underlyingCode`, from the engine version after 2.0.0.
+Both stay out of the fingerprint, so an issue keeps its group, and both are
+tags, so `underlyingCode:-12860` finds the reports with one cause.
 
 A stage is a string in the fingerprint, so renaming one splits its issue in
 two. The engine names the stages it fails at: `open`, `seek`, `read`,
