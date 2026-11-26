@@ -241,6 +241,14 @@ nonisolated struct PlaybackInfoResponse: Decodable {
         playSessionId = try c.decodeIfPresent(String.self, forKey: "playSessionId")
         errorCode = try c.decodeIfPresent(String.self, forKey: "errorCode")
     }
+
+    /// The source to play, or why there is none. Jellyfin sends
+    /// `NoCompatibleStream` with an empty list, so the list is asked first.
+    func playableSource() throws -> MediaSource {
+        guard let source = mediaSources.first else { throw JellyfinError.unplayable(.noSource) }
+        if let errorCode { throw JellyfinError.unplayable(UnplayableReason(serverCode: errorCode)) }
+        return source
+    }
 }
 
 nonisolated struct MediaSource: Decodable, Identifiable, Hashable {

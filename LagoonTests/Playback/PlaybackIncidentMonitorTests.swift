@@ -203,6 +203,19 @@ struct PlaybackIncidentMonitorTests {
         engine.shutdown()
     }
 
+    /// Each reason is its own issue, so a missing file is not grouped with a
+    /// refused account.
+    @Test func anUnplayableStartIsReportedWithItsReason() throws {
+        let sink = CapturingSink()
+        let hub = DiagnosticsHub(sink: sink, reportingEnabled: { true })
+        let monitor = PlaybackIncidentMonitor(hub: hub)
+        monitor.startFailed(JellyfinError.unplayable(.noSource), delivery: .negotiated, stage: .negotiate)
+        let incident = try #require(sink.incidents.first)
+        #expect(incident.fields["errorDomain"] == .string("JellyfinError.unplayable.noSource"))
+        #expect(incident.fingerprint == ["playback.startFailed", "negotiate", "JellyfinError.unplayable.noSource"])
+        #expect(incident.fields["schemaRejected"] == nil)
+    }
+
     @Test func aStartFailureCarriesTheServerStatusNotItsMessage() throws {
         let sink = CapturingSink()
         let hub = DiagnosticsHub(sink: sink, reportingEnabled: { true })

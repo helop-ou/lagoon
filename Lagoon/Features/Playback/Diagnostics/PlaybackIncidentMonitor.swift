@@ -772,8 +772,8 @@ final class PlaybackIncidentMonitor {
             switch jellyfin {
             case .server(let status, _):
                 return PlaybackFailureDetail(stage: stage, domain: "JellyfinError.server", code: status)
-            case .unplayable:
-                return PlaybackFailureDetail(stage: stage, domain: "JellyfinError.unplayable")
+            case .unplayable(let reason):
+                return PlaybackFailureDetail(stage: stage, domain: "JellyfinError.unplayable.\(reason.rawValue)")
             case .notConfigured, .invalidServerURL:
                 return PlaybackFailureDetail(stage: stage, domain: "JellyfinError.configuration")
             case .unauthorized, .sessionExpired:
