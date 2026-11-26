@@ -61,7 +61,8 @@ clean" in docs/README.md.
   breaks: break the code once and watch it fail. UI journeys run under the
   `LagoonHardwareRegression` scheme. See the [regression
   lane](docs/reference/regression-lane.md). CI runs the same unit suites on
-  every pull request, and `main` takes only pull requests that passed
+  every pull request that changes more than Markdown, and `main` takes only
+  pull requests that passed
   ([standards](docs/standards.md#continuous-integration)). It reports after
   the push, so it never replaces a local run.
 - Ship through pull requests. Read "Pull requests" in the
